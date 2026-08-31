@@ -1,0 +1,33 @@
+version: "3.8"
+
+services:
+  python-ai:
+    build:
+      context: ./python
+    environment:
+      - APP_HOST=0.0.0.0
+      - APP_PORT=8000
+      - REDIS_URL=redis://redis:6379/0
+      - MYSQL_URL=mysql+pymysql://review:reviewdb123@mysql:3306/review
+      - PERSISTENCE_BACKEND=inmemory
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=admin
+      - MINIO_SECRET_KEY=admin123
+      - MINIO_BUCKET=review-reports
+    depends_on:
+      - redis
+    deploy:
+      replicas: 3
+    networks:
+      - review-net
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - review-net
+
+networks:
+  review-net:
+    driver: bridge

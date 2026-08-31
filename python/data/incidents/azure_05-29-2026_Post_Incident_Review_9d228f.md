@@ -1,0 +1,46 @@
+---
+source: azure
+title: "Post Incident Review"
+url: https://azure.microsoft.com/en-us/status/history/
+date: 05/29/2026
+---
+
+- Option #1 - 17:30 to 18:00 UTC on 25 June 2026 - https://aka.ms/air/LYXT-C1Z/1
+- Option #2 - 05:30 to 06:00 UTC on 26 June 2026 - https://aka.ms/air/LYXT-C1Z/2
+What happened?
+Between 09:39 UTC and 17:05 UTC on 29 May 2026, customers using the Azure OpenAI Service may have experienced increased latency, intermittent request failures, timeouts, and/or HTTP 5XX errors when submitting inference requests. The impact was more pronounced in regions in Europe and Australia East that were directly processing the highest levels of affected traffic.
+The incident was triggered by an upstream change that altered how certain capacity-related failures were surfaced, which led to a rapid and unexpected increase in internal retry traffic. This retry amplification overwhelmed a shared inference load balancer component, which distributes the inference traffic, degrading service reliability across multiple regions.
+What went wrong and why?
+Azure OpenAI relies on an internal routing and load balancing layer to direct inference requests across regions and model capacity. This layer is designed to distribute traffic efficiently and support resiliency during transient failures. During this incident, that layer became overloaded and unstable after it was subjected to a large volume of retry traffic from an upstream internal workload.
+The triggering condition was a change in an upstream API layer used by a Microsoft first-party workload, Microsoft 365, which relies on Azure OpenAI for some request processing scenarios, including Copilot-related experiences. This change altered how capacity-related failures were surfaced to higher layers in the request path. The rollout first occurred in Australia East, and later expanded to Sweden Central.
+When the upstream rollout later expanded to Sweden Central, the same failure pattern reappeared, but at much greater scale. As a major European processing hub, Sweden Central serves significantly higher traffic volume - so the retry amplification effect was stronger and the resulting overload was more severe. This second wave made it clear that the issue was not limited to the internal feature we had first suspected. Instead, it exposed the true underlying problem: a large internal retry storm overwhelming the shared routing layer.
+As the retry storm intensified, it exhausted resources in the Azure OpenAI inference routing layer. The affected component scaled out, but the magnitude of the retry amplification exceeded the protection available at the time. In a small number of regions, recovery was further constrained because scale-out options were limited by available compute quota for replacement virtual machine SKUs. The result was resource exhaustion, out-of-memory crashes on multiple instances, and broad degradation across the shared routing path.
+This incident also exposed a gap in how internal workloads were protected, relative to traffic from external sources. The affected upstream workload operated in a model where traffic was not subject to the same rate-limiting and overload controls used for many external scenarios. In addition, some of this traffic reached the internal routing layer more directly than standard external traffic paths. That meant the system did not sufficiently suppress or isolate the amplified retry volume before it reached shared infrastructure.
+While the initial impact in Australia East led us toward a credible but incomplete explanation, the apparent recovery after disabling the suspected feature obscured the real cause. Once the rollout reached Sweden Central and the issue reappeared, albeit at greater scale, we were able to definitively correlate the degradation to retry amplification, correctly diagnose the trigger condition as the change in the upstream dependency API layer, then execute the targeted mitigations that restored stability.
+How did we respond?
+- 09:20 UTC on 29 May 2026 – Initial customer impact began as the first wave of retry amplification, associated with the upstream rollout in Australia East, caused increased failures and latency across multiple regions.
+- 09:39 UTC on 29 May 2026 – Automated monitoring detected a drop in request success rates and initiated incident investigation.
+- 10:10 UTC on 29 May 2026 – We identified widespread service instability and correlated failures across regions and models.
+- 12:17 UTC on 29 May 2026 – Based on early crash diagnostics, we disabled a component that was suspected of contributing to the instability.
+- 12:40 UTC on 29 May 2026 – Service health began improving as traffic conditions in Australia East eased, which initially made the earlier mitigation appear effective.
+- 14:20 UTC on 29 May 2026 – The upstream rollout expanded to Sweden Central, where significantly higher traffic volume increased the impact of the retry amplification.
+- 14:40 UTC on 29 May 2026 – The issue reoccurred after the upstream rollout reached Sweden Central, where higher traffic volume magnified the retry amplification and overloaded the system at greater scale.
+- 16:20 UTC on 29 May 2026 – We identified that the earlier mitigation had addressed a secondary symptom rather than the underlying cause, and refocused the investigation on upstream retry behavior.
+- 16:27 UTC on 29 May 2026 – We confirmed that the amplified traffic was originating from an internal first-party workload and began targeted mitigation planning.
+- 16:30 UTC on 29 May 2026 – We identified the source of the amplified retry traffic, isolated the offending internal workload onto dedicated infrastructure, and coordinated with the upstream service to roll back the triggering change and reduce traffic volume.
+- 16:25 UTC on 29 May 2026 – The upstream service began rollback of the triggering change and took additional actions to reduce retry-driven traffic volume.
+- 17:05 UTC on 29 May 2026 – Following the completion of the isolation and rollback, and all backlogged requests were cleared, customer impact was confirmed as mitigated.
+How are we making incidents like this less likely or less impactful?
+- We are reducing shared infrastructure blast radius by moving large first-party generative AI workloads onto dedicated routing infrastructure, rather than allowing them to share the same inference load balancing stamp with broader multi-tenant traffic. (Estimated completion: June 2026)
+- We are improving our diagnostic guidance, runbooks, and alerting so that engineers can more quickly distinguish between secondary crash symptoms and the true underlying source of overload during fast-moving incidents. (Estimated completion: June 2026)
+- We are partnering with upstream service teams to improve retry policy design, dependency contracts, and telemetry so retry amplification conditions can be detected earlier and prevented from propagating across shared infrastructure. (Estimated completion: July 2026)
+- We are implementing stronger overload prevention and workload throttling controls so that excessive retry traffic from any single internal workload cannot overwhelm shared components. (Estimated completion: July 2026)
+- Finally, we are continuing work to identify and eliminate single points of failure and improve resiliency in the inference routing layer. (Perpetual/Ongoing)
+How can customers make incidents like this less impactful?
+- For mission-critical AI workloads, customers should consider a multi-region resiliency strategy so that service degradation affecting a specific processing path or region is less likely to impact the full application experience. Customers using regional deployments may wish to evaluate whether additional geographic diversity or fallback patterns would improve resilience for their scenarios. See: https://learn.microsoft.com/azure/ai-services/openai/how-to/business-continuity-disaster-recovery
+- Customers should also review application retry behavior to ensure that client-side retries use appropriate backoff and jitter, and that applications degrade gracefully when dependent services are under stress. Well-controlled retry behavior helps avoid compounding platform-level recovery events. See: https://learn.microsoft.com/azure/architecture/patterns/retry
+- The impact times above represent the full incident duration, so are not specific to any individual customer. Actual impact to service availability varied between customers and resources – for guidance on implementing monitoring to understand granular impact: https://aka.ms/AzPIR/Monitoring
+- Finally, consider ensuring that the right people in your organization will be notified about any future service issues – by configuring Azure Service Health alerts. These can trigger emails, SMS, push notifications, webhooks, and more: https://aka.ms/AzPIR/Alerts
+How can we make our incident communications more useful?
+You can rate this PIR and provide any feedback using our quick 3-question survey: https://aka.ms/AzPIR/LYXT-C1Z
+## 29

@@ -1,0 +1,53 @@
+[project]
+name = "ai-code-review-sentinel"
+version = "0.1.0"
+description = "Python AI layer for AI Code Review Sentinel"
+requires-python = ">=3.12"
+readme = "README.md"
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.29.0",
+    "pydantic>=2.6.0",
+    "pydantic-settings>=2.2.1",
+    "python-dotenv>=1.0.1",
+    "langchain>=0.1.0",
+    "langgraph>=0.0.30",
+    "sqlalchemy>=2.0.28",
+    "aiosqlite>=0.20.0",
+    "mysqlclient>=2.2.4",
+    "redis>=5.0.1",
+    "httpx>=0.27.0",
+    "minio>=7.2.5",
+    "jinja2>=3.1.3",
+    "pymilvus>=2.4.0",
+    "pgvector>=0.2.5",
+    "psycopg2-binary>=2.9.10",
+    "chromadb>=0.5.0",
+    "qdrant-client>=1.7.0",
+    "structlog>=24.1.0",
+    "openai>=1.0.0",
+    "tiktoken>=0.7.0",
+    "jieba>=0.42.1",
+    "rank-bm25>=0.2.2",
+    "elasticsearch>=8.15.0",
+    "networkx>=3.0",
+    "pymysql>=1.1.0",
+    "pytesseract>=0.3.10",
+    "Pillow>=10.0.0",
+    "sentence-transformers>=5.6.0",
+    "docx2txt>=0.8",
+    "pypdf>=4.0.0",
+]
+
+[project.optional-dependencies]
+test = ["pytest", "pytest-asyncio", "httpx", "faker", "testcontainers"]
+doc-ingest = [
+    "langchain-community>=0.0.10",
+    "unstructured>=0.12.0",
+]
+
+[tool.uv]
+dev-dependencies = ["black", "ruff", "mypy", "pytest"]
+
+[tool.pytest.ini_options]
+addopts = "--import-mode=importlib"

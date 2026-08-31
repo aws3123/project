@@ -1,0 +1,141 @@
+# ── AI Code Review Sentinel — 应用服务编排 ──
+# 前置：基础设施容器已运行 (mysql, redis, minio, vector-db, kafka/rabbitmq)
+# 启动: docker compose up -d
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  python-ai:
+    build:
+      context: ./python
+      dockerfile: Dockerfile
+    environment:
+      APP_ENV: dev
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8000
+      # --- 数据源 ---
+      MYSQL_URL: mysql+pymysql://review:reviewdb123@mysql:3307/review
+      REDIS_URL: redis://redis:6379/0
+      PERSISTENCE_BACKEND: inmemory
+      # --- MinIO ---
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: admin
+      MINIO_SECRET_KEY: admin123
+      MINIO_BUCKET: review-reports
+      MINIO_IMAGE_BUCKET: incident-images
+      # --- ChromaDB ---
+      VECTOR_BACKEND: chromadb
+      CHROMA_PATH: /data/chroma
+      CHROMA_COLLECTION: incident_vectors
+      # --- Elasticsearch ---
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      ES_INDEX_NAME: incident_keywords
+      # --- LLM / Embedding ---
+      LLM_API_BASE: ${LLM_API_BASE:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      LLM_API_KEY: ${LLM_API_KEY:-sk-3b25bf58850f4a8eb4936b55ddc7e145}
+      LLM_MODEL: qwen-plus
+      EMBEDDING_MODEL: microsoft/codebert-base
+      # --- RAG 检索 ---
+      RRF_K: 60
+      RAG_MAX_TOKENS: 2000
+      TOP_K: 5
+      MIN_RETRIEVAL_SCORE: 0.15
+      ENABLE_RERANK: "true"
+      RERANK_MODEL_NAME: cross-encoder/ms-marco-MiniLM-L-6-v2
+      ENABLE_QUERY_REWRITE: "false"
+      # --- BFF AST 解析 ---
+      BFF_BASE_URL: http://java-backend:8080
+      BFF_API_KEY: dev-key
+      BFF_CHUNK_TIMEOUT: 30
+      BFF_CHUNK_MAX_CHARS: 1500
+      BFF_CHUNK_OVERLAP: 300
+      # --- Business Risk Worker ---
+      BUSINESS_RISK_WORKER_HEARTBEAT_URL: http://java-backend:8080/api/internal/business-risk/worker-heartbeat
+      BUSINESS_RISK_WORKER_TOKEN: dev-callback
+      BUSINESS_RISK_WORKER_TOKEN_HEADER: X-Worker-Token
+      # --- Telemetry ---
+      TELEMETRY_BACKEND: logging
+      # --- Semantic Hotspot ---
+      SEMANTIC_HOTSPOT_ENABLED: "true"
+      SEMANTIC_HOTSPOT_CONCURRENCY: 5
+      SEMANTIC_HOTSPOT_CONFIDENCE_THRESHOLD: 0.6
+    ports:
+      - "8000:8000"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    extra_hosts:
+      - "mysql:host-gateway"
+      - "redis:host-gateway"
+      - "minio:host-gateway"
+      - "vector-db:host-gateway"
+      - "my-kafka:host-gateway"
+
+  java-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SERVER_PORT: 8080
+      # --- Redis ---
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # --- Python AI ---
+      PYTHON_BASE_URL: http://python-ai:8000
+      # --- Kafka ---
+      SPRING_CLOUD_STREAM_KAFKA_BINDER_BROKERS: my-kafka:9092
+      MQ_BINDER: kafka
+      # --- Security ---
+      API_KEY: dev-key
+      CALLBACK_TOKEN: dev-callback
+      # --- MinIO ---
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: admin
+      MINIO_SECRET_KEY: admin123
+      MINIO_IMAGE_BUCKET: incident-images
+      # --- Business Risk ---
+      BUSINESS_RISK_SSE_PERSISTENCE_BACKEND: memory
+    ports:
+      - "8080:8080"
+    depends_on:
+      - python-ai
+    extra_hosts:
+      - "mysql:host-gateway"
+      - "redis:host-gateway"
+      - "minio:host-gateway"
+      - "my-kafka:host-gateway"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ""
+        VITE_API_KEY: dev-key
+        VITE_API_KEY_HEADER: X-API-Key
+        VITE_HTTP_TIMEOUT_MS: "120000"
+    environment:
+      JAVA_BACKEND_URL: http://java-backend:8080
+      NGINX_LISTEN_PORT: "80"
+    ports:
+      - "3000:80"
+    depends_on:
+      - java-backend
+
+volumes:
+  es-data:

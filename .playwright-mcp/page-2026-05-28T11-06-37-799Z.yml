@@ -1,0 +1,23 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: Task Console
+      - heading "AI Code Review Sentinel" [level=1] [ref=e7]
+      - paragraph [ref=e8]: 面向 Java / Python 协同链路的代码审查控制台
+    - navigation "主导航" [ref=e9]:
+      - link "提交审查" [ref=e10] [cursor=pointer]:
+        - /url: /
+      - link "任务查询" [ref=e11] [cursor=pointer]:
+        - /url: /tasks
+      - link "业务风险" [ref=e12] [cursor=pointer]:
+        - /url: /business-risk/source
+  - main [ref=e13]:
+    - generic [ref=e14]:
+      - generic [ref=e15]:
+        - heading "业务风险审查（Source Bundle）" [level=2] [ref=e16]
+        - paragraph [ref=e17]: 提交 Java 预处理后的 source bundle，后端将异步执行业务风险分析并写入任务中心。
+      - generic [ref=e19]:
+        - generic [ref=e20]:
+          - generic [ref=e21]: 请求体 JSON
+          - textbox "请求体 JSON" [ref=e22]: "{ \"schemaVersion\": \"1.0\", \"javaPreprocessVersion\": \"1.0\", \"projectId\": \"ticket-demo\", \"repo\": \"ticket-service\", \"branch\": \"main\", \"sourceBundle\": { \"fileCount\": 1, \"files\": [ { \"path\": \"src/main/java/com/acme/ticket/TicketService.java\", \"language\": \"java\", \"classSummary\": \"处理余票扣减与订单创建。\", \"methodSkeletons\": [ { \"methodId\": \"TicketService#reserve\", \"signature\": \"public Reservation reserve(String userId, String showId, int count)\", \"controlFlowSummary\": [ \"读取余票\", \"校验请求数量\", \"扣减库存\", \"写入订单\" ], \"keyCalls\": [ \"inventoryService.lock(showId)\", \"orderRepository.save(order)\" ], \"lineMap\": { \"startLine\": 18, \"endLine\": 66 } } ], \"hotspots\": [ { \"methodId\": \"TicketService#reserve\", \"rawSnippet\": \"if (remaining < count) { throw new SoldOutException(); }\", \"reason\": \"库存判断与扣减存在并发竞态风险\", \"lineMap\": { \"startLine\": 33, \"endLine\": 41 } } ] } ] } }"
+        - button "提交业务风险审查" [ref=e24] [cursor=pointer]

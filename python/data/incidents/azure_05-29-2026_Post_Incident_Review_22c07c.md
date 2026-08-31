@@ -1,0 +1,47 @@
+---
+source: azure
+title: "Post Incident Review"
+url: https://azure.microsoft.com/en-us/status/history/
+date: 05/29/2026
+---
+
+- Option #1 - 16:30 to 17:00 UTC on 25 June 2026 - https://aka.ms/air/GHRP-84G/1
+- Option #2 - 04:30 to 05:00 UTC on 26 June 2026 - https://aka.ms/air/GHRP-84G/2
+What happened?
+Between 04:24 UTC on 29 May and 02:30 UTC on 30 May 2026, customers with resources in the West US 2 region may have experienced failures when attempting to access or manage some Azure services in the region. Impact included connectivity failures, resource unavailability, and service management failures.
+The issue was triggered by a severe thunderstorm that caused utility power disturbances affecting multiple datacenter facilities serving the region. These disturbances led to some cooling systems entering a protective mode to preserve equipment integrity. This caused elevated temperatures which triggered proactive shutdowns of infrastructure affecting compute, networking, and storage systems across two different availability zones in the region (physical AZ-01 and AZ-03). After cooling systems stabilized, storage services - and the networking on which they depend - required extensive manual recovery actions, which contributed to the total duration of customer impact.
+The following services were among those affected: Application Insights, Azure App Service, Azure Backup, Azure Cache for Redis, Azure Container Registry, Azure Cosmos DB, Azure Databricks, Azure Data Explorer, Azure Data Factory, Azure Functions, Azure IoT Hub, Azure Kubernetes Service, Azure Monitor, Azure NetApp Files, Azure Resource Manager, Azure Site Recovery, Azure SQL Database, Azure Storage, Azure Synapse Analytics, Azure Virtual Machines, Log Analytics, Service Bus, and Virtual Machine Scale Sets.
+What went wrong and why?
+Independently of whether each datacenter transferred to backup power, a subset of components within the mechanical cooling systems - across multiple datacenters - detected abnormal electrical conditions and, by design, entered a 'lockout' protective state. This reduced cooling capability and prevented parts of the cooling system from automatically returning to normal operation after the power disturbance. As temperatures rose beyond safe operating thresholds, a subset of cloud infrastructure automatically shut down to prevent physical damage and preserve data integrity.
+Impacted cooling systems required manual intervention and troubleshooting, including multiple restart attempts before stable cooling capacity could be reestablished. Additionally, we had to identify which devices required manual recovery and which were expected to self-recover. Impacted Storage scale units required additional validation. These factors contributed to the extended recovery time for services dependent on storage, including telemetry processing systems.
+How did we respond?
+Recovery efforts began immediately, prioritizing cooling restoration, then network infrastructure, followed by compute and storage systems. Cooling was restored within approximately two hours of impact start. The majority of compute resources recovered within eight hours. Storage validation, which must be performed sequentially, extended over approximately 14 hours. Finally, telemetry services (Application Insights and Log Analytics) required an additional six hours beyond storage recovery to process accumulated backlogs. The timeline below details the progression of recovery:
+- 04:14 UTC on 29 May 2026 – Utility power sag/swells were observed across multiple datacenters. These caused a subset of the mechanical cooling systems to enter a 'lockout' protective state.
+- 04:24 UTC on 29 May 2026 – Customer impact began; our monitoring produced thermal alerts as temperatures rose due to reduced cooling functionality.
+- 04:31 UTC on 29 May 2026 – Manual cooling diagnosis and restoration efforts began.
+- 04:40 UTC on 29 May 2026 – As temperatures rose, some cloud infrastructure shut down to prevent damage.
+- 04:50 UTC on 29 May 2026 – Networking and Storage engineers began assessing infrastructure health and necessary restoration efforts.
+- 05:55 UTC on 29 May 2026 – All cooling was restored in impacted datacenters, and temperatures had stabilized. Assessments continued on remaining infrastructure issues.
+- 06:15 UTC on 29 May 2026 – Approximately 50% of impacted underlying Virtual Machines (VMs) had recovered.
+- 12:00 UTC on 29 May 2026 – Approximately 95% of impacted underlying Virtual Machines (VMs) had recovered, after premium Storage had been largely recovered. Compute and Storage teams continued to identify and mitigate remaining unhealthy nodes.
+- 18:46 UTC on 29 May 2026 – Storage was confirmed as the remaining recovery bottleneck; validation of Storage-specific issues was ongoing.
+- 20:18 UTC on 29 May 2026 – All affected services confirmed as recovered, except for Application Insights and Log Analytics which were still processing backlogs.
+- 02:30 UTC on 30 May 2026 – Customer impact for Log Analytics and Application Insights confirmed as mitigated.
+How are we making incidents like this less likely or less impactful?
+- First and foremost, we are reviewing and enhancing our operational processes for cooling system recovery based on learnings from this incident, to ensure that all employees have clear and documented actions to support faster recovery during high-stress scenarios. (Estimated completion: June 2026)
+- Our Log Analytics team is improving the resiliency of service startup processes so that transient initialization failures self-recover automatically, reducing the need for manual intervention during large-scale restarts. (Estimated completion: June 2026)
+- Our Networking team is addressing platform limitations that constrained the speed at which storage nodes could be returned to service following the thermal event. This includes reducing dependencies on manual coordination steps, and enabling faster parallel recovery of storage infrastructure. (Estimated completion: July 2026)
+- Our Networking team is also improving the tooling and processes used to identify which infrastructure devices have entered protective states and require manual recovery. This includes developing clearer prioritization of foundational devices (such as management and networking components) earlier in the recovery sequence, and improving awareness across teams when thermal events affect shared infrastructure. (Estimated completion: August 2026)
+- Our Log Analytics team is improving the architectural resiliency of our telemetry processing services by enabling multi-cluster flexibility and support for a broader pool of compute resource types, reducing dependence on any single cluster or resource type's availability and improving the ability to recover during large-scale scenarios. (Estimated completion: August 2026)
+- Finally, in the longer term we are performing a joint, holistic engineering review to evaluate the fail-state behavior of the cooling system protection logic. The current system prioritizes equipment protection and data security over operational continuity, which resulted in a full lockout rather than staged or degraded operation. This includes evaluating proactive row-level shutdown strategies during rapid temperature increases, and expanding the decision-making window available to operators before protective systems engage. (Estimated completion: October 2026)
+How can customers make incidents like this less impactful?
+- Note that the 'logical' Availability Zones used by each customer subscription may correspond to different physical Availability Zones - customers can use the Locations API to understand this mapping, to confirm which resources run in which physical AZ: https://learn.microsoft.com/rest/api/resources/subscriptions/list-locations
+- For mission-critical workloads, customers should consider a multi-region geodiversity strategy to avoid impact from incidents like this one that impacted a single region: https://learn.microsoft.com/en-us/azure/architecture/patterns/geodes and https://learn.microsoft.com/en-us/azure/well-architected/design-guides/regions-availability-zones
+- Consider leveraging data redundancy options such as Geo-Redundant Storage (GRS) or Read-Access Geo-Redundant Storage (RA-GRS), which replicate data to a secondary region and can provide continued read access to data during regional incidents: https://learn.microsoft.com/azure/storage/common/storage-redundancy
+- More generally, consider evaluating the reliability of your applications using guidance from the Azure Well-Architected Framework and its interactive Well-Architected Review: https://aka.ms/AzPIR/WAF
+- The impact times above represent the full incident duration, so are not specific to any individual customer. Actual impact to service availability varied between customers and resources. For guidance on implementing monitoring to understand granular impact: https://aka.ms/AzPIR/Monitoring
+- Finally, consider ensuring that the right people in your organization will be notified about any future service issues by configuring Azure Service Health alerts. These can trigger emails, SMS, push notifications, webhooks, and more: https://aka.ms/AzPIR/Alerts
+How can we make our incident communications more useful?
+You can rate this PIR and provide any feedback using our quick 3-question survey: https://aka.ms/AzPIR/GHRP-84G
+## April 2026
+## 24

@@ -1,0 +1,24 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: Task Console
+      - heading "AI Code Review Sentinel" [level=1] [ref=e7]
+      - paragraph [ref=e8]: 面向 Java / Python 协同链路的代码审查控制台
+    - navigation "主导航" [ref=e9]:
+      - link "提交审查" [ref=e10] [cursor=pointer]:
+        - /url: /
+      - link "任务查询" [ref=e11] [cursor=pointer]:
+        - /url: /tasks
+      - link "业务风险" [ref=e12] [cursor=pointer]:
+        - /url: /business-risk/source
+  - main [ref=e13]:
+    - generic [ref=e14]:
+      - generic [ref=e15]:
+        - heading "业务风险审查（Source Bundle）" [level=2] [ref=e16]
+        - paragraph [ref=e17]: 提交 Java 预处理后的 source bundle，后端将异步执行业务风险分析并写入任务中心。
+      - generic [ref=e19]:
+        - generic [ref=e20]:
+          - generic [ref=e21]: 请求体 JSON
+          - textbox "请求体 JSON" [ref=e22]: "{ \"schemaVersion\": \"1.0\", \"javaPreprocessVersion\": \"1.0\", \"projectId\": \"ticket-demo\", \"repo\": \"ticket-service-demo\", \"branch\": \"main\", \"requestId\": \"ticket-demo-001\", \"sessionId\": \"ticket-demo-session-001\", \"sourceBundle\": { \"fileCount\": 3, \"files\": [ { \"path\": \"src/main/java/com/demo/ticket/TicketService.java\", \"language\": \"java\", \"classSummary\": \"购票核心流程，包含库存校验、扣减与订单落库。\", \"methodSkeletons\": [ { \"methodId\": \"TicketService#reserve\", \"signature\": \"public Reservation reserve(String userId, String showId, int count)\", \"controlFlowSummary\": [ \"校验购票数量\", \"读取余票并做前置判断\", \"调用库存扣减\", \"生成订单并落库\", \"返回预订结果\" ], \"keyCalls\": [ \"inventoryService.getRemaining(showId)\", \"inventoryService.reserve(showId, count)\", \"orderRepository.save(orderId, userId, showId, count)\" ], \"lineMap\": { \"startLine\": 14, \"endLine\": 31 } } ], \"hotspots\": [ { \"methodId\": \"TicketService#reserve\", \"rawSnippet\": \"if (remainingBefore < count) { throw new IllegalStateException(\\\"SOLD_OUT\\\"); }\", \"reason\": \"库存判断与真正扣减分离，存在并发条件下超卖风险窗口\", \"lineMap\": { \"startLine\": 20, \"endLine\": 22 } } ] }, { \"path\": \"src/main/java/com/demo/ticket/InventoryService.java\", \"language\": \"java\", \"classSummary\": \"管理场次库存并提供扣减能力。\", \"methodSkeletons\": [ { \"methodId\": \"InventoryService#reserve\", \"signature\": \"public synchronized int reserve(String showId, int count)\", \"controlFlowSummary\": [ \"读取余票\", \"不足则抛错\", \"扣减并写回\" ], \"keyCalls\": [ \"getRemaining(showId)\", \"remainByShow.put(showId, updated)\" ], \"lineMap\": { \"startLine\": 18, \"endLine\": 26 } } ], \"hotspots\": [ { \"methodId\": \"InventoryService#reserve\", \"rawSnippet\": \"public synchronized int reserve(String showId, int count) { ... }\", \"reason\": \"单 JVM synchronized 锁在多实例部署下无法全局互斥\", \"lineMap\": { \"startLine\": 18, \"endLine\": 26 } } ] }, { \"path\": \"src/main/java/com/demo/ticket/OrderRepository.java\", \"language\": \"java\", \"classSummary\": \"订单记录写入内存集合。\", \"methodSkeletons\": [ { \"methodId\": \"OrderRepository#save\", \"signature\": \"public void save(String orderId, String userId, String showId, int count)\", \"controlFlowSummary\": [ \"拼接订单日志字符串\", \"追加到同步列表\" ], \"keyCalls\": [ \"orders.add(...)\" ], \"lineMap\": { \"startLine\": 12, \"endLine\": 14 } } ], \"hotspots\": [ { \"methodId\": \"OrderRepository#save\", \"rawSnippet\": \"orders.add(orderId + \\\"|\\\" + userId + \\\"|\\\" + showId + \\\"|\\\" + count + \\\"|\\\" + Instant.now());\", \"reason\": \"订单落库缺乏事务边界与幂等键，重复调用可能产生重复记录\", \"lineMap\": { \"startLine\": 13, \"endLine\": 13 } } ] } ] } }"
+        - button "提交业务风险审查" [ref=e24] [cursor=pointer]
+        - paragraph [ref=e25]: "### Error querying database. Cause: java.sql.SQLSyntaxErrorException: Unknown column 'retry_count' in 'field list' ### The error may exist in com/acme/review/repository/mapper/ReviewTaskMapper.java (best guess) ### The error may involve defaultParameterMap ### The error occurred while setting parameters ### SQL: SELECT id,task_id,project_id,project_name,submitter,status,mode,priority,trace_id,handoff_decision,handoff_operator,handoff_comment,handoff_handled_at,retry_count,version,diff_content,pr_url,question,created_at,updated_at FROM review_task WHERE (task_id = ?) LIMIT 1 ### Cause: java.sql.SQLSyntaxErrorException: Unknown column 'retry_count' in 'field list' ; bad SQL grammar []"

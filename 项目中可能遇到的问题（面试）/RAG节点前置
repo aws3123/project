@@ -1,0 +1,6 @@
+问题 2：RAG 节点位置不当 — 应与并行分析建立"上下文供给"关系
+现状：RAG 与 security/performance/rules 平级并行执行（dependencies.py:229-236）。RAG 检索到的事故文档对 security/performance 分析没有任何指导作用 — 它们是同时跑的。业界对比：成熟的 RAG 增强代码审查方案（如 Google 内部 Code Review Assistant）都是 RAG 先行 → 检索结果注入后续分析 Agent 的 prompt 中，让安全/性能 Agent"带着历史教训去审查"。建议：将 RAG 从并行组中移出，变为串行前置节点：
+原顺序: diff → classifier → impact → [rules | rag | security | performance] → scoring → report
+
+调整为: diff → classifier → impact → rag（串行前置）→ [rules | security | performance]（并行，注入RAG上下文）→ scoring → report
+这样 security Agent 的 prompt 里可以携带「同类变更历史上导致过 SQL 注入」的上下文，提高发现率。
