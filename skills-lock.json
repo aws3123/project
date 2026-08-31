@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "interview-skills": {
+      "source": "jennifer88huang/interview-skills",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "fa880f2f2e8ef82a4b436b7c94b623b4fcf6f06b168b1573b0b9a37ac80be4a7"
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "superpowers",
+  "displayName": "Superpowers",
+  "version": "1.0.0",
+  "description": "An agentic skills framework & software development methodology for coding agents",
+  "descriptionZh": "AI 编程代理技能框架与软件开发方法论，包含 14 个可组合技能",
+  "author": { "name": "Jesse Vincent (obra)" },
+  "homepage": "https://github.com/obra/superpowers",
+  "repository": "https://github.com/obra/superpowers",
+  "keywords": ["qoder-plugin", "skill", "superpowers", "methodology", "tdd", "brainstorming"],
+  "category": "developer-tools",
+  "tags": ["skill", "methodology", "workflow"],
+  "skills": "./skills/"
+}

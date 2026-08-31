@@ -1,0 +1,14 @@
+{
+  "name": "context7",
+  "displayName": "Context7",
+  "version": "1.0.0",
+  "description": "Fetch up-to-date library documentation via ctx7 CLI",
+  "descriptionZh": "通过 ctx7 CLI 获取任意库/框架的最新文档，避免使用过时 API",
+  "author": { "name": "upstash" },
+  "homepage": "https://github.com/upstash/context7",
+  "repository": "https://github.com/upstash/context7",
+  "keywords": ["qoder-plugin", "skill", "documentation", "context7"],
+  "category": "developer-tools",
+  "tags": ["skill", "documentation"],
+  "skills": "./skills/"
+}

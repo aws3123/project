@@ -1,0 +1,55 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: Task Console
+      - heading "AI Code Review Sentinel" [level=1] [ref=e7]
+      - paragraph [ref=e8]: 面向 Java / Python 协同链路的代码审查控制台
+    - navigation "主导航" [ref=e9]:
+      - link "提交审查" [ref=e10] [cursor=pointer]:
+        - /url: /
+      - link "任务查询" [ref=e11] [cursor=pointer]:
+        - /url: /tasks
+      - link "业务风险" [ref=e12] [cursor=pointer]:
+        - /url: /business-risk/source
+  - main [ref=e13]:
+    - generic [ref=e26]:
+      - generic [ref=e27]:
+        - generic [ref=e28]:
+          - heading "任务详情" [level=2] [ref=e29]
+          - paragraph [ref=e30]: "Task ID: ticket-demo-001"
+        - generic [ref=e31]: 处理中
+      - generic [ref=e33]:
+        - generic [ref=e34]:
+          - generic [ref=e35]:
+            - heading "执行进度" [level=3] [ref=e36]
+            - list [ref=e37]:
+              - listitem [ref=e38]:
+                - generic [ref=e40]: 排队中
+              - listitem [ref=e41]:
+                - generic [ref=e43]: 处理中
+              - listitem [ref=e44]:
+                - generic [ref=e46]: 人工复核
+              - listitem [ref=e47]:
+                - generic [ref=e49]: 完成
+          - generic [ref=e51]: 暂无审查结果，请等待任务完成。
+          - generic [ref=e53]: 暂无日志
+        - complementary [ref=e54]:
+          - generic [ref=e55]:
+            - heading "摘要信息" [level=3] [ref=e56]
+            - generic [ref=e57]:
+              - generic [ref=e58]:
+                - term [ref=e59]: 当前状态
+                - definition [ref=e60]:
+                  - generic [ref=e61]: 处理中
+              - generic [ref=e63]:
+                - term [ref=e64]: Task ID
+                - definition [ref=e65]: ticket-demo-001
+              - generic [ref=e66]:
+                - term [ref=e67]: 项目 ID
+                - definition [ref=e68]: ticket-demo
+              - generic [ref=e69]:
+                - term [ref=e70]: 创建时间
+                - definition [ref=e71]: 2026/5/28 02:22:41
+              - generic [ref=e72]:
+                - term [ref=e73]: PR 链接
+                - definition [ref=e74]: 暂无

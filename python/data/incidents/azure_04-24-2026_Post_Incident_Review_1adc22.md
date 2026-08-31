@@ -1,0 +1,56 @@
+---
+source: azure
+title: "Post Incident Review"
+url: https://azure.microsoft.com/en-us/status/history/
+date: 04/24/2026
+---
+
+What happened?
+Between 11:30 and 23:22 UTC on 24 April 2026, customers may have experienced failures or delays when attempting to provision, scale, or update resources in East US.
+Beyond this impact to service management, a small subset of customers may have encountered intermittent connectivity issues for newly-provisioned workloads including Virtual Machines and Azure Virtual Desktop sessions.
+The issue initially began with impact to a subset of customers in a single Availability Zone (physical AZ-01) but as demand shifted, similar symptoms were observed impacting service management operations in AZ-02 and AZ-03. While none of these zones were impacted for the full duration of the incident, customers could have experienced periods of impact in each zone for portions of the incident.
+The following services were among those affected: Azure Application Gateway, Azure App Service, Azure Batch, Azure Cache for Redis, Azure Data Explorer, Azure Data Factory, Azure Databricks, Azure Health Data Services, Azure Kubernetes Service (AKS), Azure Red Hat OpenShift, Azure Service Fabric, Azure Synapse Analytics, Azure Virtual Desktop, Azure Virtual Machines (VMs), Azure Virtual Network Manager, Azure VMware Solution, Oracle Database@Azure, Virtual Machine Scale Sets – and potentially additional services that were dependent on new compute allocations in the region.
+Note: Logical availability zones assigned to customer subscriptions may map to different physical availability zones. Customers can use the Locations API to understand this mapping: https://learn.microsoft.com/rest/api/resources/subscriptions/list-locations?HTTP#availabilityzonemappings.
+What went wrong and why?
+During normal platform operations, one partition of the PubSub control plane service in a single Availability Zone (AZ-01) experienced lock contention errors for several minutes, resulting in operations on that partition to timeout and fail. As designed, the platform initiated an automatic failover to a secondary replica, but this failover did not complete successfully. We intervened to investigate and attempted a manual failover of the primary partition, but this attempt was also unsuccessful, therefore resources on the impacted partition continued to see service management failures.
+Approximately two hours into troubleshooting, we received alerts of impact to a single partition in AZ-03, which indicated partial loss of control plane availability in this zone as well. As the investigation progressed, we suspected that a previously deployed update to a control plane dependency had introduced a regression which could trigger lock contention under certain conditions.As part of our mitigation efforts, we prepared a rollback to the ‘last known good’ version to eliminate the possibility of a regression. We first applied this rollback in AZ-03, which successfully restored control plane service in that zone. Based on this, we began rolling back the affected components in AZ-01.
+By design, rollback operations are executed in stages by our Service Fabric controllers using update domains to ensure platform safety. Recovery time was further extended because compute and data are co-located on the same nodes. In some cases, rollback requires rebuilding full replicas on new nodes, which significantly increases the time required to complete each stage. Given these conditions, we intentionally prioritized maintaining availability for unaffected partitions and services rather than accelerating the rollback. This combination of sequential update domain processing, replica rebuild requirements, and our standard safe recovery approach, resulted in an extended time to mitigate.
+While mitigation was in progress, there were two periods of time during which we were unable to maintain two simultaneous fully healthy instances of the PubSub service across availability zones, a requirement for normal replication and control plane operations. This resulted in a temporary loss of quorum within the service. As the service attempted to self-heal, customer impact shifted between availability zones, leading to periods of degraded behavior across multiple zones.
+These failure patterns began to appear in AZ-02 and again in AZ-03, broadening the scope of impact across the region. For AZ-02 we initiated and completed a rollback, and although AZ-03 had previously shown recovery following the earlier attempted rollback, we discovered that the rollback in that zone had not fully completed to all update domains. As impact reemerged, a rollback in AZ-03 was reinitialized and then completed, fully restoring service health.
+Our post incident investigations confirmed that a latent regression in a recently deployed version of the PubSub service exacerbated the replica build times for the large Availability Zones of this region. This regression also contributed to the failure of the failover process, as it increased contention and reduced the service’s ability to build replicas under these conditions successfully. This issue had not surfaced during earlier testing, or in any other regions which had already received the update.
+During the early stages of the incident, the impact appeared limited to a specific set of VM service management operations. Our first customer communication was automatically sent to impacted customers within 30 minutes of the issue starting, via our “BRAIN” automated messaging system. As more signals surfaced, it became clear that the impact was becoming broader and affecting the underlying systems on which multiple services rely, across Availability Zones. Consequently, we expanded our communications from attempting to target affected subscriptions, to communicating to all customers with resources in the region – in addition to publishing to our public Azure Status page. Finally, some updates lacked specificity that could have helped customers understand the evolving impact, how widespread the issue was, and how best to respond. We have included communications-related learnings below, to improve both the speed and level of detail.
+How did we respond?
+- 11:30 UTC on 24 April 2026 – Customer impact began, including failures and delays when attempting to provision, scale, or update resources.
+- 11:38 UTC on 24 April 2026 – We detected an issue in AZ-01. A control plane partition experienced lock contention, and automatic failover attempts to secondary replicas did not complete successfully.
+- 11:38–13:40 UTC on 24 April 2026 – We attempted manual failover in AZ-01, but these efforts did not successfully restore service.
+- 11:59 UTC on 24 April 2026 – First targeted notifications were sent to a subset of impacted customers, via our “BRAIN” automated messaging system.
+- 13:14 on 24 April 2026 – Notifications expanded to customer subscriptions that were using VMs/VMSS resources in the region.
+- 13:40 UTC on 24 April 2026 – We identified a recently deployed update as the likely trigger condition for this issue.
+- 13:50 UTC on 24 April 2026 – We began observing impact in AZ-03, indicating the issue was now affecting multiple Availability Zones.
+- 14:07 UTC on 24 April 2026 – We initiated a rollback to the last known good version in AZ-03.
+- 15:03 UTC on 24 April 2026 – We observed significant recovery in AZ-03, control plane availability exceeded 99%.
+- 15:04 UTC on 24 April 2026 – We initiated a rollback to the last known good version in AZ-01.
+- 15:36 UTC on 24 April 2026 – First public Azure Status page update, to ensure wider visibility.
+- 17:19 on 24 April 2026 – Notifications expanded to all customer subscriptions that were using any resources in the region.
+- 18:52 UTC on 24 April 2026 – We observed significant improvement in AZ-01, as the rollback progressed.
+- 19:02 UTC on 24 April 2026 – We observed significant recovery in AZ-01, control plane availability exceeded 99%.
+- 19:05 UTC on 24 April 2026 – We began observing impact in AZ-02, as load redistributed across the region.
+- 19:10 UTC on 24 April 2026 – We initiated a rollback to the last known good version in AZ-02.
+- 21:02 UTC on 24 April 2026 – We observed instability reappear in AZ-03, determined that this was because the rollback had not yet completed across all update domains, so manually reinitialized the rollback.
+- 22:39 UTC on 24 April 2026 – We confirmed the rollback was fully completed in AZ-03.
+- 23:22 UTC on 24 April 2026 – All customer impact confirmed as mitigated.
+How are we making incidents like this less likely or less impactful?
+- We assessed the risk of occurrence in other regions with large Availability Zones and rolled back the PubSub service update in these regions. (Completed)
+- We are improving our test coverage surrounding the failure cases and load patterns that contributed to this incident, to catch similar issues before they reach production. (Estimated completion: June 2026)
+- We are reducing the blast radius of each partition by adjusting the scale of the partitioning used by the PubSub service. (Estimated completion: June 2026)
+- We are investing in additional enrichment surrounding our Network Resource Provider monitoring, to determine impacted subscriptions and send initial communications automatically. (Estimated completion: August 2026)
+- While co-locating compute and data on the same node in Service Fabric provides performance benefits, it can make rollback and recovery more challenging under resource-constrained conditions. To address this, we are developing a solution designed to ensure resource constraints do not delay recovery operations. (Estimated completion: September 2026)
+- Finally, we are further developing our AI-assisted communication system to consolidate relevant incident information into more detailed customer updates. (Estimated completion: September 2026)
+How can customers make incidents like this less impactful?
+- For mission-critical workloads, customers should consider a multi-region geodiversity strategy to avoid impact from incidents like this one that impacted a single region: https://learn.microsoft.com/azure/architecture/patterns/geodes and https://learn.microsoft.com/azure/well-architected/design-guides/regions-availability-zones
+- More generally, consider evaluating the reliability of your applications using guidance from the Azure Well-Architected Framework and its interactive Well-Architected Review: https://aka.ms/AzPIR/WAF
+- The impact times above represent the full incident duration, so are not specific to any individual customer. Actual impact to service availability varied between customers and resources – for guidance on implementing monitoring to understand granular impact: https://aka.ms/AzPIR/Monitoring
+- Finally, consider ensuring that the right people in your organization will be notified about any future service issues – by configuring Azure Service Health alerts. These can trigger emails, SMS, push notifications, webhooks, and more: https://aka.ms/AzPIR/Alerts
+How can we make our incident communications more useful?
+You can rate this PIR and provide any feedback using our quick 3-question survey: https://aka.ms/AzPIR/5GP8-W0G
+##### Sorry for the inconvenience, but something went wrong.  Please try refreshing the page.

@@ -1,0 +1,167 @@
+---
+source: cloudflare
+title: "Cloudflare outage on December 5, 2025"
+url: https://blog.cloudflare.com/5-december-2025-outage/
+date: 2025-12-05
+---
+
+# Cloudflare outage on December 5, 2025
+
+2025-12-05
+
+* [![Dane Knecht](https://blog.cloudflare.com/cdn-cgi/image/format=auto,dpr=3,width=64,height=64,gravity=face,fit=crop,zoom=0.5/https://cf-assets.www.cloudflare.com/zkvhlag99gkb/2Vb2AhRye3notdj8Q605bw/15216da4779b7ef162916df8ea5ebcf3/Screenshot_2025-09-22_at_1.23.33%C3%A2__PM.png)](https://blog.cloudflare.com/author/dane-knecht/)  
+[Dane Knecht](https://blog.cloudflare.com/author/dane-knecht/)
+
+5 min read
+
+This post is also available in [简体中文](https://blog.cloudflare.com/zh-cn/5-december-2025-outage), [Français](https://blog.cloudflare.com/fr-fr/5-december-2025-outage), [Deutsch](https://blog.cloudflare.com/de-de/5-december-2025-outage), [Italiano](https://blog.cloudflare.com/it-it/5-december-2025-outage), [日本語](https://blog.cloudflare.com/ja-jp/5-december-2025-outage), [한국어](https://blog.cloudflare.com/ko-kr/5-december-2025-outage), [Português](https://blog.cloudflare.com/pt-br/5-december-2025-outage), [Español (Latinoamérica)](https://blog.cloudflare.com/es-la/5-december-2025-outage), [Español](https://blog.cloudflare.com/es-es/5-december-2025-outage), [Рyсский](https://blog.cloudflare.com/ru-ru/5-december-2025-outage), [Polski](https://blog.cloudflare.com/pl-pl/5-december-2025-outage), [Nederlands](https://blog.cloudflare.com/nl-nl/5-december-2025-outage) and [繁體中文](https://blog.cloudflare.com/zh-tw/5-december-2025-outage).
+
+![](https://cf-assets.www.cloudflare.com/zkvhlag99gkb/5NoiDo8eH6E6bTJYfEqoe9/5dbf9b8cf88260554ac603c2a28ca7dd/Screenshot_2025-12-09_at_9.57.52%C3%A2__AM.png)
+
+_Note: This post was updated to clarify the relationship of the internal WAF tool with the incident on Dec. 5._
+
+On December 5, 2025, at 08:47 UTC (all times in this blog are UTC), a portion of Cloudflare’s network began experiencing significant failures. The incident was resolved at 09:12 (\~25 minutes total impact), when all services were fully restored.
+
+A subset of customers were impacted, accounting for approximately 28% of all HTTP traffic served by Cloudflare. Several factors needed to combine for an individual customer to be affected as described below.
+
+The issue was not caused, directly or indirectly, by a cyber attack on Cloudflare’s systems or malicious activity of any kind. Instead, it was triggered by changes being made to our body parsing logic while attempting to detect and mitigate an industry-wide vulnerability [disclosed this week](https://blog.cloudflare.com/waf-rules-react-vulnerability/) in React Server Components.
+
+Any outage of our systems is unacceptable, and we know we have let the Internet down again following the incident on November 18\. We will be publishing details next week about the work we are doing to stop these types of incidents from occurring.
+
+### What happened
+
+[ ](#what-happened) 
+
+The graph below shows HTTP 500 errors served by our network during the incident timeframe (red line at the bottom), compared to unaffected total Cloudflare traffic (green line at the top).
+
+Cloudflare's Web Application Firewall (WAF) provides customers with protection against malicious payloads, allowing them to be detected and blocked. To do this, Cloudflare’s proxy buffers HTTP request body content in memory for analysis. Before today, the buffer size was set to 128KB.
+
+As part of our ongoing work to protect customers who use React against a critical vulnerability, [CVE-2025-55182](https://nvd.nist.gov/vuln/detail/CVE-2025-55182), we started rolling out an increase to our buffer size to 1MB, the default limit allowed by Next.js applications, to make sure as many customers as possible were protected.
+
+This first change was being rolled out using our gradual deployment system. During rollout, we noticed that our internal WAF testing tool did not support the increased buffer size. As this internal test tool was not needed at that time and had no effect on customer traffic, we made a second change to turn it off.
+
+This second change of turning off our WAF testing tool was implemented using our global configuration system. This system does not perform gradual rollouts, but rather propagates changes within seconds to the entire fleet of servers in our network and is under review [following the outage we experienced on November 18](https://blog.cloudflare.com/18-november-2025-outage/). 
+
+Unfortunately, in our FL1 version of our proxy, under certain circumstances, the second change of turning off our WAF rule testing tool caused an error state that resulted in 500 HTTP error codes to be served from our network.
+
+As soon as the change propagated to our network, code execution in our FL1 proxy reached a bug in our rules module which led to the following Lua exception: 
+
+`[lua] Failed to run module rulesets callback late_routing: /usr/local/nginx-fl/lua/modules/init.lua:314: attempt to index field 'execute' (a nil value)`
+            
+
+resulting in HTTP code 500 errors being issued.
+
+The issue was identified shortly after the change was applied, and was reverted at 09:12, after which all traffic was served correctly.
+
+Customers that have their web assets served by our older FL1 proxy **AND** had the Cloudflare Managed Ruleset deployed were impacted. All requests for websites in this state returned an HTTP 500 error, with the small exception of some test endpoints such as `/cdn-cgi/trace`.
+
+Customers that did not have the configuration above applied were not impacted. Customer traffic served by our China network was also not impacted.
+    
+      
+### The runtime error
+
+
+      [                ](#the-runtime-error)
+    
+
+    Cloudflare’s rulesets system consists of sets of rules which are evaluated for each request entering our system. A rule consists of a filter, which selects some traffic, and an action which applies an effect to that traffic. Typical actions are “`block`”, “`log`”, or “`skip`”. Another type of action is “`execute`”, which is used to trigger evaluation of another ruleset.
+
+Our internal logging system uses this feature to evaluate new rules before we make them available to the public. A top level ruleset will execute another ruleset containing test rules. It was these test rules that we were attempting to disable.
+
+We have a killswitch subsystem as part of the rulesets system which is intended to allow a rule which is misbehaving to be disabled quickly. This killswitch system receives information from our global configuration system mentioned in the prior sections. We have used this killswitch system on a number of occasions in the past to mitigate incidents and have a well-defined Standard Operating Procedure, which was followed in this incident.
+
+However, we have never before applied a killswitch to a rule with an action of “`execute`”. When the killswitch was applied, the code correctly skipped the evaluation of the execute action, and didn’t evaluate the sub-ruleset pointed to by it. However, an error was then encountered while processing the overall results of evaluating the ruleset:
+            
+
+`if rule_result.action == "execute" then rule_result.execute.results = ruleset_results[tonumber(rule_result.execute.results_index)] end` 
+
+This code expects that, if the ruleset has action=”execute”, the “rule\_result.execute” object will exist. However, because the rule had been skipped, the rule\_result.execute object did not exist, and Lua returned an error due to attempting to look up a value in a nil value.
+
+This is a straightforward error in the code, which had existed undetected for many years. This type of code error is prevented by languages with strong type systems. In our replacement for this code in our new FL2 proxy, which is written in Rust, the error did not occur.
+
+### What about the changes being made after the incident on November 18, 2025?
+
+[ ](#what-about-the-changes-being-made-after-the-incident-on-november-18-2025) 
+
+We made an unrelated change that caused a similar, [longer availability incident](https://blog.cloudflare.com/18-november-2025-outage/) two weeks ago on November 18, 2025\. In both cases, a deployment to help mitigate a security issue for our customers propagated to our entire network and led to errors for nearly all of our customer base.
+
+We have spoken directly with hundreds of customers following that incident and shared our plans to make changes to prevent single updates from causing widespread impact like this. We believe these changes would have helped prevent the impact of today’s incident but, unfortunately, we have not finished deploying them yet.
+
+We know it is disappointing that this work has not been completed yet. It remains our first priority across the organization. In particular, the projects outlined below should help contain the impact of these kinds of changes:
+
+* **Enhanced Rollouts & Versioning**: Similar to how we slowly deploy software with strict health validation, data used for rapid threat response and general configuration needs to have the same safety and blast mitigation features. This includes health validation and quick rollback capabilities among other things.
+* **Streamlined break glass capabilities:** Ensure that critical operations can still be achieved in the face of additional types of failures. This applies to internal services as well as all standard methods of interaction with the Cloudflare control plane used by all Cloudflare customers.
+* **"Fail-Open" Error Handling:** As part of the resilience effort, we are replacing the incorrectly applied hard-fail logic across all critical Cloudflare data-plane components. If a configuration file is corrupt or out-of-range (e.g., exceeding feature caps), the system will log the error and default to a known-good state or pass traffic without scoring, rather than dropping requests. Some services will likely give the customer the option to fail open or closed in certain scenarios. This will include drift-prevention capabilities to ensure this is enforced continuously.
+
+Before the end of next week we will publish a detailed breakdown of all the resiliency projects underway, including the ones listed above. While that work is underway, we are locking down all changes to our network in order to ensure we have better mitigation and rollback systems before we begin again.
+
+These kinds of incidents, and how closely they are clustered together, are not acceptable for a network like ours. On behalf of the team at Cloudflare we want to apologize for the impact and pain this has caused again to our customers and the Internet as a whole.
+
+### Timeline
+
+[ ](#timeline) 
+
+| Time (UTC) | Status            | Description                                                 |
+| ---------- | ----------------- | ----------------------------------------------------------- |
+| 08:47      | INCIDENT start    | Configuration change deployed and propagated to the network |
+| 08:48      | Full impact       | Change fully propagated                                     |
+| 08:50      | INCIDENT declared | Automated alerts                                            |
+| 09:11      | Change reverted   | Configuration change reverted and propagation start         |
+| 09:12      | INCIDENT end      | Revert fully propagated, all traffic restored               |
+
+[Outage](https://blog.cloudflare.com/tag/outage/)[Post Mortem](https://blog.cloudflare.com/tag/post-mortem/)
+
+Follow on X
+
+Dane Knecht|[@dok2001](https://x.com/@dok2001)
+
+Cloudflare|[@cloudflare](https://x.com/@cloudflare)
+
+Related posts
+
+May 06, 2026
+
+[When DNSSEC goes wrong: how we responded to the .de TLD outage](https://blog.cloudflare.com/de-tld-outage-dnssec/)
+
+On May 5, 2026, DENIC published broken DNSSEC signatures for the .de TLD, making millions of domains unreachable. Here's what 1.1.1.1 saw, how serve stale cushioned the impact, and how we restored resolution....
+
+By 
+* [Sebastiaan Neuteboom](https://blog.cloudflare.com/author/sebastiaan-neuteboom/),
+* [Christian Elmerot](https://blog.cloudflare.com/author/christian-elmerot/),
+* [Max Worsley](https://blog.cloudflare.com/author/max-worsley/)
+
+[DNS,](https://blog.cloudflare.com/tag/dns/) [DNSSEC,](https://blog.cloudflare.com/tag/dnssec/) [1.1.1.1,](https://blog.cloudflare.com/tag/1-1-1-1/) [Reliability,](https://blog.cloudflare.com/tag/reliability/) [Outage](https://blog.cloudflare.com/tag/outage/) 
+
+May 01, 2026
+
+[Code Orange: Fail Small is complete. The result is a stronger Cloudflare network](https://blog.cloudflare.com/code-orange-fail-small-complete/)
+
+We have completed a massive engineering effort to make our infrastructure more resilient. Through new tools like Snapstone and the Engineering Codex, we've implemented safer configuration changes and automated best practices to prevent future incidents....
+
+By 
+* [Jeremy Hartman](https://blog.cloudflare.com/author/jeremy-hartman/)
+
+[Outage,](https://blog.cloudflare.com/tag/outage/) [Post Mortem,](https://blog.cloudflare.com/tag/post-mortem/) [Code Orange](https://blog.cloudflare.com/tag/code-orange/) 
+
+April 28, 2026
+
+[Shutdowns, power outages, and conflict: a review of Q1 2026 Internet disruptions](https://blog.cloudflare.com/q1-2026-internet-disruption-summary/)
+
+The first quarter of 2026 saw a surge in Internet disruptions, from nationwide shutdowns in Uganda and Iran to unprecedented drone strikes on cloud infrastructure. We explore the data behind these events using Cloudflare Radar....
+
+By 
+* [David Belson](https://blog.cloudflare.com/author/david-belson/)
+
+[Radar,](https://blog.cloudflare.com/tag/cloudflare-radar/) [Internet Shutdown,](https://blog.cloudflare.com/tag/internet-shutdown/) [Internet Traffic,](https://blog.cloudflare.com/tag/internet-traffic/) [Outage,](https://blog.cloudflare.com/tag/outage/) [Internet Trends,](https://blog.cloudflare.com/tag/internet-trends/) [AWS,](https://blog.cloudflare.com/tag/aws/) [BGP,](https://blog.cloudflare.com/tag/bgp/) [IPv6](https://blog.cloudflare.com/tag/ipv6/) 
+
+February 21, 2026
+
+[Cloudflare outage on February 20, 2026](https://blog.cloudflare.com/cloudflare-outage-february-20-2026/)
+
+Cloudflare suffered a service outage on February 20, 2026\. A subset of customers who use Cloudflare’s Bring Your Own IP (BYOIP) service saw their routes to the Internet withdrawn via Border Gateway Protocol (BGP)....
+
+By 
+* [David Tuber](https://blog.cloudflare.com/author/tubes/),
+* [Dzevad Trumic](https://blog.cloudflare.com/author/dzevad-trumic/)
+
+[Post Mortem,](https://blog.cloudflare.com/tag/post-mortem/) [Incident Response,](https://blog.cloudflare.com/tag/incident-response/) [Outage](https://blog.cloudflare.com/tag/outage/)

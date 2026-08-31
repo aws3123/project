@@ -1,0 +1,164 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  application:
+    name: review-backend
+  cloud:
+    stream:
+      defaultBinder: ${MQ_BINDER:kafka}
+      bindings:
+        reviewTask-out-0:
+          destination: ${MQ_TOPIC:${REVIEW_TASK_TOPIC:ai.review.tasks}}
+          contentType: application/json
+          producer:
+            partition-key-expression: payload.taskId
+        reviewTaskIn-in-0:
+          destination: ${MQ_TOPIC:ai.review.tasks}
+          group: ${MQ_CONSUMER_GROUP:java-orchestrator}
+          consumer:
+            max-attempts: 3
+            back-off-initial-interval: 2000
+            back-off-max-interval: 10000
+            back-off-multiplier: 2.0
+        reviewTaskDlqIn-in-0:
+          destination: ${MQ_TOPIC:ai.review.tasks}-dlq
+          group: ${MQ_CONSUMER_GROUP:java-orchestrator}-dlq
+      kafka:
+        bindings:
+          reviewTaskIn-in-0:
+            consumer:
+              enableDlq: true
+              dlqName: ${MQ_TOPIC:ai.review.tasks}-dlq
+              dlqProducerProperties:
+                configuration:
+                  key.serializer: org.apache.kafka.common.serialization.StringSerializer
+    function:
+      definition: reviewTaskIn;reviewTaskDlqIn
+
+rate-limit:
+  enabled: ${RATE_LIMIT_ENABLED:true}
+  capacity: ${RATE_LIMIT_CAPACITY:100}
+  refill-rate: ${RATE_LIMIT_REFILL_RATE:50}
+  include-paths:
+    - /api/review/**
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        record-exceptions:
+          - com.acme.review.exception.PythonServiceException
+          - com.acme.review.exception.PythonTimeoutException
+    instances:
+      pythonService:
+        base-config: default
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: ${ORCHESTRATOR_SYNC_TIMEOUT:120s}
+    instances:
+      pythonService:
+        base-config: default
+
+orchestrator:
+  core-pool-size: ${ORCHESTRATOR_CORE_POOL:4}
+  max-pool-size: ${ORCHESTRATOR_MAX_POOL:16}
+  queue-capacity: ${ORCHESTRATOR_QUEUE_CAPACITY:200}
+  keep-alive-seconds: 60
+  sync-timeout-ms: ${ORCHESTRATOR_SYNC_TIMEOUT:120000}
+  async-timeout-ms: ${ORCHESTRATOR_ASYNC_TIMEOUT:180000}
+
+reconciliation:
+  stuck-pending-minutes: ${RECONCILIATION_STUCK_PENDING_MINUTES:30}
+  processing-timeout-multiplier: ${RECONCILIATION_PROC_TIMEOUT_MULT:2}
+
+webhook:
+  dedup-lock-ttl-seconds: 120
+
+security:
+  header-name: ${API_HEADER_NAME:X-API-Key}
+  api-key: ${API_KEY:dev-key}
+  callback-token: ${CALLBACK_TOKEN:dev-callback}
+
+minio:
+  endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+  access-key: ${MINIO_ACCESS_KEY:admin}
+  secret-key: ${MINIO_SECRET_KEY:admin123}
+  image-bucket: ${MINIO_IMAGE_BUCKET:incident-images}
+
+python:
+  base-url: ${PYTHON_BASE_URL:http://localhost:8000}
+  sync-path: ${PYTHON_SYNC_PATH:/ai/review/sync}
+  logs-path: ${PYTHON_LOGS_PATH:/ai/review/logs}
+  timeout-ms: ${PYTHON_TIMEOUT_MS:60000}
+  connect-timeout-ms: 3000
+  discovery-enabled: ${PYTHON_DISCOVERY_ENABLED:true}
+  health-path: ${PYTHON_HEALTH_PATH:/ai/health}
+  business-risk-health-path: ${PYTHON_BUSINESS_RISK_HEALTH_PATH:/ai/health/business-risk-source}
+
+review:
+  dispatch:
+    small-diff-chars: ${REVIEW_DISPATCH_SMALL_DIFF_CHARS:4000}
+    large-diff-chars: ${REVIEW_DISPATCH_LARGE_DIFF_CHARS:12000}
+    small-file-count: ${REVIEW_DISPATCH_SMALL_FILE_COUNT:2}
+    large-file-count: ${REVIEW_DISPATCH_LARGE_FILE_COUNT:6}
+    classifier-confidence-threshold: ${REVIEW_DISPATCH_CONFIDENCE_THRESHOLD:0.80}
+
+business-risk:
+  source:
+    max-files: ${BUSINESS_RISK_SOURCE_MAX_FILES:50}
+    max-prepared-bytes: ${BUSINESS_RISK_SOURCE_MAX_PREPARED_BYTES:262144}
+    trim-to-bytes: ${BUSINESS_RISK_SOURCE_TRIM_TO_BYTES:196608}
+    java-preprocess-version: ${BUSINESS_RISK_JAVA_PREPROCESS_VERSION:3.0}
+    python-path: ${PYTHON_BUSINESS_RISK_SOURCE_PATH:/ai/business-risk/source}
+  callback:
+    url: ${BUSINESS_RISK_CALLBACK_URL:http://localhost:8080/api/internal/business-risk/callback}
+    token-header: ${BUSINESS_RISK_CALLBACK_TOKEN_HEADER:X-Callback-Token}
+    signature-header: ${BUSINESS_RISK_CALLBACK_SIGNATURE_HEADER:X-Callback-Signature}
+    timestamp-header: ${BUSINESS_RISK_CALLBACK_TIMESTAMP_HEADER:X-Callback-Timestamp}
+    nonce-header: ${BUSINESS_RISK_CALLBACK_NONCE_HEADER:X-Callback-Nonce}
+    max-skew-seconds: ${BUSINESS_RISK_CALLBACK_MAX_SKEW_SECONDS:300}
+    nonce-ttl-seconds: ${BUSINESS_RISK_CALLBACK_NONCE_TTL_SECONDS:600}
+  worker:
+    token-header: ${BUSINESS_RISK_WORKER_TOKEN_HEADER:X-Worker-Token}
+    redis-key-prefix: ${BUSINESS_RISK_WORKER_REDIS_KEY_PREFIX:bizrisk:worker:}
+    ttl-seconds: ${BUSINESS_RISK_WORKER_TTL_SECONDS:45}
+    fresh-seconds: ${BUSINESS_RISK_WORKER_FRESH_SECONDS:45}
+  sse:
+    heartbeat-seconds: ${BUSINESS_RISK_SSE_HEARTBEAT_SECONDS:25}
+    replay-limit: ${BUSINESS_RISK_SSE_REPLAY_LIMIT:1000}
+    ttl-seconds: ${BUSINESS_RISK_SSE_TTL_SECONDS:3600}
+    max-total-events: ${BUSINESS_RISK_SSE_MAX_TOTAL_EVENTS:50000}
+    max-events-per-session: ${BUSINESS_RISK_SSE_MAX_EVENTS_PER_SESSION:5000}
+    max-events-per-task: ${BUSINESS_RISK_SSE_MAX_EVENTS_PER_TASK:500}
+    persistence-backend: ${BUSINESS_RISK_SSE_PERSISTENCE_BACKEND:memory}
+    redis-key-prefix: ${BUSINESS_RISK_SSE_REDIS_KEY_PREFIX:bizrisk:sse:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,python,redisPing,mq
+
+logging:
+  pattern:
+    level: "%5p [%X{traceId:-}]"
