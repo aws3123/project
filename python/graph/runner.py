@@ -41,6 +41,14 @@ from schemas.result import Recommendation, ReviewResult, RiskBreakdown
 
 from app.utils import safe_detail
 from graph.circuit_breaker import CircuitBreaker
+from graph.events import (
+    EventSink,
+    emit_run_error,
+    emit_run_finished,
+    emit_run_started,
+    emit_step_finished,
+    emit_step_started,
+)
 from graph.state import GraphState, NodeContext
 from services.checkpoint_service import CheckpointService
 from services.image_service import ImageService
@@ -122,22 +130,36 @@ class GraphRunner:
         """统计流水线中所有节点的总数（用于日志/监控）。"""
         return sum(len(p) for p in self._phases)
 
-    def run(self, request: ReviewRequest) -> ReviewResult:
+    def run(self, request: ReviewRequest, event_sink: EventSink | None = None) -> ReviewResult:
         """执行完整流水线：从请求开始 → 跑完所有节点 → 返回审查结果。
 
         这是外部调用的主入口，内部流程：
         1. 将请求转换为初始状态（GraphState）
         2. 调用 run_state() 执行所有节点
         3. 调用 _build_result() 将最终状态转换为 ReviewResult
+
+        event_sink（可选）：流式模式下的事件接收器。
+        不传时行为与旧版完全一致（零开销）；传入时在关键节点
+        发出 run_started / step_* / run_finished / run_error 事件。
         """
+        task_id = str(request.taskId)
+        emit_run_started(event_sink, task_id, self.count_nodes())
         state: GraphState = {
-            "task_id": str(request.taskId),
+            "task_id": task_id,
             "request": request.model_dump(by_alias=True),
         }
-        state = self.run_state(state)
-        return self._build_result(request, state)
+        try:
+            state = self.run_state(state, event_sink=event_sink)
+        except Exception as exc:
+            emit_run_error(
+                event_sink, task_id, type(exc).__name__, safe_detail(exc)
+            )
+            raise
+        result = self._build_result(request, state)
+        emit_run_finished(event_sink, task_id, result)
+        return result
 
-    def run_state(self, state: GraphState) -> GraphState:
+    def run_state(self, state: GraphState, event_sink: EventSink | None = None) -> GraphState:
         """执行流水线的核心方法 —— 按阶段依次执行所有节点。
 
         执行流程：
@@ -189,12 +211,17 @@ class GraphRunner:
                 name, node = phase[0]
                 start = perf_counter()  # 记录开始时间
                 input_snapshot = dict(state)  # 快照输入状态（用于日志记录）
+                emit_step_started(event_sink, task_id, name)
                 try:
                     state = node(state, context)  # 执行节点函数
                     self._append_log(
                         name, context.task_id,
                         input_snapshot, dict(state),
                         start, "SUCCEEDED",
+                    )
+                    emit_step_finished(
+                        event_sink, task_id, name, "SUCCEEDED",
+                        int((perf_counter() - start) * 1000),
                     )
                     completed.add(phase_idx)
                     if ckpt_svc:
@@ -207,6 +234,10 @@ class GraphRunner:
                         name, context.task_id,
                         input_snapshot, {"error": str(exc)},
                         start, "FAILED",
+                    )
+                    emit_step_finished(
+                        event_sink, task_id, name, "FAILED",
+                        int((perf_counter() - start) * 1000),
                     )
                     raise  # 顺序节点失败 → 整个流水线中止
             else:
@@ -270,6 +301,7 @@ class GraphRunner:
                     merged_state = self._run_parallel(
                         remaining, state, context,
                         on_agent_done=_on_agent_done,
+                        event_sink=event_sink,
                     )
 
                     state = merged_state
@@ -316,6 +348,7 @@ class GraphRunner:
         state,
         context,
         on_agent_done: Callable[[str, dict], None] | None = None,
+        event_sink: EventSink | None = None,
     ):
         """并行执行一个阶段内的多个 Agent。
 
@@ -348,6 +381,7 @@ class GraphRunner:
                     self._run_single_agent,
                     name, fn, state, context, log_lock,
                     on_agent_done,
+                    event_sink,
                 )
                 futures[fut] = name
 
@@ -382,7 +416,7 @@ class GraphRunner:
 
         return self._merge_results(state, results)
 
-    def _run_single_agent(self, name, fn, state, context, log_lock, on_done=None):
+    def _run_single_agent(self, name, fn, state, context, log_lock, on_done=None, event_sink=None):
         """在线程中执行单个 Agent 节点。
 
         每个 Agent 在独立线程中运行，完成后：
@@ -391,12 +425,17 @@ class GraphRunner:
         3. 返回 Agent 的输出状态
         """
         start = perf_counter()
+        emit_step_started(event_sink, context.task_id, name)
         try:
             result_state = fn(state, context)
             with log_lock:  # 加锁：确保同一时刻只有一个线程在写日志
                 self._append_log(
                     name, context.task_id, {}, dict(result_state), start, "SUCCEEDED"
                 )
+            emit_step_finished(
+                event_sink, context.task_id, name, "SUCCEEDED",
+                int((perf_counter() - start) * 1000),
+            )
             if on_done:
                 on_done(name, dict(result_state))  # 通知断点服务：这个 Agent 完成了
             return result_state
@@ -405,6 +444,10 @@ class GraphRunner:
                 self._append_log(
                     name, context.task_id, {}, {"error": str(exc)}, start, "FAILED"
                 )
+            emit_step_finished(
+                event_sink, context.task_id, name, "FAILED",
+                int((perf_counter() - start) * 1000),
+            )
             raise
 
     def _merge_results(self, base: GraphState, results: dict[str, dict]) -> GraphState:
