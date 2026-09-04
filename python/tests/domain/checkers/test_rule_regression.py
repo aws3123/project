@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from tools.api_breaking_checker import APIBreakingCheckerTool
 from tools.base import ToolContext
-from tools.config_change_checker import ConfigChangeCheckerTool
 from tools.diff_analyzer import DiffAnalyzerTool
-from tools.sql_risk_checker import SQLRiskCheckerTool
-from tools.test_coverage_checker import TestCoverageCheckerTool as CoverageCheckerTool
+from domain.checkers.api_breaking_checker import APIBreakingCheckerTool
+from domain.checkers.config_change_checker import ConfigChangeCheckerTool
+from domain.checkers.sql_risk_checker import SQLRiskCheckerTool
+from domain.checkers.test_coverage_checker import TestCoverageCheckerTool as CoverageCheckerTool
 
 
 def make_context(task_id: str = "task-1") -> ToolContext:
