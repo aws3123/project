@@ -15,6 +15,7 @@ RAG 是什么？
   比如：历史上"缓存和数据库双写"导致过数据不一致，
   那这次如果也有类似模式，就应该提醒开发者注意
 """
+
 from __future__ import annotations
 
 import logging
@@ -111,12 +112,14 @@ def _build_code_metadata(state: GraphState) -> list[dict]:
         for method in file_info.get("methods", []) or []:
             if not isinstance(method, dict):
                 continue
-            code_metadata.append({
-                "name": method.get("methodId", ""),
-                "kind": "method",
-                "language": "java",
-                "signature": method.get("signature", ""),
-            })
+            code_metadata.append(
+                {
+                    "name": method.get("methodId", ""),
+                    "kind": "method",
+                    "language": "java",
+                    "signature": method.get("signature", ""),
+                }
+            )
 
     return code_metadata or None
 
@@ -163,7 +166,9 @@ def business_risk_rag(state: GraphState, ctx: NodeContext) -> GraphState:
         {
             "source": item.get("source", "unknown"),
             "topic": item.get("title", "unknown"),
-            "snippet": (item.get("nl_description", "") or item.get("snippet", "")) + "\n" + (item.get("code_content", "") or "")[:200],
+            "snippet": (item.get("nl_description", "") or item.get("snippet", ""))
+            + "\n"
+            + (item.get("code_content", "") or "")[:200],
             "score": item.get("score", 0),
             "image_urls": item.get("image_urls", []),
             "image_texts": item.get("image_texts", []),

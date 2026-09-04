@@ -28,7 +28,7 @@ from app.dependencies import (
     get_business_risk_worker_state,
     get_settings,
 )
-from app.routers import review, health, handoff, business_risk_source
+from app.routers import business_risk_source, handoff, health, review
 from app.utils import create_trace_id
 from config.logging import configure_logging
 from services.worker_registry import WorkerRegistry
@@ -71,7 +71,9 @@ async def lifespan(app: FastAPI):
     )
     # 启动心跳循环（一个异步任务，定期发送心跳）
     _registry_task = asyncio.create_task(_registry.heartbeat_loop())
-    logger.info("WorkerRegistry heartbeat sender started instance=%s", _registry._instance_id)
+    logger.info(
+        "WorkerRegistry heartbeat sender started instance=%s", _registry._instance_id
+    )
 
     # 若启用 Kafka 异步链路，启动审查任务消费者
     if settings.kafka_enabled:
@@ -101,7 +103,9 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="AI Code Review Sentinel AI Layer", lifespan=lifespan)
 # 注册路由（将 URL 路径映射到处理函数）
 app.include_router(review.router, prefix="/ai", tags=["review"])
-app.include_router(business_risk_source.router, prefix="/ai", tags=["business-risk-source"])
+app.include_router(
+    business_risk_source.router, prefix="/ai", tags=["business-risk-source"]
+)
 app.include_router(health.router, prefix="/ai", tags=["health"])
 app.include_router(handoff.router, prefix="/ai", tags=["handoff"])
 
@@ -138,5 +142,9 @@ async def service_error_handler(request: Request, exc: exceptions.ServiceError):
     trace_id = getattr(request.state, "trace_id", None)
     return JSONResponse(
         status_code=exc.status_code,
-        content={"errorCode": "PY001", "message": exc.detail.get("message"), "traceId": trace_id},
+        content={
+            "errorCode": "PY001",
+            "message": exc.detail.get("message"),
+            "traceId": trace_id,
+        },
     )

@@ -29,9 +29,17 @@ class BusinessRiskMethodSkeleton(BaseModel):
         data = dict(data)
         if data.get("method_id") is None:
             signature = str(data.get("signature") or "method")
-            start_line = data.get("start_line") or (data.get("line_map") or {}).get("start_line") or 1
+            start_line = (
+                data.get("start_line")
+                or (data.get("line_map") or {}).get("start_line")
+                or 1
+            )
             data["method_id"] = f"{signature}@{start_line}"
-        if data.get("line_map") is None and data.get("start_line") is not None and data.get("end_line") is not None:
+        if (
+            data.get("line_map") is None
+            and data.get("start_line") is not None
+            and data.get("end_line") is not None
+        ):
             data["line_map"] = {
                 "start_line": data.get("start_line"),
                 "end_line": data.get("end_line"),
@@ -62,7 +70,11 @@ class BusinessRiskHotspot(BaseModel):
             data["snippet"] = data.get("raw_snippet")
         if data.get("raw_snippet") is None and data.get("snippet") is not None:
             data["raw_snippet"] = data.get("snippet")
-        if data.get("line_map") is None and data.get("start_line") is not None and data.get("end_line") is not None:
+        if (
+            data.get("line_map") is None
+            and data.get("start_line") is not None
+            and data.get("end_line") is not None
+        ):
             data["line_map"] = {
                 "start_line": data.get("start_line"),
                 "end_line": data.get("end_line"),
@@ -72,7 +84,11 @@ class BusinessRiskHotspot(BaseModel):
         if data.get("end_line") is None and data.get("line_map") is not None:
             data["end_line"] = data["line_map"].get("end_line")
         if data.get("method_id") is None:
-            start_line = data.get("start_line") or (data.get("line_map") or {}).get("start_line") or 1
+            start_line = (
+                data.get("start_line")
+                or (data.get("line_map") or {}).get("start_line")
+                or 1
+            )
             data["method_id"] = f"hotspot@{start_line}"
         return data
 

@@ -45,20 +45,22 @@ class APIBreakingCheckerTool(Tool):
         # 遍历每个文件
         for file in payload.get("files", []):
             # 逐行扫描 diff 内容，enumerate 同时获取行号（从 1 开始）
-            for line_number, line in enumerate(file.get("diff", "").splitlines(), start=1):
+            for line_number, line in enumerate(
+                file.get("diff", "").splitlines(), start=1
+            ):
                 # 如果这一行包含 @Deprecated，说明使用了已废弃的 API
                 if "@Deprecated" in line:
                     findings.append(
                         {
-                            "severity": "MEDIUM",           # 严重程度：中等
-                            "category": "api",              # 分类：API 相关
+                            "severity": "MEDIUM",  # 严重程度：中等
+                            "category": "api",  # 分类：API 相关
                             "title": "Potential API contract drift",  # 标题：API 契约可能漂移
                             "detail": f"Deprecated API usage in {file.get('path')}",  # 详情
-                            "file": file.get("path"),       # 所在文件
-                            "line": line_number,            # 所在行号
-                            "evidence": line,               # 证据：这一行的内容
+                            "file": file.get("path"),  # 所在文件
+                            "line": line_number,  # 所在行号
+                            "evidence": line,  # 证据：这一行的内容
                             "suggestion": "Review compatibility impact and provide a migration path",  # 建议
-                            "confidence": 0.85,             # 置信度：85%
+                            "confidence": 0.85,  # 置信度：85%
                         }
                     )
                     break  # 一个文件只报告一次，避免重复

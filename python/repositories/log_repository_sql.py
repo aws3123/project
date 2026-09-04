@@ -32,7 +32,9 @@ class SQLLogRepository(LogRepositoryProtocol):
         session = self._session_factory()
         try:
             rows = session.execute(
-                select(NodeLogModel.payload).where(NodeLogModel.task_id == task_id).order_by(NodeLogModel.id.asc())
+                select(NodeLogModel.payload)
+                .where(NodeLogModel.task_id == task_id)
+                .order_by(NodeLogModel.id.asc())
             ).all()
             return [log_to_schema(row[0]) for row in rows]
         finally:

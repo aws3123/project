@@ -5,6 +5,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import ValidationError
+from starlette.responses import StreamingResponse
 
 from app.dependencies import (
     get_ai_service,
@@ -20,7 +21,6 @@ from graph.events import (
 )
 from schemas.api.backend_contract import parse_sync_payload
 from schemas.api.result import ReviewResult
-from starlette.responses import StreamingResponse
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +92,7 @@ async def review_sync_stream(
                     event = await asyncio.wait_for(
                         queue.get(), timeout=STREAM_HEARTBEAT_SECONDS
                     )
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     yield format_heartbeat_frame()
                     continue
                 yield format_sse_frame(event)
@@ -107,7 +107,9 @@ async def review_sync_stream(
             if not task.done():
                 # 客户端提前断开：工作线程继续跑完（P1 不做协作取消），
                 # 审查结果照常产出；流端仅记日志
-                logger.info("stream client disconnected early taskId=%s", request.taskId)
+                logger.info(
+                    "stream client disconnected early taskId=%s", request.taskId
+                )
                 task.add_done_callback(_swallow_task_exception)
 
     return StreamingResponse(
@@ -122,7 +124,11 @@ async def review_sync_stream(
 
 
 @router.get("/review/tasks/{task_id}")
-def get_task(task_id: str, task_service=Depends(get_task_service), result_service=Depends(get_result_service)):
+def get_task(
+    task_id: str,
+    task_service=Depends(get_task_service),
+    result_service=Depends(get_result_service),
+):
     task = task_service.get(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")

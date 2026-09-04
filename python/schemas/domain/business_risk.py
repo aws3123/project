@@ -36,6 +36,7 @@ class BusinessInvariant(BaseModel):
       - "库存数量 >= 0"（库存不能为负）
       - "订单总金额 = 各商品金额之和"（金额必须对得上）
     """
+
     # 不变量的唯一标识，比如 "INV-001"
     invariant_id: str
     # 不变量名称，比如 "库存非负"
@@ -58,6 +59,7 @@ class DataFlowPath(BaseModel):
     比如：用户输入 → Service 层 → DAO 层 → 数据库（如果中间没有做过滤，
     就可能是 SQL 注入风险）。
     """
+
     # 数据源头，比如 "HttpServletRequest.getParameter()"
     source: str
     # 中间经过的环节列表，比如 ["UserService.validate()", "OrderDAO.insert()"]
@@ -74,6 +76,7 @@ class DataFlowPath(BaseModel):
 # =============================================================================
 class InvariantViolation(BaseModel):
     """对某个业务不变量的检查结果。"""
+
     # 被检查的不变量 ID
     invariant_id: str
     # 是否被违反（True = 代码违反了这个规则）
@@ -89,6 +92,7 @@ class InvariantViolation(BaseModel):
 # =============================================================================
 class MethodIssue(BaseModel):
     """在某个方法中发现的具体问题。"""
+
     # 方法名称
     method_name: str
     # 问题类型，比如 "SQL_INJECTION"、"MISSING_NULL_CHECK"
@@ -114,6 +118,7 @@ class BusinessRiskItem(BaseModel):
     每个条目描述了一个已识别的业务风险，包括它的严重程度、影响范围、
     违反的不变量、证据和缓解措施。
     """
+
     # 风险唯一标识
     risk_id: str
     # 风险标题，比如 "订单金额可能被篡改"
@@ -142,6 +147,7 @@ class BusinessRiskReport(BaseModel):
 
     汇总了所有不变量、数据流路径、方法问题和风险条目。
     """
+
     # 整体风险级别：low / medium / high
     overall_risk_level: str = "medium"
     # 执行摘要（给管理层看的概括性描述）
@@ -161,6 +167,7 @@ class BusinessRiskReport(BaseModel):
 # =============================================================================
 class BusinessRiskRequest(BaseModel):
     """发起业务风险分析的请求数据。"""
+
     # 任务 ID（可选，异步场景下由系统分配）
     task_id: str | None = None
     # 项目标识
@@ -192,6 +199,7 @@ class BusinessRiskRequest(BaseModel):
 # =============================================================================
 class BusinessRiskResponse(BaseModel):
     """业务风险分析的响应数据。"""
+
     # 运行 ID，标识这次分析的运行实例
     run_id: str
     # 任务 ID
@@ -204,6 +212,8 @@ class BusinessRiskResponse(BaseModel):
     proposed_memory_updates: dict[str, Any] = Field(default_factory=dict)
     # 链路追踪 ID
     trace_id: str | None = None
+
+
 """Schemas for business-risk analysis requests and responses."""
 
 from typing import Any

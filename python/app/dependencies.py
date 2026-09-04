@@ -22,16 +22,15 @@ from threading import RLock
 from fastapi import Request
 
 from config.settings import AppSettings
-from schemas.api.result import (
-    BusinessRiskReadinessComponent,
-    BusinessRiskSourceReadinessStatus,
-)
+
 # select_agents：根据代码变更内容动态选择要执行哪些 Agent
 from graph.agent_selector import select_agents
+
 # GraphBuilder：建造者模式，一步步构建审查流水线
 from graph.builder import GraphBuilder
 from graph.business_risk_runner import BusinessRiskRunner
 from graph.circuit_breaker import CircuitBreaker
+
 # 导入所有节点函数（每个节点就是一个普通的 Python 函数）
 from graph.nodes import (
     analyze_diff,
@@ -60,17 +59,20 @@ from repositories.result_repository import InMemoryResultRepository
 from repositories.result_repository_sql import SQLResultRepository
 from repositories.task_repository import InMemoryTaskRepository
 from repositories.task_repository_sql import SQLTaskRepository
+from schemas.api.result import (
+    BusinessRiskReadinessComponent,
+    BusinessRiskSourceReadinessStatus,
+)
 from services.ai_service import AIService
 from services.business_risk_source_service import BusinessRiskSourceService
 from services.business_risk_worker_state import BusinessRiskWorkerState
 from services.checkpoint_service import CheckpointService
-from services.memory_service import MemoryService
 from services.log_service import LogService
+from services.memory_service import MemoryService
 from services.result_service import ResultService
 from services.task_service import TaskService
 from telemetry.hooks import LoggingTelemetryHook, NoOpTelemetry, TelemetryHook
 from tools.registry import ToolRegistry, build_default_registry
-
 
 # ---------------------------------------------------------------------------
 # 配置（Settings）
@@ -113,7 +115,11 @@ def _get_task_repo() -> InMemoryTaskRepository | SQLTaskRepository:
     global _task_repo
     with _repo_lock:  # 加锁，确保同一时刻只有一个线程在创建实例
         if _task_repo is None:
-            _task_repo = _make_repo(SQLTaskRepository, InMemoryTaskRepository, get_settings().persistence_backend)
+            _task_repo = _make_repo(
+                SQLTaskRepository,
+                InMemoryTaskRepository,
+                get_settings().persistence_backend,
+            )
         return _task_repo
 
 
@@ -122,7 +128,11 @@ def _get_result_repo() -> InMemoryResultRepository | SQLResultRepository:
     global _result_repo
     with _repo_lock:
         if _result_repo is None:
-            _result_repo = _make_repo(SQLResultRepository, InMemoryResultRepository, get_settings().persistence_backend)
+            _result_repo = _make_repo(
+                SQLResultRepository,
+                InMemoryResultRepository,
+                get_settings().persistence_backend,
+            )
         return _result_repo
 
 
@@ -131,7 +141,11 @@ def _get_log_repo() -> InMemoryLogRepository | SQLLogRepository:
     global _log_repo
     with _repo_lock:
         if _log_repo is None:
-            _log_repo = _make_repo(SQLLogRepository, InMemoryLogRepository, get_settings().persistence_backend)
+            _log_repo = _make_repo(
+                SQLLogRepository,
+                InMemoryLogRepository,
+                get_settings().persistence_backend,
+            )
         return _log_repo
 
 
@@ -230,7 +244,9 @@ def _build_graph_runner(
     builder.add_node("diff", analyze_diff)
     builder.add_node("classifier", classify_changes)
     builder.add_node("impact", analyze_impact)
-    builder.add_node("rag", run_rag)  # RAG 前置：检索历史事故作为下游并行 Agent 的共享上下文
+    builder.add_node(
+        "rag", run_rag
+    )  # RAG 前置：检索历史事故作为下游并行 Agent 的共享上下文
     # 并行节点组（三个 Agent 同时执行）
     builder.add_parallel_group(
         [

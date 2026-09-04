@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from threading import RLock
-from typing import Dict
 
 from repositories.base import ResultRepositoryProtocol
 from schemas.api.result import ReviewResult
@@ -9,7 +8,7 @@ from schemas.api.result import ReviewResult
 
 class InMemoryResultRepository(ResultRepositoryProtocol):
     def __init__(self) -> None:
-        self._results: Dict[str, ReviewResult] = {}
+        self._results: dict[str, ReviewResult] = {}
         self._lock = RLock()
 
     def save(self, result: ReviewResult) -> ReviewResult:

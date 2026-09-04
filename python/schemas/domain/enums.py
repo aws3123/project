@@ -87,6 +87,8 @@ class HandoffDecision(str, Enum):
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
     CHANGES_REQUESTED = "CHANGES_REQUESTED"
+
+
 """Enum definitions shared across schema modules."""
 
 from enum import Enum

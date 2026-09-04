@@ -1,4 +1,5 @@
 """风险评分领域逻辑 —— 纯函数，包含所有评分公式与文本构建。"""
+
 from __future__ import annotations
 
 from domain.reviewers._findings import AGENT_WEIGHT, SEVERITY_MULTIPLIER, cross_validate
@@ -6,12 +7,12 @@ from domain.reviewers._findings import AGENT_WEIGHT, SEVERITY_MULTIPLIER, cross_
 __all__ = [
     "AGENT_WEIGHT",
     "SEVERITY_MULTIPLIER",
-    "cross_validate",
-    "compute_deterministic",
-    "build_findings_text",
     "build_cross_text",
+    "build_findings_text",
     "build_impact_text",
     "build_scoring_messages",
+    "compute_deterministic",
+    "cross_validate",
     "parse_scoring_result",
 ]
 
@@ -36,12 +37,12 @@ _MAX_AFFECTED_FILES_FOR_AUTO_REVIEW = 10
 __all__ = [
     "AGENT_WEIGHT",
     "SEVERITY_MULTIPLIER",
-    "cross_validate",
-    "compute_deterministic",
-    "build_findings_text",
     "build_cross_text",
+    "build_findings_text",
     "build_impact_text",
     "build_scoring_messages",
+    "compute_deterministic",
+    "cross_validate",
     "parse_scoring_result",
 ]
 
@@ -73,11 +74,13 @@ def cross_validate(sources: dict[str, list[dict]]) -> tuple[list[dict], bool]:
             continue
         # 多 Agent 交叉验证：加权分 = Σ Agent权重 × 严重级别乘数
         weighted_score = sum(
-            AGENT_WEIGHT.get(item["_source"], 1) *
-            SEVERITY_MULTIPLIER.get(item.get("severity", "LOW"), 1)
+            AGENT_WEIGHT.get(item["_source"], 1)
+            * SEVERITY_MULTIPLIER.get(item.get("severity", "LOW"), 1)
             for item in items
         )
-        best = max(items, key=lambda x: SEVERITY_MULTIPLIER.get(x.get("severity", "LOW"), 0))
+        best = max(
+            items, key=lambda x: SEVERITY_MULTIPLIER.get(x.get("severity", "LOW"), 0)
+        )
         best["confidence"] = min(best.get("confidence", 0.5) * 1.3, 1.0)
         best["cross_validated_by"] = [item["_source"] for item in items]
         best["cross_validation_score"] = weighted_score
@@ -108,20 +111,52 @@ def compute_deterministic(
     affected_count = len(impact_radius.get("affected_files", []))
 
     score = _BASE_SCORE
-    score += min(len([f for f in rule_findings if f.get("severity") == "HIGH"]) * _RULE_HIGH_WEIGHT, _RULE_HIGH_CAP)
-    score += min(len([f for f in security_findings if f.get("severity") == "HIGH"]) * _SECURITY_HIGH_WEIGHT, _SECURITY_HIGH_CAP)
-    score += min(len([f for f in performance_findings if f.get("severity") == "HIGH"]) * _PERF_HIGH_WEIGHT, _PERF_HIGH_CAP)
+    score += min(
+        len([f for f in rule_findings if f.get("severity") == "HIGH"])
+        * _RULE_HIGH_WEIGHT,
+        _RULE_HIGH_CAP,
+    )
+    score += min(
+        len([f for f in security_findings if f.get("severity") == "HIGH"])
+        * _SECURITY_HIGH_WEIGHT,
+        _SECURITY_HIGH_CAP,
+    )
+    score += min(
+        len([f for f in performance_findings if f.get("severity") == "HIGH"])
+        * _PERF_HIGH_WEIGHT,
+        _PERF_HIGH_CAP,
+    )
     score += min(len(rag_context) * _RAG_CONTEXT_WEIGHT, _RAG_CONTEXT_CAP)
     score += _LOW_COVERAGE_BONUS if coverage < _COVERAGE_THRESHOLD else 0
     score += min(impact_score * _IMPACT_WEIGHT, _IMPACT_CAP)
     score = min(score, 1.0)
 
     breakdown = [
-        {"dimension": "规则检查", "score": min(len(rule_findings) * 10, 100), "count": len(rule_findings)},
-        {"dimension": "安全审计", "score": min(len(security_findings) * 15, 100), "count": len(security_findings)},
-        {"dimension": "性能分析", "score": min(len(performance_findings) * 10, 100), "count": len(performance_findings)},
-        {"dimension": "历史关联", "score": min(len(rag_context) * 10, 100), "count": len(rag_context)},
-        {"dimension": "影响范围", "score": min(affected_count * 10, 100), "count": affected_count},
+        {
+            "dimension": "规则检查",
+            "score": min(len(rule_findings) * 10, 100),
+            "count": len(rule_findings),
+        },
+        {
+            "dimension": "安全审计",
+            "score": min(len(security_findings) * 15, 100),
+            "count": len(security_findings),
+        },
+        {
+            "dimension": "性能分析",
+            "score": min(len(performance_findings) * 10, 100),
+            "count": len(performance_findings),
+        },
+        {
+            "dimension": "历史关联",
+            "score": min(len(rag_context) * 10, 100),
+            "count": len(rag_context),
+        },
+        {
+            "dimension": "影响范围",
+            "score": min(affected_count * 10, 100),
+            "count": affected_count,
+        },
         {"dimension": "测试覆盖", "score": int((1 - coverage) * 100)},
     ]
     need_human = (
@@ -129,11 +164,17 @@ def compute_deterministic(
         or force_human
         or affected_count > _MAX_AFFECTED_FILES_FOR_AUTO_REVIEW
     )
-    return {"risk_score": score, "breakdown": breakdown, "need_human_review": need_human}
+    return {
+        "risk_score": score,
+        "breakdown": breakdown,
+        "need_human_review": need_human,
+    }
 
 
 def build_findings_text(
-    rule_findings: list[dict], security_findings: list[dict], performance_findings: list[dict]
+    rule_findings: list[dict],
+    security_findings: list[dict],
+    performance_findings: list[dict],
 ) -> str:
     """构建发现摘要文本（最多取前 15 条）。"""
     return "\n".join(
@@ -171,7 +212,11 @@ def build_impact_text(impact_radius: dict) -> str:
 
 
 def build_scoring_messages(
-    findings_text: str, cross_text: str, impact_text: str, rag_analysis: str, coverage: float
+    findings_text: str,
+    cross_text: str,
+    impact_text: str,
+    rag_analysis: str,
+    coverage: float,
 ) -> list[dict]:
     """构建 LLM 结构化评分消息（system + user）。"""
     return [
@@ -201,9 +246,14 @@ def parse_scoring_result(result: dict, force_human: bool) -> dict:
     return {
         "risk_score": risk_score / 100.0,
         "breakdown": [
-            {"dimension": item.get("dimension", "unknown"), "score": item.get("score", 0), "reason": item.get("reason", "")}
+            {
+                "dimension": item.get("dimension", "unknown"),
+                "score": item.get("score", 0),
+                "reason": item.get("reason", ""),
+            }
             for item in breakdown
         ],
-        "need_human_review": bool(result.get("need_human_review", False)) or bool(force_human),
+        "need_human_review": bool(result.get("need_human_review", False))
+        or bool(force_human),
         "risk_summary": result.get("risk_summary", ""),
     }

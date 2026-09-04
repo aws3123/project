@@ -2,6 +2,7 @@
 
 只负责：读取 state、调用领域纯函数、异常降级、写回 state/字段。
 """
+
 from __future__ import annotations
 
 from domain.reviewers.scoring_review import (
@@ -53,14 +54,20 @@ def score_risks(state: GraphState, ctx: NodeContext) -> GraphState:
     coverage = classification.get("summary", {}).get("coverage", 1.0)
     impact_radius = state.get("impact_radius", {})
 
-    findings_text = build_findings_text(rule_findings, security_findings, performance_findings)
+    findings_text = build_findings_text(
+        rule_findings, security_findings, performance_findings
+    )
     cross_text = build_cross_text(cross_merged, force_human)
     impact_text = build_impact_text(impact_radius)
-    messages = build_scoring_messages(findings_text, cross_text, impact_text, rag_analysis, coverage)
+    messages = build_scoring_messages(
+        findings_text, cross_text, impact_text, rag_analysis, coverage
+    )
 
     try:
         result = ctx.llm_client.chat_structured(
-            messages=messages, output_schema=ScoringOutput, max_tokens=1024,
+            messages=messages,
+            output_schema=ScoringOutput,
+            max_tokens=1024,
         )
         parsed = parse_scoring_result(result, force_human)
         state["risk_score"] = parsed["risk_score"]
@@ -84,8 +91,13 @@ def _apply_deterministic(state: GraphState, force_human: bool) -> None:
     coverage = state.get("classification", {}).get("summary", {}).get("coverage", 1.0)
 
     outcome = compute_deterministic(
-        rule_findings, security_findings, performance_findings,
-        rag_context, impact_radius, coverage, force_human,
+        rule_findings,
+        security_findings,
+        performance_findings,
+        rag_context,
+        impact_radius,
+        coverage,
+        force_human,
     )
     state["risk_score"] = outcome["risk_score"]
     state["breakdown"] = outcome["breakdown"]

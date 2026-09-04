@@ -4,7 +4,10 @@ import json
 from unittest.mock import patch
 
 from config.settings import AppSettings
-from repositories.keyword_index import search_incidents_keyword_local, write_keyword_index
+from repositories.keyword_index import (
+    search_incidents_keyword_local,
+    write_keyword_index,
+)
 
 
 @patch("repositories.keyword_index.es_client")

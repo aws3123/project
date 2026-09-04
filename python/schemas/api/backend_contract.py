@@ -4,15 +4,30 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from schemas.domain.enums import ReviewMode
 from schemas.api.request import ReviewRequest
+from schemas.domain.enums import ReviewMode
 
 
 def _infer_virtual_path(diff_content: str) -> str:
     upper_diff = diff_content.upper()
-    if any(keyword in upper_diff for keyword in ("SELECT", "INSERT", "UPDATE", "DELETE", "CREATE TABLE", "ALTER TABLE", "DROP TABLE")):
+    if any(
+        keyword in upper_diff
+        for keyword in (
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE",
+            "CREATE TABLE",
+            "ALTER TABLE",
+            "DROP TABLE",
+        )
+    ):
         return "changes.sql"
-    if "@REQUESTMAPPING" in upper_diff or "@GETMAPPING" in upper_diff or "@POSTMAPPING" in upper_diff:
+    if (
+        "@REQUESTMAPPING" in upper_diff
+        or "@GETMAPPING" in upper_diff
+        or "@POSTMAPPING" in upper_diff
+    ):
         return "controller.diff"
     if "SERVICE" in upper_diff:
         return "service.diff"
@@ -35,7 +50,12 @@ class BackendSyncRequest(BaseModel):
             repo=self.prUrl,
             branch="unknown",
             diffUrl=self.prUrl,
-            files=[{"path": _infer_virtual_path(self.diffContent), "diff": self.diffContent}],
+            files=[
+                {
+                    "path": _infer_virtual_path(self.diffContent),
+                    "diff": self.diffContent,
+                }
+            ],
             mode=self.mode,
             riskPreferences={},
             metadata={"projectName": self.projectName, "source": "java-backend"},
@@ -54,7 +74,9 @@ class BackendAsyncTaskMessage(BackendSyncRequest):
 
     def to_review_request(self) -> ReviewRequest:
         request = super().to_review_request(self.traceId)
-        return request.model_copy(update={"taskId": self.taskId, "mode": ReviewMode.ASYNC})
+        return request.model_copy(
+            update={"taskId": self.taskId, "mode": ReviewMode.ASYNC}
+        )
 
 
 def parse_sync_payload(payload: dict, trace_id: str) -> ReviewRequest:

@@ -24,7 +24,10 @@ def test_business_risk_source_readiness_returns_503_when_llm_key_missing(monkeyp
     assert body["overall"] == "DOWN"
     assert body["route"]["status"] == "UP"
     assert body["config"] == {"status": "DOWN", "detail": "llm_api_key is required"}
-    assert body["persistence"] == {"status": "UP", "detail": "stateless worker does not require task persistence"}
+    assert body["persistence"] == {
+        "status": "UP",
+        "detail": "stateless worker does not require task persistence",
+    }
     assert body["llm"] == {"status": "DOWN", "detail": "llm_api_key is required"}
 
 
@@ -42,5 +45,8 @@ def test_business_risk_source_readiness_returns_200_when_llm_key_is_ready(monkey
     assert body["overall"] == "UP"
     assert body["route"]["status"] == "UP"
     assert body["config"]["status"] == "UP"
-    assert body["persistence"] == {"status": "UP", "detail": "stateless worker does not require task persistence"}
+    assert body["persistence"] == {
+        "status": "UP",
+        "detail": "stateless worker does not require task persistence",
+    }
     assert body["llm"]["status"] == "UP"

@@ -29,6 +29,7 @@ class BreakdownItem(BaseModel):
 
     比如安全性维度：dimension="security", score=80, reason="发现 SQL 注入风险"
     """
+
     # 维度名称
     dimension: str
     # 评分（0~100）
@@ -42,6 +43,7 @@ class ScoringOutput(BaseModel):
 
     这是"评分节点"要求 LLM 返回的数据结构，包含总分、各维度明细、是否需要人工复核等。
     """
+
     # 整体风险评分（0~100）
     risk_score: int = Field(ge=0, le=100)
     # 各维度的评分明细列表
@@ -57,7 +59,8 @@ class ScoringOutput(BaseModel):
 # =============================================================================
 class RecommendationItem(BaseModel):
     """一条改进建议。"""
-    title: str   # 建议标题
+
+    title: str  # 建议标题
     detail: str  # 建议详情
 
 
@@ -66,6 +69,7 @@ class RAGAnalysisOutput(BaseModel):
 
     RAG 检索到相关的历史事故后，LLM 会分析这些事故和当前代码变更的关联。
     """
+
     # 相关的历史事故 ID 列表
     related_incidents: list[str] = Field(default_factory=list)
     # 风险关联分析（LLM 解释当前变更和历史事故的关系）
@@ -82,6 +86,7 @@ class ReportOutput(BaseModel):
 
     这是"报告生成节点"要求 LLM 返回的数据结构。
     """
+
     # 报告摘要（一段话概括整体审查结论）
     summary: str
     # 详细发现列表（每条是一个具体的风险描述）
@@ -103,6 +108,7 @@ class BusinessInvariantOutput(BaseModel):
         比如"订单金额不能为负数"就是一个不变量——不管什么情况，
         如果订单金额为负，那就是 bug。
     """
+
     # 不变量的唯一标识
     invariant_id: str
     # 不变量名称，比如 "订单金额非负"
@@ -118,6 +124,7 @@ class InvariantCheckOutput(BaseModel):
 
     给定一个不变量（如"订单金额非负"），LLM 会检查当前代码是否违反了这个规则。
     """
+
     # 被检查的不变量 ID
     invariant_id: str
     # 是否被违反（True = 违反了，False = 没有违反）
@@ -137,6 +144,7 @@ class DeepReadOutput(BaseModel):
 
     "深度阅读"是指 LLM 仔细阅读一个方法的完整代码，找出潜在的问题。
     """
+
     # 被分析的方法名
     method_name: str
     # 发现的问题类型，比如 "SQL_INJECTION"、"NULL_POINTER"
@@ -161,6 +169,7 @@ class BusinessRiskAggregateOutput(BaseModel):
 
     这是"业务风险评估节点"要求 LLM 返回的最终结构。
     """
+
     # 整体风险级别：low / medium / high
     overall_risk_level: str = "medium"
     # 执行摘要（给管理层看的一段话概括）
@@ -183,12 +192,15 @@ class SelfVerifyOutput(BaseModel):
         就是让 LLM 回顾自己之前的分析结果，检查是否有遗漏或错误。
         类似于"做完题后检查一遍"。
     """
+
     # 是否通过验证（True = 之前的分析没问题，False = 发现了问题需要修正）
     passed: bool
     # 置信度（0~1），LLM 对自己自检结果的确信程度
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     # 备注列表（LLM 补充的说明，比如"虽然通过了，但建议关注 XX 点"）
     notes: list[str] = Field(default_factory=list)
+
+
 """Pydantic schemas for LLM structured output validation."""
 
 from pydantic import BaseModel, Field

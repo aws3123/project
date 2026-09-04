@@ -2,6 +2,7 @@
 
 薄适配器：领域逻辑用 domain/reviewers/_findings.cross_validate（与 scoring 共享）。
 """
+
 from __future__ import annotations
 
 from domain.reviewers._findings import cross_validate

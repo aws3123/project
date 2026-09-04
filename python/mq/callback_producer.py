@@ -28,7 +28,9 @@ class CallbackProducer:
     def _build_producer(self) -> AIOKafkaProducer:
         kwargs: dict[str, Any] = {
             "bootstrap_servers": self._settings.kafka_bootstrap_servers,
-            "value_serializer": lambda v: json.dumps(v, ensure_ascii=False).encode("utf-8"),
+            "value_serializer": lambda v: json.dumps(v, ensure_ascii=False).encode(
+                "utf-8"
+            ),
             "key_serializer": lambda v: str(v).encode("utf-8"),
             "acks": "all",
             "security_protocol": self._settings.kafka_security_protocol,

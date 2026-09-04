@@ -50,6 +50,7 @@ logger = logging.getLogger(__name__)
 # 评估指标计算函数
 # ============================================================
 
+
 def _dcg_at_k(relevances: list[float], k: int) -> float:
     """计算 DCG@K（Discounted Cumulative Gain，折损累积增益）。
 
@@ -75,7 +76,7 @@ def _dcg_at_k(relevances: list[float], k: int) -> float:
         # i 从 0 开始，所以位置折损用 log2(i + 2)
         # i=0 → log2(2)=1（第1位不折损）
         # i=1 → log2(3)≈1.58（第2位折损）
-        dcg += (2 ** rel - 1) / math.log2(i + 2)
+        dcg += (2**rel - 1) / math.log2(i + 2)
     return dcg
 
 
@@ -172,6 +173,7 @@ def _extract_id(item: dict) -> str:
 # ============================================================
 # 评估主流程
 # ============================================================
+
 
 def evaluate(
     test_queries: list[dict],
@@ -320,11 +322,19 @@ def main():
         print(f"No test queries found in {args.test_file}")
         print("\nExample test query file format:")
         # 打印一个示例格式，方便用户创建自己的测试集
-        print(json.dumps([{
-            "query": "SQL注入 漏洞",
-            "code_metadata": [{"name": "UserService", "language": "java"}],
-            "relevant_ids": ["sql-injection:method:findByUsername:1"]
-        }], indent=2, ensure_ascii=False))
+        print(
+            json.dumps(
+                [
+                    {
+                        "query": "SQL注入 漏洞",
+                        "code_metadata": [{"name": "UserService", "language": "java"}],
+                        "relevant_ids": ["sql-injection:method:findByUsername:1"],
+                    }
+                ],
+                indent=2,
+                ensure_ascii=False,
+            )
+        )
         sys.exit(1)
 
     results = evaluate(test_queries, service, top_k=args.top_k)

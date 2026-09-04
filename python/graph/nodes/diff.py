@@ -7,6 +7,7 @@
   就像审稿前先"标记出哪些段落被修改了"——
   先搞清楚改了哪里，后面的专家才能有针对性地审查。
 """
+
 from __future__ import annotations
 
 from graph.state import GraphState, NodeContext
@@ -30,7 +31,9 @@ def analyze_diff(state: GraphState, ctx: NodeContext) -> GraphState:
     files = state["request"].get("files", [])
     payload = {"files": files, "diffUrl": state["request"].get("diffUrl")}
     # 调用 diff_analyzer 工具执行分析
-    result: ToolResult = ctx.registry.run("diff_analyzer", payload, ToolContext(task_id=ctx.task_id))
+    result: ToolResult = ctx.registry.run(
+        "diff_analyzer", payload, ToolContext(task_id=ctx.task_id)
+    )
     # 将分析结果写入共享状态
     state["diff_analysis"] = result.payload
     return state

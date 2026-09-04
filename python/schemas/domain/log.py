@@ -45,6 +45,8 @@ class NodeLog(BaseModel):
     model_config = {
         "populate_by_name": True,
     }
+
+
 """Schemas for structured telemetry logs produced during graph execution."""
 
 from datetime import datetime

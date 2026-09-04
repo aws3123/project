@@ -24,6 +24,7 @@ class TestImageServiceUnit:
         mock_get_client.return_value = mock_client
 
         from pathlib import Path
+
         url = self.service.upload_image(Path("dummy.png"), "incident-001")
 
         mock_client.make_bucket.assert_called_once_with("incident-images")
@@ -32,7 +33,9 @@ class TestImageServiceUnit:
 
     def test_generate_image_url(self) -> None:
         url = self.service.generate_image_url("images/incident-001/arch.png")
-        assert url == "http://localhost:9000/incident-images/images/incident-001/arch.png"
+        assert (
+            url == "http://localhost:9000/incident-images/images/incident-001/arch.png"
+        )
 
     def test_replace_image_urls_via_service(self) -> None:
         text = "![图](PLACEHOLDER:inc-001/x.png)"
@@ -90,8 +93,13 @@ class TestUrlReplacerIntegration:
             "风险评分: 75/100。"
             "参考历史事故 DELETE 缺少 WHERE 的架构图: ![SQL注入示意图](PLACEHOLDER:incident-001/sql-delete-no-where.png)"
         )
-        result = replace_markdown_image_urls(summary, "http://localhost:9000", "incident-images")
-        assert "http://localhost:9000/incident-images/images/incident-001/sql-delete-no-where.png" in result
+        result = replace_markdown_image_urls(
+            summary, "http://localhost:9000", "incident-images"
+        )
+        assert (
+            "http://localhost:9000/incident-images/images/incident-001/sql-delete-no-where.png"
+            in result
+        )
         assert "PLACEHOLDER" not in result
 
     def test_details_with_images(self) -> None:
@@ -104,4 +112,7 @@ class TestUrlReplacerIntegration:
             for d in details
         ]
         assert "PLACEHOLDER" not in result[1]
-        assert "incident-images/images/incident-002/cascade-failure-monitor.png" in result[1]
+        assert (
+            "incident-images/images/incident-002/cascade-failure-monitor.png"
+            in result[1]
+        )

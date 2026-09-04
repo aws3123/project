@@ -74,12 +74,16 @@ def _fetch_query_embedding(query: str, settings: AppSettings) -> list[float]:
     return emb.tolist()
 
 
-def cache_task_snapshot(task_id: str, payload: dict, settings: AppSettings | None = None) -> None:
+def cache_task_snapshot(
+    task_id: str, payload: dict, settings: AppSettings | None = None
+) -> None:
     client = get_redis_client(settings)
     client.set(f"task:{task_id}", json.dumps(payload, ensure_ascii=False), ex=86400)
 
 
-def get_cached_task_snapshot(task_id: str, settings: AppSettings | None = None) -> dict | None:
+def get_cached_task_snapshot(
+    task_id: str, settings: AppSettings | None = None
+) -> dict | None:
     client = get_redis_client(settings)
     raw = client.get(f"task:{task_id}")
     if not raw:

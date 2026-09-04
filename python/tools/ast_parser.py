@@ -28,16 +28,19 @@ from __future__ import annotations
 
 # ast 是 Python 内置的 AST 解析模块
 import ast as py_ast
+
 # logging 记录日志
 import logging
+
 # re 正则表达式模块
 import re
+
+# Callable 表示可调用类型
 # dataclass 自动生成构造方法等
 from dataclasses import dataclass, field
+
 # wraps 保留被装饰函数的元信息
 from functools import wraps
-# Callable 表示可调用类型
-from typing import Callable
 
 # 导入工具基础类型
 from tools.base import Tool, ToolContext, ToolResult
@@ -51,19 +54,33 @@ MAX_FILES_PER_REQUEST = 50
 # TARGET_NODE_TYPES: 每种语言需要提取的 AST 节点类型
 # 键是语言名，值是 {节点类型: 实体类别} 的映射
 TARGET_NODE_TYPES = {
-    "python": {"ClassDef": "class", "FunctionDef": "method", "AsyncFunctionDef": "method",
-               "Import": "import", "ImportFrom": "import"},
-    "java": {"class_declaration": "class", "method_declaration": "method",
-             "field_declaration": "field", "import_declaration": "import",
-             "interface_declaration": "interface"},
-    "sql": {"create_table": "table", "alter_table": "table", "drop_table": "table",
-            "create_index": "index"},
+    "python": {
+        "ClassDef": "class",
+        "FunctionDef": "method",
+        "AsyncFunctionDef": "method",
+        "Import": "import",
+        "ImportFrom": "import",
+    },
+    "java": {
+        "class_declaration": "class",
+        "method_declaration": "method",
+        "field_declaration": "field",
+        "import_declaration": "import",
+        "interface_declaration": "interface",
+    },
+    "sql": {
+        "create_table": "table",
+        "alter_table": "table",
+        "drop_table": "table",
+        "create_index": "index",
+    },
 }
 
 # 检查 tree-sitter 是否可用（可选依赖）
 TREE_SITTER_AVAILABLE = False
 try:
     import tree_sitter
+
     TREE_SITTER_AVAILABLE = True
 except ImportError:
     pass
@@ -72,6 +89,7 @@ except ImportError:
 JAVALANG_AVAILABLE = False
 try:
     import javalang
+
     JAVALANG_AVAILABLE = True
 except ImportError:
     pass
@@ -97,6 +115,7 @@ class CodeEntity:
         parent_class: 父类名（如果是类成员）
         package: 包名
     """
+
     name: str
     kind: str
     file_path: str
@@ -122,6 +141,7 @@ class CodeRelation:
         target: 目标实体（被调用方）
         relation_type: 关系类型（CALLS/EXTENDS/IMPLEMENTS/IMPORTS/REFERENCES）
     """
+
     source: str
     target: str
     relation_type: str  # CALLS / EXTENDS / IMPLEMENTS / IMPORTS / REFERENCES
@@ -137,6 +157,7 @@ def timeout(seconds: int):
     注意：这个装饰器只在 Unix 系统上有效（使用 signal.alarm）。
     """
     import signal as _signal
+
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -145,7 +166,9 @@ def timeout(seconds: int):
                 return func(*args, **kwargs)
             finally:
                 _signal.alarm(0)  # 取消闹钟
+
         return wrapper
+
     return decorator
 
 
@@ -169,22 +192,26 @@ class ASTParserTool(Tool):
         pre_entities = payload.get("entities")
         pre_relations = payload.get("relations")
         if pre_entities is not None and pre_relations is not None:
-            logger.info("Using preprocessed entities/relations from Java BFF, skipping local AST parsing")
+            logger.info(
+                "Using preprocessed entities/relations from Java BFF, skipping local AST parsing"
+            )
             return ToolResult(
                 name=self.name,
                 payload={
                     "entities": pre_entities,
                     "relations": pre_relations,
-                }
+                },
             )
 
         files = payload.get("files", [])
         # 限制文件数量，防止恶意提交
         if len(files) > MAX_FILES_PER_REQUEST:
-            logger.warning("Too many files (%d), limiting to %d", len(files), MAX_FILES_PER_REQUEST)
+            logger.warning(
+                "Too many files (%d), limiting to %d", len(files), MAX_FILES_PER_REQUEST
+            )
             files = files[:MAX_FILES_PER_REQUEST]
 
-        entities: list[CodeEntity] = []   # 存放所有代码实体
+        entities: list[CodeEntity] = []  # 存放所有代码实体
         relations: list[CodeRelation] = []  # 存放所有代码关系
 
         # 遍历每个文件进行解析
@@ -208,18 +235,27 @@ class ASTParserTool(Tool):
             payload={
                 "entities": [self._entity_to_dict(e) for e in entities],
                 "relations": [self._relation_to_dict(r) for r in relations],
-            }
+            },
         )
 
     def _detect_language(self, path: str) -> str:
         """根据文件扩展名检测编程语言。"""
         ext = path.rsplit(".", 1)[-1].lower() if "." in path else ""
-        lang_map = {"java": "java", "py": "python", "sql": "sql",
-                    "yml": "yaml", "yaml": "yaml", "xml": "xml",
-                    "properties": "properties", "json": "json"}
+        lang_map = {
+            "java": "java",
+            "py": "python",
+            "sql": "sql",
+            "yml": "yaml",
+            "yaml": "yaml",
+            "xml": "xml",
+            "properties": "properties",
+            "json": "json",
+        }
         return lang_map.get(ext, "unknown")
 
-    def _extract_entities(self, path: str, diff: str, full_content: str, lang: str) -> list[CodeEntity]:
+    def _extract_entities(
+        self, path: str, diff: str, full_content: str, lang: str
+    ) -> list[CodeEntity]:
         """从文件中提取代码实体。根据语言选择不同的解析器。"""
         changed_ranges = self._diff_line_ranges(diff)  # 获取变更的行号范围
 
@@ -240,7 +276,7 @@ class ASTParserTool(Tool):
         """
         ranges: set[int] = set()
         # 解析 @@ 头部获取变更行号
-        for m in re.finditer(r'@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@', diff):
+        for m in re.finditer(r"@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", diff):
             start = int(m.group(1))
             count = int(m.group(2)) if m.group(2) else 1
             for i in range(start, start + count):
@@ -254,7 +290,9 @@ class ASTParserTool(Tool):
                     ranges.add(line_num)
         return ranges
 
-    def _parse_python(self, path: str, diff: str, full_content: str, changed_ranges: set[int]) -> list[CodeEntity]:
+    def _parse_python(
+        self, path: str, diff: str, full_content: str, changed_ranges: set[int]
+    ) -> list[CodeEntity]:
         """解析 Python 代码，提取类、函数、导入等实体。"""
         entities: list[CodeEntity] = []
         # 如果有完整内容就用完整内容，否则从 diff 重建
@@ -275,7 +313,9 @@ class ASTParserTool(Tool):
                 if entity:
                     entities.append(entity)
         except SyntaxError as e:
-            logger.debug("Python syntax error in %s: %s (falling back to regex)", path, e)
+            logger.debug(
+                "Python syntax error in %s: %s (falling back to regex)", path, e
+            )
             entities = self._parse_generic(path, diff, "python")
         return entities
 
@@ -285,26 +325,39 @@ class ASTParserTool(Tool):
         for line in diff.splitlines():
             if line.startswith("+") and not line.startswith("+++"):
                 lines.append(line[1:])  # 去掉 + 号
-            elif not line.startswith("-") and not line.startswith("---") and not line.startswith("@@"):
+            elif (
+                not line.startswith("-")
+                and not line.startswith("---")
+                and not line.startswith("@@")
+            ):
                 lines.append(line)  # 保留未变更的行
         return "\n".join(lines)
 
     def _extract_python_package(self, source: str) -> str:
         """从 Python 源码中提取包名（从 import 语句推断）。"""
         for line in source.splitlines()[:10]:
-            m = re.match(r'^from\s+([\w.]+)\s+import', line)
+            m = re.match(r"^from\s+([\w.]+)\s+import", line)
             if m:
                 return m.group(1)
         return ""
 
-    def _py_node_to_entity(self, node, path: str, package: str, source: str) -> CodeEntity | None:
+    def _py_node_to_entity(
+        self, node, path: str, package: str, source: str
+    ) -> CodeEntity | None:
         """将 Python AST 节点转换为 CodeEntity。"""
-        kind_map = {"ClassDef": "class", "FunctionDef": "method", "AsyncFunctionDef": "method",
-                    "Import": "import", "ImportFrom": "import"}
+        kind_map = {
+            "ClassDef": "class",
+            "FunctionDef": "method",
+            "AsyncFunctionDef": "method",
+            "Import": "import",
+            "ImportFrom": "import",
+        }
         kind = kind_map.get(node.__class__.__name__, "unknown")
         name = getattr(node, "name", "unknown")
         start = getattr(node, "lineno", 0)
-        end = getattr(node, "end_lineno", start) if hasattr(node, "end_lineno") else start
+        end = (
+            getattr(node, "end_lineno", start) if hasattr(node, "end_lineno") else start
+        )
 
         qname = f"{path}::{name}"
         if package:
@@ -315,13 +368,22 @@ class ASTParserTool(Tool):
         for n in py_ast.walk(node):
             if isinstance(n, py_ast.ClassDef) and n != node:
                 parent_class = n.name
-                qname = f"{package}.{parent_class}.{name}" if package else f"{parent_class}.{name}"
+                qname = (
+                    f"{package}.{parent_class}.{name}"
+                    if package
+                    else f"{parent_class}.{name}"
+                )
                 break
 
         return CodeEntity(
-            name=name, kind=kind, file_path=path,
-            line_start=start, line_end=end, language="python",
-            fully_qualified_name=qname, parent_class=parent_class,
+            name=name,
+            kind=kind,
+            file_path=path,
+            line_start=start,
+            line_end=end,
+            language="python",
+            fully_qualified_name=qname,
+            parent_class=parent_class,
             package=package,
             signature=self._py_get_signature(node, source),
         )
@@ -333,7 +395,9 @@ class ASTParserTool(Tool):
         except Exception:
             return ""
 
-    def _parse_java(self, path: str, diff: str, full_content: str, changed_ranges: set[int]) -> list[CodeEntity]:
+    def _parse_java(
+        self, path: str, diff: str, full_content: str, changed_ranges: set[int]
+    ) -> list[CodeEntity]:
         """解析 Java 代码，提取类、方法、字段等实体。"""
         entities: list[CodeEntity] = []
         source = full_content or self._reconstruct_generic(diff, "+")
@@ -345,7 +409,11 @@ class ASTParserTool(Tool):
                 package = tree.package.name if tree.package else ""
                 if tree.types:
                     for t in tree.types:
-                        entities.extend(self._javalang_type_to_entities(t, path, package, changed_ranges, source))
+                        entities.extend(
+                            self._javalang_type_to_entities(
+                                t, path, package, changed_ranges, source
+                            )
+                        )
                 return entities
             except Exception as e:
                 logger.debug("javalang parse failed for %s: %s", path, e)
@@ -353,8 +421,9 @@ class ASTParserTool(Tool):
         # 如果 javalang 不可用或解析失败，回退到正则表达式解析
         return self._parse_generic(path, diff, "java")
 
-    def _javalang_type_to_entities(self, type_decl, path: str, package: str,
-                                    changed_ranges: set[int], source: str) -> list[CodeEntity]:
+    def _javalang_type_to_entities(
+        self, type_decl, path: str, package: str, changed_ranges: set[int], source: str
+    ) -> list[CodeEntity]:
         """将 javalang 解析的类型声明转换为 CodeEntity 列表。"""
         entities: list[CodeEntity] = []
         class_name = type_decl.name
@@ -368,35 +437,55 @@ class ASTParserTool(Tool):
                 if changed_ranges and line_num not in changed_ranges:
                     continue
                 method_fqn = f"{fqn}::{name}"
-                entities.append(CodeEntity(
-                    name=name, kind="method", file_path=path, line_start=line_num,
-                    language="java", fully_qualified_name=method_fqn,
-                    parent_class=class_name, package=package,
-                    modifiers=member.modifiers or [],
-                    signature=f"{member.return_type or 'void'} {name}(...)" if member.return_type else f"{name}(...)",
-                ))
+                entities.append(
+                    CodeEntity(
+                        name=name,
+                        kind="method",
+                        file_path=path,
+                        line_start=line_num,
+                        language="java",
+                        fully_qualified_name=method_fqn,
+                        parent_class=class_name,
+                        package=package,
+                        modifiers=member.modifiers or [],
+                        signature=(
+                            f"{member.return_type or 'void'} {name}(...)"
+                            if member.return_type
+                            else f"{name}(...)"
+                        ),
+                    )
+                )
             elif isinstance(member, javalang.tree.FieldDeclaration):
                 line = getattr(member, "_position", None)
                 line_num = line.line if line else 0
                 if changed_ranges and line_num not in changed_ranges:
                     continue
                 for decl in member.declarators:
-                    entities.append(CodeEntity(
-                        name=decl.name, kind="field", file_path=path, line_start=line_num,
-                        language="java", fully_qualified_name=f"{fqn}.{decl.name}",
-                        parent_class=class_name, package=package,
-                    ))
+                    entities.append(
+                        CodeEntity(
+                            name=decl.name,
+                            kind="field",
+                            file_path=path,
+                            line_start=line_num,
+                            language="java",
+                            fully_qualified_name=f"{fqn}.{decl.name}",
+                            parent_class=class_name,
+                            package=package,
+                        )
+                    )
         return entities
 
-    def _parse_sql(self, path: str, diff: str, changed_ranges: set[int]) -> list[CodeEntity]:
+    def _parse_sql(
+        self, path: str, diff: str, changed_ranges: set[int]
+    ) -> list[CodeEntity]:
         """解析 SQL 代码，提取表、索引等实体。"""
         entities: list[CodeEntity] = []
         # SQL 关键字正则表达式映射
         sql_keywords = {
-            r'(?i)CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)': "table",
-            r'(?i)ALTER\s+TABLE\s+(\w+)': "table",
-            r'(?i)DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(\w+)': "table",
-            r'(?i)CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)': "index",
+            r"(?i)CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)": "table",
+            r"(?i)ALTER\s+TABLE\s+(\w+)": "table",
+            r"(?i)DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(\w+)": "table",
+            r"(?i)CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)": "index",
         }
         line_num = 0
         for line in diff.splitlines():
@@ -409,12 +498,17 @@ class ASTParserTool(Tool):
             for pattern, kind in sql_keywords.items():
                 m = re.search(pattern, content)
                 if m:
-                    entities.append(CodeEntity(
-                        name=m.group(1), kind=kind, file_path=path,
-                        line_start=line_num, language="sql",
-                        fully_qualified_name=f"{path}::{m.group(1)}",
-                        signature=content[:120],
-                    ))
+                    entities.append(
+                        CodeEntity(
+                            name=m.group(1),
+                            kind=kind,
+                            file_path=path,
+                            line_start=line_num,
+                            language="sql",
+                            fully_qualified_name=f"{path}::{m.group(1)}",
+                            signature=content[:120],
+                        )
+                    )
         return entities
 
     def _parse_generic(self, path: str, diff: str, lang: str) -> list[CodeEntity]:
@@ -423,14 +517,17 @@ class ASTParserTool(Tool):
         # 每种语言的正则表达式模式
         generic_patterns = {
             "java": [
-                (r'(?:public|private|protected)?\s*(?:static)?\s*(?:final)?\s*\w+\s+(\w+)\s*\(', "method"),
-                (r'(?:public|private|protected)?\s*class\s+(\w+)', "class"),
-                (r'import\s+([\w.]+)', "import"),
+                (
+                    r"(?:public|private|protected)?\s*(?:static)?\s*(?:final)?\s*\w+\s+(\w+)\s*\(",
+                    "method",
+                ),
+                (r"(?:public|private|protected)?\s*class\s+(\w+)", "class"),
+                (r"import\s+([\w.]+)", "import"),
             ],
             "python": [
-                (r'def\s+(\w+)\s*\(', "method"),
-                (r'class\s+(\w+)', "class"),
-                (r'(?:from\s+([\w.]+)\s+)?import\s+([\w.,\s]+)', "import"),
+                (r"def\s+(\w+)\s*\(", "method"),
+                (r"class\s+(\w+)", "class"),
+                (r"(?:from\s+([\w.]+)\s+)?import\s+([\w.,\s]+)", "import"),
             ],
         }
         patterns = generic_patterns.get(lang, [])
@@ -443,11 +540,16 @@ class ASTParserTool(Tool):
             for pattern, kind in patterns:
                 m = re.match(pattern, content)
                 if m:
-                    entities.append(CodeEntity(
-                        name=m.group(1), kind=kind, file_path=path,
-                        line_start=line_num, language=lang,
-                        fully_qualified_name=f"{path}::{m.group(1)}",
-                    ))
+                    entities.append(
+                        CodeEntity(
+                            name=m.group(1),
+                            kind=kind,
+                            file_path=path,
+                            line_start=line_num,
+                            language=lang,
+                            fully_qualified_name=f"{path}::{m.group(1)}",
+                        )
+                    )
         return entities
 
     def _reconstruct_generic(self, diff: str, prefix: str) -> str:
@@ -455,12 +557,18 @@ class ASTParserTool(Tool):
         lines = []
         for line in diff.splitlines():
             if line.startswith(prefix) and not line.startswith(prefix * 3):
-                lines.append(line[len(prefix):])
-            elif not line.startswith("-") and not line.startswith("---") and not line.startswith("@@"):
+                lines.append(line[len(prefix) :])
+            elif (
+                not line.startswith("-")
+                and not line.startswith("---")
+                and not line.startswith("@@")
+            ):
                 lines.append(line)
         return "\n".join(lines)
 
-    def _extract_relations(self, entities: list[CodeEntity], diff: str, lang: str) -> list[CodeRelation]:
+    def _extract_relations(
+        self, entities: list[CodeEntity], diff: str, lang: str
+    ) -> list[CodeRelation]:
         """从 diff 中提取代码实体之间的关系（调用、继承等）。"""
         relations: list[CodeRelation] = []
         qnames = {e.fully_qualified_name for e in entities}
@@ -471,37 +579,53 @@ class ASTParserTool(Tool):
             content = line[1:].strip()
 
             # 提取方法调用：obj.method() 或 method()
-            for m in re.finditer(r'(?:\w+\.)?(\w+)\s*\(', content):
+            for m in re.finditer(r"(?:\w+\.)?(\w+)\s*\(", content):
                 called = m.group(1)
                 for e in entities:
                     if e.kind in ("method",) and called == e.name:
-                        source_entity = self._find_enclosing_entity(entities, e.line_start)
+                        source_entity = self._find_enclosing_entity(
+                            entities, e.line_start
+                        )
                         if source_entity:
-                            relations.append(CodeRelation(
-                                source=source_entity.fully_qualified_name,
-                                target=e.fully_qualified_name,
-                                relation_type="CALLS",
-                            ))
+                            relations.append(
+                                CodeRelation(
+                                    source=source_entity.fully_qualified_name,
+                                    target=e.fully_qualified_name,
+                                    relation_type="CALLS",
+                                )
+                            )
 
             # 提取继承关系：extends ClassName
-            extends_m = re.match(r'.*extends\s+(\w+)', content)
+            extends_m = re.match(r".*extends\s+(\w+)", content)
             if extends_m:
                 for e in entities:
                     if e.name == extends_m.group(1) and e.kind == "class":
                         for src in entities:
-                            if src.kind == "class" and src.line_start == self._find_line_in_diff(diff, content):
-                                relations.append(CodeRelation(
-                                    source=src.fully_qualified_name,
-                                    target=e.fully_qualified_name,
-                                    relation_type="EXTENDS",
-                                ))
+                            if (
+                                src.kind == "class"
+                                and src.line_start
+                                == self._find_line_in_diff(diff, content)
+                            ):
+                                relations.append(
+                                    CodeRelation(
+                                        source=src.fully_qualified_name,
+                                        target=e.fully_qualified_name,
+                                        relation_type="EXTENDS",
+                                    )
+                                )
 
         return relations
 
-    def _find_enclosing_entity(self, entities: list[CodeEntity], line: int) -> CodeEntity | None:
+    def _find_enclosing_entity(
+        self, entities: list[CodeEntity], line: int
+    ) -> CodeEntity | None:
         """查找包含指定行的实体（用于确定调用关系中的源实体）。"""
-        for e in sorted(entities, key=lambda x: (x.line_start, x.line_end), reverse=True):
-            if e.kind == "method" and e.line_start <= line <= (e.line_end or e.line_start + 10):
+        for e in sorted(
+            entities, key=lambda x: (x.line_start, x.line_end), reverse=True
+        ):
+            if e.kind == "method" and e.line_start <= line <= (
+                e.line_end or e.line_start + 10
+            ):
                 return e
         for e in sorted(entities, key=lambda x: x.line_start):
             if e.kind == "class" and e.line_start <= line:
@@ -518,13 +642,23 @@ class ASTParserTool(Tool):
     def _entity_to_dict(self, e: CodeEntity) -> dict:
         """将 CodeEntity 转换为字典格式。"""
         return {
-            "name": e.name, "kind": e.kind, "file_path": e.file_path,
-            "line_start": e.line_start, "line_end": e.line_end,
-            "language": e.language, "modifiers": e.modifiers,
-            "signature": e.signature, "fully_qualified_name": e.fully_qualified_name,
-            "parent_class": e.parent_class, "package": e.package,
+            "name": e.name,
+            "kind": e.kind,
+            "file_path": e.file_path,
+            "line_start": e.line_start,
+            "line_end": e.line_end,
+            "language": e.language,
+            "modifiers": e.modifiers,
+            "signature": e.signature,
+            "fully_qualified_name": e.fully_qualified_name,
+            "parent_class": e.parent_class,
+            "package": e.package,
         }
 
     def _relation_to_dict(self, r: CodeRelation) -> dict:
         """将 CodeRelation 转换为字典格式。"""
-        return {"source": r.source, "target": r.target, "relation_type": r.relation_type}
+        return {
+            "source": r.source,
+            "target": r.target,
+            "relation_type": r.relation_type,
+        }

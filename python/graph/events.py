@@ -12,6 +12,7 @@
 3. run_finished 携带的 result 与旧同步接口的 JSON 响应完全一致，
    Java 落库逻辑与前端映射零改动
 """
+
 from __future__ import annotations
 
 import json
@@ -51,8 +52,10 @@ def _emit(sink: EventSink | None, event: str, data: dict[str, Any]) -> None:
         return
     try:
         sink({"event": event, "data": data})
-    except Exception:  # noqa: BLE001 —— 事件管道故障绝不能中断流水线
-        logger.warning("event sink failed for %s, streaming degraded", event, exc_info=True)
+    except Exception:
+        logger.warning(
+            "event sink failed for %s, streaming degraded", event, exc_info=True
+        )
 
 
 def emit_run_started(sink: EventSink | None, task_id: str, total_steps: int) -> None:
@@ -91,7 +94,9 @@ def emit_run_finished(sink: EventSink | None, task_id: str, result: Any) -> None
     _emit(sink, "run_finished", {"taskId": task_id, "result": result_payload})
 
 
-def emit_run_error(sink: EventSink | None, task_id: str, error_code: str, error_message: str) -> None:
+def emit_run_error(
+    sink: EventSink | None, task_id: str, error_code: str, error_message: str
+) -> None:
     _emit(
         sink,
         "run_error",

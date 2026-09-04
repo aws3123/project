@@ -2,6 +2,7 @@
 
 只负责：读取 state、调用领域纯函数、异常降级、写回 state。
 """
+
 from __future__ import annotations
 
 from domain.reviewers.report_review import build_report_messages, template_fallback
@@ -38,7 +39,12 @@ def summarize(state: GraphState, ctx: NodeContext) -> GraphState:
     rag_context = state.get("rag_context", [])
 
     messages = build_report_messages(
-        risk_score_value, risk_summary, breakdown, rule_findings, rag_analysis, rag_context,
+        risk_score_value,
+        risk_summary,
+        breakdown,
+        rule_findings,
+        rag_analysis,
+        rag_context,
     )
 
     try:

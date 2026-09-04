@@ -47,20 +47,22 @@ class SQLRiskCheckerTool(Tool):
         # 遍历每个文件
         for file in payload.get("files", []):
             # 逐行扫描 diff 内容，enumerate 同时获取行号（从 1 开始）
-            for line_number, line in enumerate(file.get("diff", "").splitlines(), start=1):
+            for line_number, line in enumerate(
+                file.get("diff", "").splitlines(), start=1
+            ):
                 # 如果这一行包含 DELETE（不区分大小写），说明可能有破坏性操作
                 if "DELETE" in line.upper():
                     findings.append(
                         {
-                            "severity": "HIGH",             # 严重程度：高
-                            "category": "sql",              # 分类：SQL 相关
+                            "severity": "HIGH",  # 严重程度：高
+                            "category": "sql",  # 分类：SQL 相关
                             "title": "Potential destructive query",  # 标题：潜在的破坏性查询
                             "detail": f"Potential destructive query in {file.get('path')}",  # 详情
-                            "file": file.get("path"),       # 所在文件
-                            "line": line_number,            # 所在行号
-                            "evidence": line,               # 证据：这一行的内容
+                            "file": file.get("path"),  # 所在文件
+                            "line": line_number,  # 所在行号
+                            "evidence": line,  # 证据：这一行的内容
                             "suggestion": "Add WHERE guard or convert to soft delete",  # 建议
-                            "confidence": 0.95,             # 置信度：95%
+                            "confidence": 0.95,  # 置信度：95%
                         }
                     )
                     break  # 一个文件只报告一次，避免重复

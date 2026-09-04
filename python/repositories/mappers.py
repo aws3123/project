@@ -8,16 +8,21 @@
     函数式（模块级纯函数），与项目的轻量风格一致。
     仓储只负责 session 管理与读写，字段映射全部委托本模块。
 """
+
 from __future__ import annotations
 
 import json
 
 from pydantic import BaseModel
 
-from repositories.sqlalchemy_models import NodeLogModel, ReviewResultModel, ReviewTaskModel
+from repositories.sqlalchemy_models import (
+    NodeLogModel,
+    ReviewResultModel,
+    ReviewTaskModel,
+)
+from schemas.api.result import ReviewResult
 from schemas.domain.enums import ReviewMode, TaskStatus
 from schemas.domain.log import NodeLog
-from schemas.api.result import ReviewResult
 from schemas.domain.task import ReviewTask
 
 

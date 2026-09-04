@@ -32,7 +32,9 @@ def test_rrf_fusion_small_k_boosts_lower_ranks():
     score_k60 = result_k60[0].get("rrf_score", result_k60[0].get("score", 0))
     score_k10 = result_k10[0].get("rrf_score", result_k10[0].get("score", 0))
     # The top item's RRF score should differ between k=60 and k=10
-    assert abs(1.0 / (60 + 1) - 1.0 / (10 + 1)) > 0.0001  # RRF scores are inherently different
+    assert (
+        abs(1.0 / (60 + 1) - 1.0 / (10 + 1)) > 0.0001
+    )  # RRF scores are inherently different
 
 
 def test_rrf_fusion_keyword_match_ranks_higher_with_small_k():

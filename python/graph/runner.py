@@ -19,25 +19,23 @@
   - 多人协作工位 = 几个专家同时干活，干完汇总
   - 断点续传 = 流水线停电后，来电了从断掉的地方继续，不用从头来
 """
+
 from __future__ import annotations
 
 import logging
 import threading  # 线程锁：并行执行时保护日志写入的线程安全
 from collections.abc import Callable
 from concurrent.futures import (
-    Future,             # 异步任务的"取票凭证"，用来获取线程执行结果
-    ThreadPoolExecutor, # 线程池：同时启动多个线程干活
+    Future,  # 异步任务的"取票凭证"，用来获取线程执行结果
+    ThreadPoolExecutor,  # 线程池：同时启动多个线程干活
+)
+from concurrent.futures import (
     TimeoutError as FutureTimeoutError,
 )
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from time import perf_counter  # 高精度计时器，用于测量节点执行耗时
 from typing import TYPE_CHECKING, Any
-
-from schemas.domain.enums import RAGStatus, TaskStatus, Tier
-from schemas.domain.log import NodeLog
-from schemas.api.request import ReviewRequest
-from schemas.api.result import Recommendation, ReviewResult, RiskBreakdown
 
 from app.utils import safe_detail
 from graph.circuit_breaker import CircuitBreaker
@@ -50,6 +48,10 @@ from graph.events import (
     emit_step_started,
 )
 from graph.state import GraphState, NodeContext
+from schemas.api.request import ReviewRequest
+from schemas.api.result import Recommendation, ReviewResult, RiskBreakdown
+from schemas.domain.enums import RAGStatus, TaskStatus, Tier
+from schemas.domain.log import NodeLog
 from services.checkpoint_service import CheckpointService
 from services.image_service import ImageService
 from services.image_url_replacer import replace_markdown_image_urls
@@ -76,14 +78,14 @@ SCORE_SCALE_FACTOR = 100
 # - "replace"  → 后者覆盖前者（如 security_findings：安全审计的结果直接替换）
 # - "overwrite"→ 默认策略，直接覆盖（同 replace）
 MERGE_STRATEGY: dict[str, str] = {
-    "tool_logs": "extend",           # 日志追加：多个 Agent 的日志合并在一起
-    "rule_findings": "replace",      # 规则发现：直接替换
-    "rag_context": "replace",        # RAG 上下文：直接替换
+    "tool_logs": "extend",  # 日志追加：多个 Agent 的日志合并在一起
+    "rule_findings": "replace",  # 规则发现：直接替换
+    "rag_context": "replace",  # RAG 上下文：直接替换
     "security_findings": "replace",  # 安全发现：直接替换
     "performance_findings": "replace",  # 性能发现：直接替换
     "semantic_findings": "replace",  # 语义发现：直接替换
-    "rag_analysis": "overwrite",     # RAG 分析文本：直接覆盖
-    "rag_status": "overwrite",       # RAG 状态：直接覆盖
+    "rag_analysis": "overwrite",  # RAG 分析文本：直接覆盖
+    "rag_status": "overwrite",  # RAG 状态：直接覆盖
 }
 
 
@@ -93,11 +95,12 @@ class RunnerConfig:
 
     类比：就像启动汽车需要的"钥匙+导航+空调设置"——所有运行参数都在这里。
     """
-    registry: ToolRegistry                  # 工具注册表：节点通过它调用各种检查工具
-    log_service: LogService                 # 日志服务：记录每个节点的执行日志
-    telemetry: TelemetryHook                # 遥测钩子：采集执行耗时等监控指标
-    task_service: TaskService | None = None        # 任务服务：更新任务状态（可选）
-    llm_client: Any | None = None                  # LLM 客户端：调用大模型（可选）
+
+    registry: ToolRegistry  # 工具注册表：节点通过它调用各种检查工具
+    log_service: LogService  # 日志服务：记录每个节点的执行日志
+    telemetry: TelemetryHook  # 遥测钩子：采集执行耗时等监控指标
+    task_service: TaskService | None = None  # 任务服务：更新任务状态（可选）
+    llm_client: Any | None = None  # LLM 客户端：调用大模型（可选）
     circuit_breaker: CircuitBreaker | None = None  # 熔断器：Agent 连续失败时自动跳过
     agent_selector: (
         Callable[
@@ -105,7 +108,7 @@ class RunnerConfig:
             list[tuple[str, Callable[[GraphState, NodeContext], GraphState]]],
         ]
         | None
-    ) = None                                       # Agent 选择器：动态决定跑哪些 Agent
+    ) = None  # Agent 选择器：动态决定跑哪些 Agent
     checkpoint_service: CheckpointService | None = None  # 断点续传服务（可选）
 
 
@@ -118,19 +121,22 @@ class GraphRunner:
     3. 合并并行节点的结果
     4. 将最终状态转换为前端可消费的 ReviewResult
     """
+
     def __init__(
         self,
         phases: list[list[tuple[str, Callable[[GraphState, NodeContext], GraphState]]]],
         config: RunnerConfig,
     ) -> None:
-        self._phases = phases   # 阶段列表：每个阶段是一个节点列表
-        self._config = config   # 运行配置
+        self._phases = phases  # 阶段列表：每个阶段是一个节点列表
+        self._config = config  # 运行配置
 
     def count_nodes(self) -> int:
         """统计流水线中所有节点的总数（用于日志/监控）。"""
         return sum(len(p) for p in self._phases)
 
-    def run(self, request: ReviewRequest, event_sink: EventSink | None = None) -> ReviewResult:
+    def run(
+        self, request: ReviewRequest, event_sink: EventSink | None = None
+    ) -> ReviewResult:
         """执行完整流水线：从请求开始 → 跑完所有节点 → 返回审查结果。
 
         这是外部调用的主入口，内部流程：
@@ -151,15 +157,15 @@ class GraphRunner:
         try:
             state = self.run_state(state, event_sink=event_sink)
         except Exception as exc:
-            emit_run_error(
-                event_sink, task_id, type(exc).__name__, safe_detail(exc)
-            )
+            emit_run_error(event_sink, task_id, type(exc).__name__, safe_detail(exc))
             raise
         result = self._build_result(request, state)
         emit_run_finished(event_sink, task_id, result)
         return result
 
-    def run_state(self, state: GraphState, event_sink: EventSink | None = None) -> GraphState:
+    def run_state(
+        self, state: GraphState, event_sink: EventSink | None = None
+    ) -> GraphState:
         """执行流水线的核心方法 —— 按阶段依次执行所有节点。
 
         执行流程：
@@ -196,7 +202,8 @@ class GraphRunner:
                 completed = set(ckpt.get("completed_phases", []))
                 logger.info(
                     "Resuming task %s from checkpoint, completed_phases=%s",
-                    task_id, sorted(completed),
+                    task_id,
+                    sorted(completed),
                 )
 
         # --- 主循环：按阶段依次执行 ---
@@ -215,28 +222,43 @@ class GraphRunner:
                 try:
                     state = node(state, context)  # 执行节点函数
                     self._append_log(
-                        name, context.task_id,
-                        input_snapshot, dict(state),
-                        start, "SUCCEEDED",
+                        name,
+                        context.task_id,
+                        input_snapshot,
+                        dict(state),
+                        start,
+                        "SUCCEEDED",
                     )
                     emit_step_finished(
-                        event_sink, task_id, name, "SUCCEEDED",
+                        event_sink,
+                        task_id,
+                        name,
+                        "SUCCEEDED",
                         int((perf_counter() - start) * 1000),
                     )
                     completed.add(phase_idx)
                     if ckpt_svc:
-                        ckpt_svc.save(task_id, {
-                            "state": dict(state),
-                            "completed_phases": sorted(completed),
-                        })
+                        ckpt_svc.save(
+                            task_id,
+                            {
+                                "state": dict(state),
+                                "completed_phases": sorted(completed),
+                            },
+                        )
                 except Exception as exc:
                     self._append_log(
-                        name, context.task_id,
-                        input_snapshot, {"error": str(exc)},
-                        start, "FAILED",
+                        name,
+                        context.task_id,
+                        input_snapshot,
+                        {"error": str(exc)},
+                        start,
+                        "FAILED",
                     )
                     emit_step_finished(
-                        event_sink, task_id, name, "FAILED",
+                        event_sink,
+                        task_id,
+                        name,
+                        "FAILED",
                         int((perf_counter() - start) * 1000),
                     )
                     raise  # 顺序节点失败 → 整个流水线中止
@@ -258,28 +280,32 @@ class GraphRunner:
                     state = self._merge_results(dict(phase_input), saved_deltas)
 
                 # 过滤掉已完成的 Agent（断点恢复场景）
-                remaining = [
-                    (n, fn) for n, fn in selected if n not in saved_deltas
-                ]
+                remaining = [(n, fn) for n, fn in selected if n not in saved_deltas]
 
                 if not remaining:
                     # 所有 Agent 都已完成（从断点恢复）
                     state = self._merge_results(dict(phase_input), saved_deltas)
                     completed.add(phase_idx)
                     if ckpt_svc:
-                        ckpt_svc.save(task_id, {
-                            "state": dict(state),
-                            "completed_phases": sorted(completed),
-                        })
+                        ckpt_svc.save(
+                            task_id,
+                            {
+                                "state": dict(state),
+                                "completed_phases": sorted(completed),
+                            },
+                        )
                 else:
                     # 执行前保存 phase_input，用于断点恢复时重建状态
                     if ckpt_svc:
-                        ckpt_svc.save(task_id, {
-                            "state": dict(state),
-                            "completed_phases": sorted(completed),
-                            "phase_input": dict(phase_input),
-                            "parallel_results": dict(saved_deltas),
-                        })
+                        ckpt_svc.save(
+                            task_id,
+                            {
+                                "state": dict(state),
+                                "completed_phases": sorted(completed),
+                                "phase_input": dict(phase_input),
+                                "parallel_results": dict(saved_deltas),
+                            },
+                        )
 
                     # 每个 Agent 完成后的回调 —— 增量保存结果
                     def _on_agent_done(agent_name: str, agent_output: dict) -> None:
@@ -287,19 +313,25 @@ class GraphRunner:
                             return
                         # 计算增量：只保存 Agent 新增/修改的字段
                         delta = {
-                            k: v for k, v in agent_output.items()
+                            k: v
+                            for k, v in agent_output.items()
                             if k not in phase_input or phase_input[k] != v
                         }
                         saved_deltas[agent_name] = delta
-                        ckpt_svc.save(task_id, {
-                            "state": dict(state),
-                            "completed_phases": sorted(completed),
-                            "phase_input": dict(phase_input),
-                            "parallel_results": dict(saved_deltas),
-                        })
+                        ckpt_svc.save(
+                            task_id,
+                            {
+                                "state": dict(state),
+                                "completed_phases": sorted(completed),
+                                "phase_input": dict(phase_input),
+                                "parallel_results": dict(saved_deltas),
+                            },
+                        )
 
                     merged_state = self._run_parallel(
-                        remaining, state, context,
+                        remaining,
+                        state,
+                        context,
                         on_agent_done=_on_agent_done,
                         event_sink=event_sink,
                     )
@@ -307,10 +339,13 @@ class GraphRunner:
                     state = merged_state
                     completed.add(phase_idx)
                     if ckpt_svc:
-                        ckpt_svc.save(task_id, {
-                            "state": dict(state),
-                            "completed_phases": sorted(completed),
-                        })
+                        ckpt_svc.save(
+                            task_id,
+                            {
+                                "state": dict(state),
+                                "completed_phases": sorted(completed),
+                            },
+                        )
 
         # 流水线全部完成 —— 清理断点数据
         if ckpt_svc:
@@ -364,7 +399,7 @@ class GraphRunner:
         """
         log_lock = threading.Lock()  # 线程锁：多个线程同时写日志时需要排队
         results: dict[str, dict] = {}  # 各 Agent 的执行结果
-        errors: dict[str, str] = {}    # 各 Agent 的错误信息
+        errors: dict[str, str] = {}  # 各 Agent 的错误信息
 
         with ThreadPoolExecutor(max_workers=len(phase)) as pool:
             futures: dict[Future, str] = {}  # Future → Agent 名称的映射
@@ -379,7 +414,11 @@ class GraphRunner:
                     continue
                 fut = pool.submit(
                     self._run_single_agent,
-                    name, fn, state, context, log_lock,
+                    name,
+                    fn,
+                    state,
+                    context,
+                    log_lock,
                     on_agent_done,
                     event_sink,
                 )
@@ -392,12 +431,16 @@ class GraphRunner:
                     agent_state = future.result(timeout=AGENT_EXECUTION_TIMEOUT_SECONDS)
                     results[name] = agent_state
                     if self._config.circuit_breaker:
-                        self._config.circuit_breaker.record_success(name)  # 成功 → 重置失败计数
+                        self._config.circuit_breaker.record_success(
+                            name
+                        )  # 成功 → 重置失败计数
                 except FutureTimeoutError:
                     errors[name] = f"timeout after {AGENT_EXECUTION_TIMEOUT_SECONDS}s"
                     logger.error("Agent %s timeout", name)
                     if self._config.circuit_breaker:
-                        self._config.circuit_breaker.record_failure(name)  # 超时 → 失败计数+1
+                        self._config.circuit_breaker.record_failure(
+                            name
+                        )  # 超时 → 失败计数+1
                 except Exception as exc:
                     errors[name] = safe_detail(exc)
                     logger.error("Agent %s failed: %s", name, exc)
@@ -410,13 +453,13 @@ class GraphRunner:
                 results[name] = {}
 
         if errors:
-            raise RuntimeError(
-                f"Parallel phase agents failed: {errors}"
-            )
+            raise RuntimeError(f"Parallel phase agents failed: {errors}")
 
         return self._merge_results(state, results)
 
-    def _run_single_agent(self, name, fn, state, context, log_lock, on_done=None, event_sink=None):
+    def _run_single_agent(
+        self, name, fn, state, context, log_lock, on_done=None, event_sink=None
+    ):
         """在线程中执行单个 Agent 节点。
 
         每个 Agent 在独立线程中运行，完成后：
@@ -433,7 +476,10 @@ class GraphRunner:
                     name, context.task_id, {}, dict(result_state), start, "SUCCEEDED"
                 )
             emit_step_finished(
-                event_sink, context.task_id, name, "SUCCEEDED",
+                event_sink,
+                context.task_id,
+                name,
+                "SUCCEEDED",
                 int((perf_counter() - start) * 1000),
             )
             if on_done:
@@ -445,7 +491,10 @@ class GraphRunner:
                     name, context.task_id, {}, {"error": str(exc)}, start, "FAILED"
                 )
             emit_step_finished(
-                event_sink, context.task_id, name, "FAILED",
+                event_sink,
+                context.task_id,
+                name,
+                "FAILED",
                 int((perf_counter() - start) * 1000),
             )
             raise
@@ -511,7 +560,6 @@ class GraphRunner:
           就像厨师做完菜后的"摆盘"——菜（数据）已经做好了，
           这里负责把它装进漂亮的盘子里（结构化响应），端给客人（前端）。
         """
-        from config.settings import AppSettings
 
         # --- 转换风险评分细分为模型对象 ---
         breakdown_models: list[RiskBreakdown] = []
@@ -589,7 +637,9 @@ class GraphRunner:
                 result.riskSummary = replace_markdown_image_urls(
                     result.riskSummary, endpoint, bucket
                 )
-                result.riskSummary = image_service.replace_image_urls(result.riskSummary)
+                result.riskSummary = image_service.replace_image_urls(
+                    result.riskSummary
+                )
 
             result.details = [
                 image_service.replace_image_urls(

@@ -47,17 +47,19 @@ class TestCoverageCheckerTool(Tool):
         if coverage < 0.8:
             findings.append(
                 {
-                    "severity": "LOW",              # 严重程度：低
-                    "category": "test",             # 分类：测试相关
+                    "severity": "LOW",  # 严重程度：低
+                    "category": "test",  # 分类：测试相关
                     "title": "Coverage below target",  # 标题：覆盖率未达标
                     "detail": f"Coverage below target: {coverage:.0%}",  # 详情（格式化为百分比）
-                    "file": None,                   # 不针对特定文件
-                    "line": None,                   # 不针对特定行
+                    "file": None,  # 不针对特定文件
+                    "line": None,  # 不针对特定行
                     "evidence": f"coverage={coverage:.0%}",  # 证据：当前覆盖率
                     "suggestion": "Add tests for changed paths and critical branches",  # 建议
-                    "confidence": 0.9,              # 置信度：90%
+                    "confidence": 0.9,  # 置信度：90%
                 }
             )
 
         # 返回检查结果（包含 findings 和覆盖率数值）
-        return ToolResult(name=self.name, payload={"findings": findings, "coverage": coverage})
+        return ToolResult(
+            name=self.name, payload={"findings": findings, "coverage": coverage}
+        )

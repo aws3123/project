@@ -61,7 +61,10 @@ def test_run_rag_keeps_rag_context_shape_with_local_keyword_search(monkeypatch):
         "task_id": "t-1",
         "request": {"metadata": {}},
         "classification": {"layers": ["service"]},
-        "diff_analysis": {"summary": {"paths": ["service/UserService.java"]}, "files": []},
+        "diff_analysis": {
+            "summary": {"paths": ["service/UserService.java"]},
+            "files": [],
+        },
         "code_graph": {},
         "impact_radius": {},
     }
@@ -100,7 +103,11 @@ def test_run_rag_keeps_empty_context_when_all_retrievals_are_empty(monkeypatch):
             {"top_k": 2, "rrf_k": 60, "rag_max_tokens": 2000},
         )(),
     )
-    monkeypatch.setattr(rag_module, "search_incidents_keyword_local", lambda query, top_k, settings=None: [])
+    monkeypatch.setattr(
+        rag_module,
+        "search_incidents_keyword_local",
+        lambda query, top_k, settings=None: [],
+    )
 
     state = {
         "task_id": "t-2",
@@ -201,5 +208,3 @@ def test_run_rag_fuses_same_incident_across_vector_and_keyword(monkeypatch):
     assert len(result["rag_context"]) == 1
     assert result["rag_context"][0]["topic"] == "incident-a"
     assert result["tool_logs"][0]["method"] == "vector+bm25+rrf"
-
-

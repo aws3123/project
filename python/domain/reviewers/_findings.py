@@ -3,6 +3,7 @@
 - parse_llm_response / merge_findings：多个"确定性 + LLM"双通道审查器共用
 - cross_validate：去重(deduplicate)与评分(scoring)都需要的交叉验证逻辑
 """
+
 from __future__ import annotations
 
 import json
@@ -47,11 +48,13 @@ def cross_validate(sources: dict[str, list[dict]]) -> tuple[list[dict], bool]:
             continue
 
         weighted_score = sum(
-            AGENT_WEIGHT.get(item["_source"], 1) *
-            SEVERITY_MULTIPLIER.get(item.get("severity", "LOW"), 1)
+            AGENT_WEIGHT.get(item["_source"], 1)
+            * SEVERITY_MULTIPLIER.get(item.get("severity", "LOW"), 1)
             for item in items
         )
-        best = max(items, key=lambda x: SEVERITY_MULTIPLIER.get(x.get("severity", "LOW"), 0))
+        best = max(
+            items, key=lambda x: SEVERITY_MULTIPLIER.get(x.get("severity", "LOW"), 0)
+        )
         best["confidence"] = min(best.get("confidence", 0.5) * 1.3, 1.0)
         best["cross_validated_by"] = [item["_source"] for item in items]
         best["cross_validation_score"] = weighted_score
@@ -82,17 +85,19 @@ def merge_findings(
     for lf in llm_findings:
         key = (lf.get("file"), lf.get("line"), lf.get("title"))
         if key not in seen:
-            merged.append({
-                "severity": lf.get("severity", "LOW"),
-                "category": lf.get("category", category),
-                "title": lf.get("title", ""),
-                "detail": lf.get("detail", ""),
-                "file": lf.get("file"),
-                "line": lf.get("line"),
-                "evidence": lf.get("evidence", ""),
-                "suggestion": lf.get("suggestion", ""),
-                "confidence": float(lf.get("confidence", 0.7)),
-            })
+            merged.append(
+                {
+                    "severity": lf.get("severity", "LOW"),
+                    "category": lf.get("category", category),
+                    "title": lf.get("title", ""),
+                    "detail": lf.get("detail", ""),
+                    "file": lf.get("file"),
+                    "line": lf.get("line"),
+                    "evidence": lf.get("evidence", ""),
+                    "suggestion": lf.get("suggestion", ""),
+                    "confidence": float(lf.get("confidence", 0.7)),
+                }
+            )
             seen.add(key)
             llm_new_count += 1
     return merged, llm_new_count

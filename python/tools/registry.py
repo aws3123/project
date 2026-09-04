@@ -1,22 +1,21 @@
 from __future__ import annotations
 
-from typing import Dict
+from domain.checkers.api_breaking_checker import APIBreakingCheckerTool
+from domain.checkers.config_change_checker import ConfigChangeCheckerTool
 
-from tools.base import Tool, ToolContext, ToolResult
-from tools.diff_analyzer import DiffAnalyzerTool
-from tools.incident_search import IncidentSearchTool
-from tools.ast_parser import ASTParserTool
-from tools.code_knowledge_graph import CodeKnowledgeGraphTool
 # 静态检查器（领域单元）从 domain.checkers 引入，仍实现 tools.base.Tool 协议
 from domain.checkers.sql_risk_checker import SQLRiskCheckerTool
-from domain.checkers.api_breaking_checker import APIBreakingCheckerTool
 from domain.checkers.test_coverage_checker import TestCoverageCheckerTool
-from domain.checkers.config_change_checker import ConfigChangeCheckerTool
+from tools.ast_parser import ASTParserTool
+from tools.base import Tool, ToolContext, ToolResult
+from tools.code_knowledge_graph import CodeKnowledgeGraphTool
+from tools.diff_analyzer import DiffAnalyzerTool
+from tools.incident_search import IncidentSearchTool
 
 
 class ToolRegistry:
     def __init__(self) -> None:
-        self._registry: Dict[str, Tool] = {}
+        self._registry: dict[str, Tool] = {}
 
     def register(self, tool: Tool) -> None:
         self._registry[tool.name] = tool

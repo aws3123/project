@@ -72,7 +72,10 @@ def test_save_session_memory_writes_to_redis(mock_get_redis):
     ttl = call_args[0][1]
     assert ttl == 7200
     payload = json.loads(call_args[0][2])
-    assert payload["memory_context"] == {"business_risk_level": "medium", "violation_count": 1}
+    assert payload["memory_context"] == {
+        "business_risk_level": "medium",
+        "violation_count": 1,
+    }
     assert payload["memory_version"] == "v3"
     assert "updated_at" in payload
 

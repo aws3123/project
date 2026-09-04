@@ -21,6 +21,7 @@
   就像从报纸剪报——不是只剪下修改的那句话，而是把整个段落都剪下来，
   这样读者才能理解完整语境。
 """
+
 from __future__ import annotations
 
 import logging
@@ -58,8 +59,12 @@ _GENERIC_METHOD_PATTERN = re.compile(
 def _detect_language(path: str) -> str:
     """根据文件扩展名检测编程语言。"""
     ext_map = {
-        ".java": "java", ".py": "python", ".js": "javascript",
-        ".ts": "typescript", ".tsx": "typescript", ".jsx": "javascript",
+        ".java": "java",
+        ".py": "python",
+        ".js": "javascript",
+        ".ts": "typescript",
+        ".tsx": "typescript",
+        ".jsx": "javascript",
     }
     for ext, lang in ext_map.items():
         if path.endswith(ext):
@@ -267,7 +272,9 @@ def extract_complete_methods(
             hunk_lines = hunk_lines[1:]
 
         methods, names = _extract_methods_from_hunk(
-            hunk_lines, language, max_chars - total_chars,
+            hunk_lines,
+            language,
+            max_chars - total_chars,
         )
         all_methods.extend(methods)
         all_names.extend(names)
@@ -286,7 +293,8 @@ def _fallback_extract(diff: str, max_chars: int = 2000) -> str:
     这是原始行为：提取以 "+" 开头的行并截断。
     """
     added = [
-        line for line in diff.splitlines()
+        line
+        for line in diff.splitlines()
         if line.startswith("+") and not line.startswith("+++")
     ]
     result = "\n".join(added)
@@ -390,7 +398,9 @@ def build_diff_snippet(
             continue
 
         snippet, names = extract_complete_methods(
-            path, diff, max_chars=max_chars_per_file,
+            path,
+            diff,
+            max_chars=max_chars_per_file,
         )
         if snippet:
             parts.append(f"--- {path} ---\n{snippet}")

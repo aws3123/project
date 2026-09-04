@@ -76,7 +76,9 @@ def _load_docx(file_path: Path) -> str:
         return docx2txt.process(str(file_path))
     except ImportError:
         try:
-            from langchain_community.document_loaders import UnstructuredWordDocumentLoader
+            from langchain_community.document_loaders import (
+                UnstructuredWordDocumentLoader,
+            )
 
             docs = UnstructuredWordDocumentLoader(str(file_path)).load()
             return "\n\n".join(d.page_content for d in docs)
@@ -85,7 +87,9 @@ def _load_docx(file_path: Path) -> str:
             return ""
 
 
-def load_document(file_path: str | Path, settings: AppSettings | None = None) -> LoadedDocument | None:
+def load_document(
+    file_path: str | Path, settings: AppSettings | None = None
+) -> LoadedDocument | None:
     """Load a single document from file path.
 
     Returns None if the file cannot be loaded (error is logged).
@@ -113,7 +117,9 @@ def load_document(file_path: str | Path, settings: AppSettings | None = None) ->
                 logger.warning("PDF yielded no pages: %s", path.name)
                 return None
             text = "\n\n".join(pages)
-            return LoadedDocument(text=text, source_file=path.name, format=fmt, pages=pages)
+            return LoadedDocument(
+                text=text, source_file=path.name, format=fmt, pages=pages
+            )
 
         elif fmt == "docx":
             text = _load_docx(path)
