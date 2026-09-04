@@ -26,11 +26,11 @@ const defaultJsonHeaders: HeadersInit = {
   'Content-Type': 'application/json',
 }
 
-function getBaseUrl() {
+export function getBaseUrl() {
   return import.meta.env.VITE_API_BASE_URL ?? ''
 }
 
-function getApiKeyHeaders(): HeadersInit {
+export function getApiKeyHeaders(): HeadersInit {
   const apiKey = import.meta.env.VITE_API_KEY
   if (!apiKey) {
     return {}

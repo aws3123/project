@@ -96,6 +96,25 @@ export type SubmissionOutcome =
   | { sourceMode: 'auto'; resolvedMode: 'sync'; result: ReviewResult }
   | { sourceMode: 'auto'; resolvedMode: 'async'; taskId: string }
 
+/** 同步审查流式进度事件（心跳在 API 层内部消化，不对外暴露） */
+export type ReviewStreamProgressEvent =
+  | { event: 'run_started'; taskId: string; totalSteps: number }
+  | { event: 'step_started'; taskId: string; step: string }
+  | {
+      event: 'step_finished'
+      taskId: string
+      step: string
+      status: 'SUCCEEDED' | 'FAILED'
+      durationMs: number
+    }
+
+/** 流式审查的单步进度（供进度时间线 UI 渲染） */
+export interface ReviewStepProgress {
+  step: string
+  status: 'RUNNING' | 'SUCCEEDED' | 'FAILED'
+  durationMs?: number
+}
+
 export interface TaskDetailResponse {
   task: {
     taskId: string
