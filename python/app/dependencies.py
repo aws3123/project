@@ -22,7 +22,7 @@ from threading import RLock
 from fastapi import Request
 
 from config.settings import AppSettings
-from schemas.result import (
+from schemas.api.result import (
     BusinessRiskReadinessComponent,
     BusinessRiskSourceReadinessStatus,
 )

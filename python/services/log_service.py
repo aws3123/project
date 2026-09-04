@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from repositories.base import LogRepositoryProtocol
-from schemas.log import NodeLog
+from schemas.domain.log import NodeLog
 from telemetry.hooks import TelemetryHook
 
 

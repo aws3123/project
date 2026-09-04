@@ -10,8 +10,8 @@ from graph.builder import GraphBuilder
 from graph.runner import GraphRunner
 from graph.state import GraphState, NodeContext
 from repositories.log_repository import InMemoryLogRepository
-from schemas.enums import ReviewMode, TaskStatus
-from schemas.request import ReviewRequest
+from schemas.domain.enums import ReviewMode, TaskStatus
+from schemas.api.request import ReviewRequest
 from services.log_service import LogService
 from telemetry.hooks import TelemetryHook
 from tools.registry import ToolRegistry

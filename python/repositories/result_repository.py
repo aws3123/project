@@ -4,7 +4,7 @@ from threading import RLock
 from typing import Dict
 
 from repositories.base import ResultRepositoryProtocol
-from schemas.result import ReviewResult
+from schemas.api.result import ReviewResult
 
 
 class InMemoryResultRepository(ResultRepositoryProtocol):

@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# JVM build output
+target/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/

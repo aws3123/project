@@ -6,7 +6,7 @@ from repositories.base import LogRepositoryProtocol
 from repositories.db import get_session
 from repositories.mappers import log_to_model, log_to_schema
 from repositories.sqlalchemy_models import Base, NodeLogModel
-from schemas.log import NodeLog
+from schemas.domain.log import NodeLog
 
 
 class SQLLogRepository(LogRepositoryProtocol):

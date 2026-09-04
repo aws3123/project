@@ -18,8 +18,8 @@ from graph.events import (
     format_heartbeat_frame,
     format_sse_frame,
 )
-from schemas.backend_contract import parse_sync_payload
-from schemas.result import ReviewResult
+from schemas.api.backend_contract import parse_sync_payload
+from schemas.api.result import ReviewResult
 from starlette.responses import StreamingResponse
 
 logger = logging.getLogger(__name__)

@@ -8,12 +8,8 @@
 """
 from __future__ import annotations
 
-from domain.reviewers.security_review import (
-    build_audit_messages,
-    merge_findings,
-    parse_llm_response,
-    scan_deterministic,
-)
+from domain.reviewers._findings import merge_findings, parse_llm_response
+from domain.reviewers.security_review import build_audit_messages, scan_deterministic
 from domain.shared.diff_extractor import build_diff_snippet
 from graph.state import GraphState, NodeContext
 

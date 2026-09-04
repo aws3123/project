@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import Callable
 
 from graph.events import EventSink
-from schemas.request import ReviewRequest
-from schemas.result import ReviewResult
+from schemas.api.request import ReviewRequest
+from schemas.api.result import ReviewResult
 
 
 class AIService:

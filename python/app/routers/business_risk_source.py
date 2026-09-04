@@ -15,10 +15,10 @@ from app.dependencies import (
 )
 from app.utils import safe_detail
 from config.settings import AppSettings
-from schemas.business_risk_review import BusinessRiskReviewRequest
-from schemas.business_risk_source import BusinessRiskSourceRequest
-from schemas.business_risk_source_result import BusinessRiskSourceResponse
-from schemas.result import BusinessRiskSourceReadinessStatus
+from schemas.domain.business_risk_review import BusinessRiskReviewRequest
+from schemas.domain.business_risk_source import BusinessRiskSourceRequest
+from schemas.domain.business_risk_source_result import BusinessRiskSourceResponse
+from schemas.api.result import BusinessRiskSourceReadinessStatus
 from services.memory_service import MemoryService
 
 router = APIRouter()

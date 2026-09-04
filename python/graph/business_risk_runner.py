@@ -17,7 +17,7 @@ from __future__ import annotations
 from graph.business_risk_result import build_business_risk_result
 from graph.business_risk_state import BusinessRiskGraphState
 from graph.runner import GraphRunner
-from schemas.business_risk_review import BusinessRiskReviewRequest, BusinessRiskReviewResult
+from schemas.domain.business_risk_review import BusinessRiskReviewRequest, BusinessRiskReviewResult
 
 
 class BusinessRiskRunner:

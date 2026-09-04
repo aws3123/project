@@ -4,8 +4,8 @@ from io import BytesIO
 
 from repositories.base import ResultRepositoryProtocol
 from repositories.db import get_minio_client
-from schemas.enums import TaskStatus
-from schemas.result import Recommendation, ReviewResult, RiskBreakdown
+from schemas.domain.enums import TaskStatus
+from schemas.api.result import Recommendation, ReviewResult, RiskBreakdown
 
 
 class ResultService:

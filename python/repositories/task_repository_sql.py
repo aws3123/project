@@ -6,7 +6,7 @@ from repositories.base import TaskRepositoryProtocol
 from repositories.db import cache_task_snapshot, get_cached_task_snapshot, get_session
 from repositories.mappers import apply_task_updates, task_to_model, task_to_schema
 from repositories.sqlalchemy_models import Base, ReviewTaskModel
-from schemas.task import ReviewTask
+from schemas.domain.task import ReviewTask
 
 
 class SQLTaskRepository(TaskRepositoryProtocol):

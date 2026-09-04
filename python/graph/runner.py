@@ -34,10 +34,10 @@ from datetime import UTC, datetime
 from time import perf_counter  # 高精度计时器，用于测量节点执行耗时
 from typing import TYPE_CHECKING, Any
 
-from schemas.enums import RAGStatus, TaskStatus, Tier
-from schemas.log import NodeLog
-from schemas.request import ReviewRequest
-from schemas.result import Recommendation, ReviewResult, RiskBreakdown
+from schemas.domain.enums import RAGStatus, TaskStatus, Tier
+from schemas.domain.log import NodeLog
+from schemas.api.request import ReviewRequest
+from schemas.api.result import Recommendation, ReviewResult, RiskBreakdown
 
 from app.utils import safe_detail
 from graph.circuit_breaker import CircuitBreaker

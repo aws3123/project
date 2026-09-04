@@ -15,7 +15,7 @@ from domain.reviewers.scoring_review import (
 )
 from graph.state import GraphState, NodeContext
 from llm.client import LLMStructuredOutputError
-from schemas.llm_output import ScoringOutput
+from schemas.domain.llm_output import ScoringOutput
 
 
 def score_risks(state: GraphState, ctx: NodeContext) -> GraphState:

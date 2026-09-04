@@ -48,7 +48,7 @@ doc-ingest = [
 ]
 
 [tool.uv]
-dev-dependencies = ["black", "ruff", "mypy", "pytest"]
+dev-dependencies = ["black", "ruff", "mypy", "pytest", "pytest-asyncio"]
 
 [tool.pytest.ini_options]
 addopts = "--import-mode=importlib"

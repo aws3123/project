@@ -16,7 +16,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.dependencies import get_result_service, get_task_service
-from schemas.request import HandoffRequest
+from schemas.api.request import HandoffRequest
 
 router = APIRouter()
 
@@ -94,7 +94,7 @@ def submit_handoff(
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.dependencies import get_result_service, get_task_service
-from schemas.request import HandoffRequest
+from schemas.api.request import HandoffRequest
 
 router = APIRouter()
 

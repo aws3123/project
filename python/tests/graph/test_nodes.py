@@ -21,7 +21,7 @@ from graph.nodes import (
     summarize,
 )
 from graph.state import GraphState, NodeContext
-from schemas.llm_output import RAGAnalysisOutput, ReportOutput, ScoringOutput
+from schemas.domain.llm_output import RAGAnalysisOutput, ReportOutput, ScoringOutput
 from tools.base import ToolContext, ToolResult
 
 
