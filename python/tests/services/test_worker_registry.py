@@ -3,7 +3,7 @@ import pytest
 from config.settings import AppSettings
 from schemas.result import BusinessRiskReadinessComponent, BusinessRiskSourceReadinessStatus
 from services.business_risk_worker_state import BusinessRiskWorkerState
-from services.registry import WorkerRegistry
+from services.worker_registry import WorkerRegistry
 
 
 class StubResponse:
@@ -106,7 +106,7 @@ async def test_registry_logs_heartbeat_failures_and_keeps_retrying(monkeypatch, 
         registry._running = False
 
     monkeypatch.setattr(registry, "send_heartbeat_once", _fail_once)
-    monkeypatch.setattr("services.registry.asyncio.sleep", _fake_sleep)
+    monkeypatch.setattr("services.worker_registry.asyncio.sleep", _fake_sleep)
 
     with caplog.at_level("WARNING"):
         await registry.heartbeat_loop()

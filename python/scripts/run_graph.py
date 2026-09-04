@@ -7,7 +7,7 @@
     开发者可以在终端运行这个脚本来测试 LangGraph 流水线是否正常工作。
 
 使用方式：
-    python tools/run_graph.py --task demo --mode SYNC
+    python scripts/run_graph.py --task demo --mode SYNC
 """
 
 # annotations 延迟求值
