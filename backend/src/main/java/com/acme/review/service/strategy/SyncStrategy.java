@@ -15,6 +15,7 @@ import com.acme.review.repository.mapper.ReviewResultMapper;
 import com.acme.review.repository.mapper.ReviewTaskMapper;
 import com.acme.review.repository.mapper.TaskAuditLogMapper;
 import com.acme.review.service.ConcurrentMetricsService;
+import com.acme.review.service.ReviewStreamEventStore;
 import com.acme.review.service.SseRegistry;
 import com.acme.review.util.MarkdownImageProcessor;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -50,6 +51,7 @@ public class SyncStrategy extends AbstractReviewExecutionStrategy {
     private static final long STREAM_EMITTER_TIMEOUT_MS = 180_000L;
 
     private final ObjectMapper objectMapper;
+    private final ReviewStreamEventStore eventStore;
 
     public SyncStrategy(ReviewTaskMapper taskRepo,
                         ReviewResultMapper resultRepo,
@@ -58,9 +60,11 @@ public class SyncStrategy extends AbstractReviewExecutionStrategy {
                         SseRegistry sseRegistry,
                         OrchestratorProperties orchProps,
                         TaskAuditLogMapper auditLogMapper,
-                        ObjectMapper objectMapper) {
+                        ObjectMapper objectMapper,
+                        ReviewStreamEventStore eventStore) {
         super(taskRepo, resultRepo, pythonClient, metrics, sseRegistry, orchProps, auditLogMapper);
         this.objectMapper = objectMapper;
+        this.eventStore = eventStore;
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -242,15 +246,31 @@ public class SyncStrategy extends AbstractReviewExecutionStrategy {
 
     /** 转发事件到前端：事件 ID 按 taskId 维度单调递增（taskId-seq），支持客户端去重。 */
     private void sendEvent(StreamContext ctx, String eventName, String data) {
+        String taskId = ctx.task().getTaskId();
+        String eventId = null;
+
+        // write-through：先写入事件缓存（Redis RecordId 作为事件 ID 的唯一权威），再实时转发
+        if (eventStore.enabled() && !"heartbeat".equals(eventName)) {
+            eventId = eventStore.append(taskId, eventName, data);
+        }
+        if (eventId == null) {
+            // Redis 不可用等降级路径：退回本地 seq 生成的事件 ID，实时转发不受影响
+            eventId = taskId + "-" + ctx.seq().incrementAndGet();
+        }
+        // 终态事件写入后切换为长保留 TTL，支持断线重连窗口
+        if (eventStore.enabled() && ("run_finished".equals(eventName) || "run_error".equals(eventName))) {
+            eventStore.markTerminal(taskId);
+        }
+
         try {
             ctx.emitter().send(SseEmitter.event()
-                    .id(ctx.task().getTaskId() + "-" + ctx.seq().incrementAndGet())
+                    .id(eventId)
                     .name(eventName)
                     .data(data));
         } catch (IOException | IllegalStateException e) {
             // 客户端已断开：不取消订阅，落库流程继续；流转发静默失败
             log.debug("SSE forward failed taskId={} event={}: {}",
-                    ctx.task().getTaskId(), eventName, e.getMessage());
+                    taskId, eventName, e.getMessage());
         }
     }
 

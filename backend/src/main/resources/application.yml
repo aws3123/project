@@ -122,6 +122,17 @@ business-risk:
     persistence-backend: ${BUSINESS_RISK_SSE_PERSISTENCE_BACKEND:memory}
     redis-key-prefix: ${BUSINESS_RISK_SSE_REDIS_KEY_PREFIX:bizrisk:sse:}
 
+review:
+  sync:
+    event-cache:
+      enabled: ${REVIEW_SYNC_EVENT_CACHE_ENABLED:true}
+      redis-key-prefix: ${REVIEW_SYNC_EVENT_CACHE_REDIS_KEY_PREFIX:review:sse:}
+      max-events-per-task: ${REVIEW_SYNC_EVENT_CACHE_MAX_EVENTS_PER_TASK:500}
+      active-ttl-seconds: ${REVIEW_SYNC_EVENT_CACHE_ACTIVE_TTL_SECONDS:240}
+      terminal-ttl-seconds: ${REVIEW_SYNC_EVENT_CACHE_TERMINAL_TTL_SECONDS:900}
+      tail-block-ms: ${REVIEW_SYNC_EVENT_CACHE_TAIL_BLOCK_MS:15000}
+      tail-threads: ${REVIEW_SYNC_EVENT_CACHE_TAIL_THREADS:64}
+
 management:
   endpoints:
     web:
