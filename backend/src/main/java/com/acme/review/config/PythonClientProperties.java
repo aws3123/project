@@ -17,6 +17,5 @@ public class PythonClientProperties {
     private long timeoutMs;
     private int connectTimeoutMs = 3000;
     private boolean discoveryEnabled = false;
-    private String healthPath = "/ai/health";
     private String businessRiskHealthPath = "/ai/health/business-risk-source";
 }
