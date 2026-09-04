@@ -1,8 +1,17 @@
 """安全审查领域逻辑 —— 纯函数，可与流水线解耦独立测试。"""
 from __future__ import annotations
 
-import json
 import re
+
+from domain.reviewers._findings import merge_findings, parse_llm_response
+
+__all__ = [
+    "DETERMINISTIC_PATTERNS",
+    "scan_deterministic",
+    "build_audit_messages",
+    "merge_findings",
+    "parse_llm_response",
+]
 
 # 确定性安全模式列表
 # 每项：(正则表达式, 严重级别, 标题, 详情, 修复建议)
@@ -76,33 +85,3 @@ def build_audit_messages(diff_snippet: str, method_names: list[str]) -> list[dic
             ),
         },
     ]
-
-
-def parse_llm_response(result) -> list[dict]:
-    """解析 LLM 返回（str 或 dict）为 findings 列表。"""
-    data = json.loads(result) if isinstance(result, str) else result
-    return data.get("findings", []) if isinstance(data, dict) else []
-
-
-def merge_findings(det_findings: list[dict], llm_findings: list[dict]) -> tuple[list[dict], int]:
-    """合并去重：以 (file, line, title) 为键，返回 (合并后的发现列表, LLM 新增数)。"""
-    seen = {(f.get("file"), f.get("line"), f.get("title")) for f in det_findings}
-    merged = list(det_findings)
-    llm_new_count = 0
-    for lf in llm_findings:
-        key = (lf.get("file"), lf.get("line"), lf.get("title"))
-        if key not in seen:
-            merged.append({
-                "severity": lf.get("severity", "LOW"),
-                "category": lf.get("category", "security"),
-                "title": lf.get("title", ""),
-                "detail": lf.get("detail", ""),
-                "file": lf.get("file"),
-                "line": lf.get("line"),
-                "evidence": lf.get("evidence", ""),
-                "suggestion": lf.get("suggestion", ""),
-                "confidence": float(lf.get("confidence", 0.7)),
-            })
-            seen.add(key)
-            llm_new_count += 1
-    return merged, llm_new_count
