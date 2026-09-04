@@ -67,6 +67,12 @@ services:
       BUSINESS_RISK_WORKER_HEARTBEAT_URL: http://java-backend:8080/api/internal/business-risk/worker-heartbeat
       BUSINESS_RISK_WORKER_TOKEN: dev-callback
       BUSINESS_RISK_WORKER_TOKEN_HEADER: X-Worker-Token
+      # --- Kafka 异步链路 (Java 生产者 → Python 消费者 → 回调回 Java) ---
+      KAFKA_ENABLED: "true"
+      KAFKA_BOOTSTRAP_SERVERS: my-kafka:9092
+      KAFKA_GROUP_ID: python-review-worker
+      KAFKA_REVIEW_TASKS_TOPIC: ai.review.tasks
+      KAFKA_REVIEW_CALLBACKS_TOPIC: ai.review.callbacks
       # --- Telemetry ---
       TELEMETRY_BACKEND: logging
       # --- Semantic Hotspot ---

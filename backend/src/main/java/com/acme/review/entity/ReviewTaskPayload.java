@@ -22,6 +22,12 @@ public class ReviewTaskPayload {
     @TableField("diff_content")
     private String diffContent;
 
+    @TableField("entities_json")
+    private String entitiesJson;
+
+    @TableField("relations_json")
+    private String relationsJson;
+
     @TableField("created_at")
     private Instant createdAt;
 

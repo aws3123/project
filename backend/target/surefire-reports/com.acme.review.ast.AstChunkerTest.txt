@@ -1,4 +1,4 @@
 -------------------------------------------------------------------------------
 Test set: com.acme.review.ast.AstChunkerTest
 -------------------------------------------------------------------------------
-Tests run: 4, Failures: 0, Errors: 0, Skipped: 1, Time elapsed: 0.374 s -- in com.acme.review.ast.AstChunkerTest
+Tests run: 4, Failures: 0, Errors: 0, Skipped: 1, Time elapsed: 0.238 s -- in com.acme.review.ast.AstChunkerTest

@@ -1,8 +1,8 @@
 -------------------------------------------------------------------------------
 Test set: com.acme.review.service.BusinessRiskPayloadBudgetServiceTest
 -------------------------------------------------------------------------------
-Tests run: 1, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 0.027 s <<< FAILURE! -- in com.acme.review.service.BusinessRiskPayloadBudgetServiceTest
-com.acme.review.service.BusinessRiskPayloadBudgetServiceTest.applyBudgetShouldTrimLargePayloadWithoutThrowing -- Time elapsed: 0.025 s <<< ERROR!
+Tests run: 1, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 0.012 s <<< FAILURE! -- in com.acme.review.service.BusinessRiskPayloadBudgetServiceTest
+com.acme.review.service.BusinessRiskPayloadBudgetServiceTest.applyBudgetShouldTrimLargePayloadWithoutThrowing -- Time elapsed: 0.011 s <<< ERROR!
 java.lang.UnsupportedOperationException
 	at java.base/java.util.ImmutableCollections.uoe(ImmutableCollections.java:142)
 	at java.base/java.util.ImmutableCollections$ListItr.remove(ImmutableCollections.java:380)

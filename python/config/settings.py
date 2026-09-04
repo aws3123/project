@@ -64,6 +64,39 @@ class AppSettings(BaseSettings):
     business_risk_java_preprocess_versions_supported: str = "3.0"
 
     # -------------------------------------------------------------------------
+    # Kafka 异步链路配置（Java 生产者 → Python 消费者 → 回调回 Java）
+    # -------------------------------------------------------------------------
+    # 总开关：false 时不启动消费者/生产者（回滚开关，配合 auto_offset_reset 排干积压）
+    kafka_enabled: bool = False
+    # Kafka broker 地址列表（逗号分隔）
+    kafka_bootstrap_servers: str = "localhost:9092"
+    # 消费者组 ID（独立组，Java 不再消费同一 topic）
+    kafka_group_id: str = "python-review-worker"
+    # Topic 1：Java 下发审查任务（Java 生产，Python 消费）
+    kafka_review_tasks_topic: str = "ai.review.tasks"
+    # Topic 2：Python 回调通知（Python 生产，Java 消费）
+    kafka_review_callbacks_topic: str = "ai.review.callbacks"
+    # 并发上限：同时运行多少个审查流水线（对齐 LLM 配额，别把配额打爆）
+    kafka_max_concurrency: int = 4
+    # 单次 poll 最多拉取的消息数
+    kafka_max_poll_records: int = 20
+    # 两次 poll 之间的最大间隔（ms）：单任务 LLM 可能跑 180s，批处理需留足余量防 rebalance
+    kafka_max_poll_interval_ms: int = 1800000
+    # 瞬时失败（LLM 超时/网络）进程内重试次数
+    kafka_transient_retries: int = 3
+    # 瞬时失败重试退避间隔（ms）
+    kafka_transient_backoff_ms: int = 2000
+    # Redis SETNX 去重开关：重复消息不重复处理，避免烧 LLM token
+    kafka_dedup_enabled: bool = True
+    # 去重键 TTL（秒）：大于单任务最长生命周期即可
+    kafka_dedup_ttl_seconds: int = 86400
+    # SASL 鉴权占位（内网可 PLAINTEXT，留出鉴权位）
+    kafka_security_protocol: str = "PLAINTEXT"
+    kafka_sasl_mechanism: str = ""
+    kafka_sasl_username: str = ""
+    kafka_sasl_password: str = ""
+
+    # -------------------------------------------------------------------------
     # 数据库连接配置
     # -------------------------------------------------------------------------
     # MySQL 数据库连接字符串，格式：mysql://用户名:密码@主机:端口/数据库名

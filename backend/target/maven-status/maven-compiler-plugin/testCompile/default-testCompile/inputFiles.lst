@@ -14,6 +14,7 @@ D:\AIPRO\backend\src\test\java\com\acme\review\controller\HealthEndpointTest.jav
 D:\AIPRO\backend\src\test\java\com\acme\review\service\BusinessRiskPayloadBudgetServiceTest.java
 D:\AIPRO\backend\src\test\java\com\acme\review\controller\ReviewControllerTest.java
 D:\AIPRO\backend\src\test\java\com\acme\review\service\SessionMemoryServiceTest.java
+D:\AIPRO\backend\src\test\java\com\acme\review\mq\ReviewCallbackConsumerTest.java
 D:\AIPRO\backend\src\test\java\com\acme\review\dto\BusinessRiskLineMapJsonTest.java
 D:\AIPRO\backend\src\test\java\com\acme\review\service\WebhookDedupServiceTest.java
 D:\AIPRO\backend\src\test\java\com\acme\review\controller\TaskControllerTest.java

@@ -5,9 +5,13 @@ import com.acme.review.dto.BusinessRiskWorkerRegistrySnapshot;
 import com.acme.review.entity.OutboxEvent;
 import com.acme.review.exception.PythonHttpException;
 import com.acme.review.repository.mapper.OutboxEventMapper;
+import com.acme.review.repository.mapper.ReviewResultMapper;
+import com.acme.review.repository.mapper.ReviewTaskMapper;
+import com.acme.review.repository.mapper.TaskAuditLogMapper;
 import com.acme.review.service.BusinessRiskMetricsService;
 import com.acme.review.service.BusinessRiskTaskService;
 import com.acme.review.service.BusinessRiskWorkerRegistryService;
+import com.acme.review.service.SseRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,7 +43,18 @@ class OutboxPollerTest {
         businessRiskTaskService = mock(BusinessRiskTaskService.class);
         workerRegistryService = mock(BusinessRiskWorkerRegistryService.class);
         BusinessRiskMetricsService metricsService = new BusinessRiskMetricsService(new SimpleMeterRegistry());
-        poller = new OutboxPoller(outboxMapper, streamBridge, new ObjectMapper(), businessRiskTaskService, workerRegistryService, metricsService);
+        poller = new OutboxPoller(
+                outboxMapper,
+                streamBridge,
+                new ObjectMapper(),
+                businessRiskTaskService,
+                workerRegistryService,
+                metricsService,
+                mock(ReviewTaskMapper.class),
+                mock(ReviewResultMapper.class),
+                mock(TaskAuditLogMapper.class),
+                mock(SseRegistry.class)
+        );
     }
 
     @Test

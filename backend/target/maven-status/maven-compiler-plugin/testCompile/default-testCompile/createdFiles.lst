@@ -20,6 +20,7 @@ com\acme\review\controller\TaskControllerTest$SecurityTestConfig.class
 com\acme\review\service\BusinessRiskEventStoreTest.class
 com\acme\review\controller\BusinessRiskSseControllerTest.class
 com\acme\review\controller\FeedbackControllerTest.class
+com\acme\review\mq\ReviewCallbackConsumerTest.class
 com\acme\review\controller\HealthEndpointTest.class
 com\acme\review\service\BusinessRiskEventStoreTest$StreamRecordFixtures.class
 com\acme\review\service\SessionMemoryServiceTest.class

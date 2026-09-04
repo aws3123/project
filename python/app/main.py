@@ -22,7 +22,12 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app import exceptions
-from app.dependencies import get_business_risk_source_readiness, get_business_risk_worker_state, get_settings
+from app.dependencies import (
+    get_ai_service,
+    get_business_risk_source_readiness,
+    get_business_risk_worker_state,
+    get_settings,
+)
 from app.routers import review, health, handoff, business_risk_source
 from app.utils import create_trace_id
 from config.logging import configure_logging
@@ -33,31 +38,28 @@ configure_logging()
 logger = logging.getLogger(__name__)
 
 
-# 全局变量：Worker 注册表实例和心跳任务
+# 全局变量：Worker 注册表实例、心跳任务、Kafka 异步链路消费者
 _registry_task: asyncio.Task | None = None
 _registry: WorkerRegistry | None = None
+_kafka_consumer_task: asyncio.Task | None = None
+_kafka_consumer: object | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理器 —— 控制应用启动和关闭时的行为。
 
-    什么是 lifespan？
-      FastAPI 的 lifespan 是一个异步上下文管理器，
-      在应用启动时执行 yield 之前的代码，
-      在应用关闭时执行 yield 之后的代码。
-      类似于"开机自检"和"关机清理"。
-
     启动时：
       1. 加载配置
       2. 创建 WorkerRegistry（向 Java 后端注册自己）
       3. 启动心跳循环（定期告诉 Java 后端"我还活着"）
-
+      4. 若 kafka_enabled，启动 Kafka 审查任务消费者（Java 生产者 → Python 消费者）
     关闭时：
       1. 注销 Worker（告诉 Java 后端"我要下线了"）
       2. 取消心跳任务
+      3. 停止 Kafka 消费者
     """
-    global _registry, _registry_task
+    global _registry, _registry_task, _kafka_consumer, _kafka_consumer_task
     settings = get_settings()
     app.state.settings = settings  # 将配置挂载到 app 对象上，供全局访问
 
@@ -71,9 +73,23 @@ async def lifespan(app: FastAPI):
     _registry_task = asyncio.create_task(_registry.heartbeat_loop())
     logger.info("WorkerRegistry heartbeat sender started instance=%s", _registry._instance_id)
 
+    # 若启用 Kafka 异步链路，启动审查任务消费者
+    if settings.kafka_enabled:
+        from mq.review_consumer import ReviewKafkaConsumer
+
+        ai_service = get_ai_service()
+        _kafka_consumer = ReviewKafkaConsumer(settings, process_message=ai_service.run)
+        await _kafka_consumer.start()
+        _kafka_consumer_task = asyncio.create_task(_kafka_consumer.run())
+        logger.info("Kafka review consumer task started")
+
     yield  # <-- 应用运行期间停在这里
 
     # ---- 应用关闭时的清理工作 ----
+    if _kafka_consumer_task is not None:
+        _kafka_consumer_task.cancel()  # 取消消费任务
+    if _kafka_consumer is not None:
+        await _kafka_consumer.stop()  # 停止消费者/生产者，提交未提交 offset
     if _registry is not None:
         await _registry.unregister()  # 注销 Worker
     if _registry_task is not None:

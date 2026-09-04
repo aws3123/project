@@ -5,13 +5,21 @@ import com.acme.review.dto.BusinessRiskPythonSourceResponse;
 import com.acme.review.dto.BusinessRiskWorkerRegistrySnapshot;
 import com.acme.review.dto.ReviewTaskMessage;
 import com.acme.review.entity.OutboxEvent;
+import com.acme.review.entity.ReviewResult;
+import com.acme.review.entity.ReviewTask;
+import com.acme.review.entity.ReviewTaskStatus;
+import com.acme.review.entity.TaskAuditLog;
 import com.acme.review.exception.BusinessRiskDispatchGateException;
 import com.acme.review.exception.PythonHttpException;
 import com.acme.review.exception.PythonTimeoutException;
 import com.acme.review.repository.mapper.OutboxEventMapper;
+import com.acme.review.repository.mapper.ReviewResultMapper;
+import com.acme.review.repository.mapper.ReviewTaskMapper;
+import com.acme.review.repository.mapper.TaskAuditLogMapper;
 import com.acme.review.service.BusinessRiskMetricsService;
 import com.acme.review.service.BusinessRiskTaskService;
 import com.acme.review.service.BusinessRiskWorkerRegistryService;
+import com.acme.review.service.SseRegistry;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +35,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 
@@ -48,6 +57,10 @@ public class OutboxPoller {
     private final BusinessRiskTaskService businessRiskTaskService;
     private final BusinessRiskWorkerRegistryService workerRegistryService;
     private final BusinessRiskMetricsService metricsService;
+    private final ReviewTaskMapper reviewTaskMapper;
+    private final ReviewResultMapper reviewResultMapper;
+    private final TaskAuditLogMapper auditLogMapper;
+    private final SseRegistry sseRegistry;
 
     @Scheduled(fixedDelay = 2000)
     public void poll() {
@@ -89,6 +102,8 @@ public class OutboxPoller {
                     log.error("Outbox event {} exceeded max retry, marking DEAD", event.getEventId());
                     if (BUSINESS_RISK_DISPATCH_EVENT.equals(event.getEventType())) {
                         markBusinessRiskDispatchExhausted(event, e);
+                    } else {
+                        markReviewTaskExhausted(event, e);
                     }
                     event.setStatus("DEAD");
                 }
@@ -114,6 +129,45 @@ public class OutboxPoller {
             );
         } catch (Exception parseException) {
             log.warn("Failed to mark business risk dispatch exhausted eventId={}", event.getEventId(), parseException);
+        }
+    }
+
+    private void markReviewTaskExhausted(OutboxEvent event, Exception cause) {
+        try {
+            ReviewTaskMessage message = objectMapper.readValue(event.getPayload(), ReviewTaskMessage.class);
+            String taskId = message.getTaskId();
+            ReviewTask task = reviewTaskMapper.findByTaskId(taskId).orElse(null);
+            if (task == null || (task.getStatus() != null && task.getStatus().isTerminal())) {
+                return;
+            }
+            task.setStatus(ReviewTaskStatus.FAILED);
+            reviewTaskMapper.saveOrUpdate(task);
+
+            ReviewResult result = new ReviewResult();
+            result.setTaskId(taskId);
+            result.setErrorCode("OUTBOX_DELIVERY_EXHAUSTED");
+            result.setErrorMessage(
+                    "Outbox delivery failed after " + MAX_POLL_RETRY + " attempts: " + cause.getMessage());
+            reviewResultMapper.upsert(result);
+
+            TaskAuditLog audit = new TaskAuditLog();
+            audit.setTaskId(taskId);
+            audit.setFromStatus(task.getStatus().name());
+            audit.setToStatus(ReviewTaskStatus.FAILED.name());
+            audit.setOperator("OUTBOX_POLLER");
+            audit.setDetail("Outbox event " + event.getEventId() + " hit DEAD");
+            audit.setCreatedAt(Instant.now());
+            auditLogMapper.insert(audit);
+
+            sseRegistry.send(taskId, "task_failed", Map.of(
+                    "taskId", taskId,
+                    "status", "FAILED",
+                    "errorCode", "OUTBOX_DELIVERY_EXHAUSTED",
+                    "traceId", message.getTraceId() != null ? message.getTraceId() : ""
+            ));
+            log.warn("Review task marked FAILED due to outbox DEAD taskId={}", taskId);
+        } catch (Exception parseException) {
+            log.warn("Failed to mark review task exhausted eventId={}", event.getEventId(), parseException);
         }
     }
 

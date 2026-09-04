@@ -1,33 +1,32 @@
 package com.acme.review.dto;
 
-import java.util.List;
-import java.util.Map;
-
+/**
+ * Topic 1 任务下发消息（瘦身后）—— Java 生产 → Python 消费。
+ *
+ * <p>仅携带 taskId 与小字段，diffContent / entities / relations 等大 payload
+ * 落库于 {@code review_task_payload} 表，Python 消费后经内部端点回源拉取，
+ * 避免 Kafka 大消息（1MB 上限）问题。</p>
+ */
 public class ReviewTaskMessage {
     private String taskId;
     private String projectId;
     private String projectName;
     private String prUrl;
-    private String diffContent;
     private String traceId;
+    private String sessionId;
     private String mode;
-    private List<Map<String, Object>> entities;
-    private List<Map<String, Object>> relations;
 
     public ReviewTaskMessage() {}
 
     public ReviewTaskMessage(String taskId, String projectId, String projectName, String prUrl,
-                             String diffContent, String traceId, String mode,
-                             List<Map<String, Object>> entities, List<Map<String, Object>> relations) {
+                             String traceId, String sessionId, String mode) {
         this.taskId = taskId;
         this.projectId = projectId;
         this.projectName = projectName;
         this.prUrl = prUrl;
-        this.diffContent = diffContent;
         this.traceId = traceId;
+        this.sessionId = sessionId;
         this.mode = mode;
-        this.entities = entities;
-        this.relations = relations;
     }
 
     public String getTaskId() { return taskId; }
@@ -42,18 +41,12 @@ public class ReviewTaskMessage {
     public String getPrUrl() { return prUrl; }
     public void setPrUrl(String prUrl) { this.prUrl = prUrl; }
 
-    public String getDiffContent() { return diffContent; }
-    public void setDiffContent(String diffContent) { this.diffContent = diffContent; }
-
     public String getTraceId() { return traceId; }
     public void setTraceId(String traceId) { this.traceId = traceId; }
 
+    public String getSessionId() { return sessionId; }
+    public void setSessionId(String sessionId) { this.sessionId = sessionId; }
+
     public String getMode() { return mode; }
     public void setMode(String mode) { this.mode = mode; }
-
-    public List<Map<String, Object>> getEntities() { return entities; }
-    public void setEntities(List<Map<String, Object>> entities) { this.entities = entities; }
-
-    public List<Map<String, Object>> getRelations() { return relations; }
-    public void setRelations(List<Map<String, Object>> relations) { this.relations = relations; }
 }

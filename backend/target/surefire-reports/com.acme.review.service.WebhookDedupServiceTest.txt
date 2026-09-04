@@ -1,8 +1,8 @@
 -------------------------------------------------------------------------------
 Test set: com.acme.review.service.WebhookDedupServiceTest
 -------------------------------------------------------------------------------
-Tests run: 1, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 0.090 s <<< FAILURE! -- in com.acme.review.service.WebhookDedupServiceTest
-com.acme.review.service.WebhookDedupServiceTest.shouldFallbackToLocalLockWhenRedissonMissing -- Time elapsed: 0.086 s <<< FAILURE!
+Tests run: 1, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 0.035 s <<< FAILURE! -- in com.acme.review.service.WebhookDedupServiceTest
+com.acme.review.service.WebhookDedupServiceTest.shouldFallbackToLocalLockWhenRedissonMissing -- Time elapsed: 0.033 s <<< FAILURE!
 org.opentest4j.AssertionFailedError: 
 
 Expecting value to be false but was true
