@@ -89,7 +89,11 @@ def ensure_index(settings: AppSettings | None = None) -> None:
                 # New unified chunk fields
                 "nl_description": {"type": "text", "analyzer": analyzer},
                 "code_content": {"type": "text", "analyzer": "standard"},
-                "entity_name": {"type": "text", "analyzer": "standard", "fields": {"keyword": {"type": "keyword"}}},
+                "entity_name": {
+                    "type": "text",
+                    "analyzer": "standard",
+                    "fields": {"keyword": {"type": "keyword"}},
+                },
                 "entity_kind": {"type": "keyword"},
                 "fully_qualified_name": {"type": "keyword"},
                 "language": {"type": "keyword"},
@@ -139,20 +143,26 @@ def index_documents(rows: list[dict], settings: AppSettings | None = None) -> No
             "image_urls": row.get("image_urls", []),
             "image_texts": row.get("image_texts", []),
         }
-        actions.append({
-            "_index": index_name,
-            "_id": doc_id,
-            "_source": doc,
-        })
+        actions.append(
+            {
+                "_index": index_name,
+                "_id": doc_id,
+                "_source": doc,
+            }
+        )
 
     if actions:
         success, errors = helpers.bulk(client, actions, raise_on_error=False)
         if errors:
-            logger.warning("ES bulk indexing had %d errors: %s", len(errors), errors[:3])
+            logger.warning(
+                "ES bulk indexing had %d errors: %s", len(errors), errors[:3]
+            )
         logger.info("Indexed %d documents into ES '%s'", success, index_name)
 
 
-def index_unified_chunks(chunks: list[dict], settings: AppSettings | None = None) -> None:
+def index_unified_chunks(
+    chunks: list[dict], settings: AppSettings | None = None
+) -> None:
     """Bulk-index unified chunks (NL + code + AST metadata) into ES."""
     if not chunks:
         return
@@ -200,7 +210,9 @@ def index_unified_chunks(chunks: list[dict], settings: AppSettings | None = None
     if actions:
         success, errors = helpers.bulk(client, actions, raise_on_error=False)
         if errors:
-            logger.warning("ES unified indexing had %d errors: %s", len(errors), errors[:3])
+            logger.warning(
+                "ES unified indexing had %d errors: %s", len(errors), errors[:3]
+            )
         logger.info("Indexed %d unified chunks into ES '%s'", success, index_name)
 
 
@@ -323,7 +335,9 @@ def search_unified(
 
     # Language boost (should, not filter)
     if code_metadata:
-        languages = list({e.get("language") for e in code_metadata if e.get("language")})
+        languages = list(
+            {e.get("language") for e in code_metadata if e.get("language")}
+        )
         if languages:
             should_clauses.append({"terms": {"language": languages, "boost": 2}})
 

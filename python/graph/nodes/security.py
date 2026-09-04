@@ -6,6 +6,7 @@
 - 降级处理（无 LLM / 无 diff / LLM 失败）与 tool_logs 落盘
 - 将结果写回 state
 """
+
 from __future__ import annotations
 
 from domain.reviewers._findings import merge_findings, parse_llm_response
@@ -26,30 +27,38 @@ def audit_security(state: GraphState, ctx: NodeContext) -> GraphState:
 
     # 没有 LLM 客户端 → 降级模式，直接用确定性扫描结果
     if ctx.llm_client is None:
-        state.setdefault("tool_logs", []).append({
-            "node": "security",
-            "method": "deterministic_only",
-            "findings_count": len(det_findings),
-            "status": "degraded",
-        })
+        state.setdefault("tool_logs", []).append(
+            {
+                "node": "security",
+                "method": "deterministic_only",
+                "findings_count": len(det_findings),
+                "status": "degraded",
+            }
+        )
         return state
 
     # ── 第二步：提取代码片段，准备 LLM 审计 ────────────────────────
     impact_radius = state.get("impact_radius")
     code_graph = state.get("code_graph")
     diff_snippet, method_names = build_diff_snippet(
-        files, max_files=5, max_chars_per_file=2500, max_chars_total=6000,
-        impact_radius=impact_radius, code_graph=code_graph,
+        files,
+        max_files=5,
+        max_chars_per_file=2500,
+        max_chars_total=6000,
+        impact_radius=impact_radius,
+        code_graph=code_graph,
     )
 
     if not diff_snippet.strip():
         # 无 diff 内容，跳过 LLM，保留确定性扫描结果
-        state.setdefault("tool_logs", []).append({
-            "node": "security",
-            "method": "deterministic_only",
-            "findings_count": len(det_findings),
-            "status": "no_diff_for_llm",
-        })
+        state.setdefault("tool_logs", []).append(
+            {
+                "node": "security",
+                "method": "deterministic_only",
+                "findings_count": len(det_findings),
+                "status": "no_diff_for_llm",
+            }
+        )
         return state
 
     # ── 第三步：LLM 审计（可选增强）────────────────────────────────
@@ -68,12 +77,14 @@ def audit_security(state: GraphState, ctx: NodeContext) -> GraphState:
 
     # 更新最终结果（包含确定性 + LLM 补充）
     state["security_findings"] = merged
-    state.setdefault("tool_logs", []).append({
-        "node": "security",
-        "method": "deterministic+llm",
-        "det_findings_count": len(merged) - llm_new_count,
-        "llm_findings_count": llm_new_count,
-        "llm_status": llm_status,
-        "status": "success",
-    })
+    state.setdefault("tool_logs", []).append(
+        {
+            "node": "security",
+            "method": "deterministic+llm",
+            "det_findings_count": len(merged) - llm_new_count,
+            "llm_findings_count": llm_new_count,
+            "llm_status": llm_status,
+            "status": "success",
+        }
+    )
     return state

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from threading import RLock
-from typing import Dict, List
 
 from repositories.base import LogRepositoryProtocol
 from schemas.domain.log import NodeLog
@@ -9,7 +8,7 @@ from schemas.domain.log import NodeLog
 
 class InMemoryLogRepository(LogRepositoryProtocol):
     def __init__(self) -> None:
-        self._logs: Dict[str, List[NodeLog]] = {}
+        self._logs: dict[str, list[NodeLog]] = {}
         self._lock = RLock()
 
     def append(self, log: NodeLog) -> NodeLog:

@@ -14,6 +14,7 @@
   Java 后端在发送请求前已经用 Tree-sitter 解析了 AST，
   所以 Python 端可以直接用现成的结果，不用重复解析（节省时间）。
 """
+
 from __future__ import annotations
 
 from graph.state import GraphState, NodeContext
@@ -60,7 +61,9 @@ def analyze_impact(state: GraphState, ctx: NodeContext) -> GraphState:
             ToolContext(task_id=ctx.task_id),
         )
         ast_entities = ast_result.payload.get("entities", [])  # 代码实体（类、方法等）
-        ast_relations = ast_result.payload.get("relations", [])  # 实体间关系（调用、继承等）
+        ast_relations = ast_result.payload.get(
+            "relations", []
+        )  # 实体间关系（调用、继承等）
 
     # 调用代码知识图谱工具：输入实体+关系+变更文件 → 输出影响范围
     kg_result: ToolResult = ctx.registry.run(

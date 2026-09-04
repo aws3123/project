@@ -1,7 +1,10 @@
 import pytest
 
 from config.settings import AppSettings
-from schemas.api.result import BusinessRiskReadinessComponent, BusinessRiskSourceReadinessStatus
+from schemas.api.result import (
+    BusinessRiskReadinessComponent,
+    BusinessRiskSourceReadinessStatus,
+)
 from services.business_risk_worker_state import BusinessRiskWorkerState
 from services.worker_registry import WorkerRegistry
 
@@ -47,10 +50,18 @@ async def test_registry_posts_java_heartbeat_contract():
         settings=settings,
         readiness_provider=lambda: BusinessRiskSourceReadinessStatus(
             overall="UP",
-            route=BusinessRiskReadinessComponent(status="UP", detail="business-risk-source readiness route registered"),
-            config=BusinessRiskReadinessComponent(status="UP", detail="llm_api_key configured"),
-            persistence=BusinessRiskReadinessComponent(status="UP", detail="stateless worker does not require task persistence"),
-            llm=BusinessRiskReadinessComponent(status="UP", detail="llm_api_key configured"),
+            route=BusinessRiskReadinessComponent(
+                status="UP", detail="business-risk-source readiness route registered"
+            ),
+            config=BusinessRiskReadinessComponent(
+                status="UP", detail="llm_api_key configured"
+            ),
+            persistence=BusinessRiskReadinessComponent(
+                status="UP", detail="stateless worker does not require task persistence"
+            ),
+            llm=BusinessRiskReadinessComponent(
+                status="UP", detail="llm_api_key configured"
+            ),
         ),
         worker_state=state,
         client=client,
@@ -59,7 +70,10 @@ async def test_registry_posts_java_heartbeat_contract():
     await registry.send_heartbeat_once()
 
     call = client.calls[0]
-    assert call["url"] == "http://localhost:8080/api/internal/business-risk/worker-heartbeat"
+    assert (
+        call["url"]
+        == "http://localhost:8080/api/internal/business-risk/worker-heartbeat"
+    )
     assert call["headers"]["X-Worker-Token"] == "dev-callback"
     assert call["json"]["readiness"] == "UP"
     assert call["json"]["inflight_count"] == 0
@@ -86,10 +100,18 @@ async def test_registry_logs_heartbeat_failures_and_keeps_retrying(monkeypatch, 
         settings=settings,
         readiness_provider=lambda: BusinessRiskSourceReadinessStatus(
             overall="UP",
-            route=BusinessRiskReadinessComponent(status="UP", detail="business-risk-source readiness route registered"),
-            config=BusinessRiskReadinessComponent(status="UP", detail="llm_api_key configured"),
-            persistence=BusinessRiskReadinessComponent(status="UP", detail="stateless worker does not require task persistence"),
-            llm=BusinessRiskReadinessComponent(status="UP", detail="llm_api_key configured"),
+            route=BusinessRiskReadinessComponent(
+                status="UP", detail="business-risk-source readiness route registered"
+            ),
+            config=BusinessRiskReadinessComponent(
+                status="UP", detail="llm_api_key configured"
+            ),
+            persistence=BusinessRiskReadinessComponent(
+                status="UP", detail="stateless worker does not require task persistence"
+            ),
+            llm=BusinessRiskReadinessComponent(
+                status="UP", detail="llm_api_key configured"
+            ),
         ),
         worker_state=state,
         client=client,

@@ -17,6 +17,7 @@ for name in list(sys.modules):
         sys.modules.pop(name, None)
 importlib.invalidate_caches()
 
+
 def _bind_local_package(package_name: str) -> None:
     package_init = ROOT / package_name / "__init__.py"
     if not package_init.exists():

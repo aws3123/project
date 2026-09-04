@@ -74,31 +74,49 @@ class LLMClient:
                 return validated.model_dump()
             except json.JSONDecodeError as e:
                 logger.warning(
-                    "LLM JSON parse failed attempt " + str(attempt + 1) + "/" + str(max_retries + 1) + ": " + str(e)
+                    "LLM JSON parse failed attempt "
+                    + str(attempt + 1)
+                    + "/"
+                    + str(max_retries + 1)
+                    + ": "
+                    + str(e)
                 )
                 if attempt < max_retries:
-                    messages.append({
-                        "role": "user",
-                        "content": "Output format error. Please output valid JSON matching the schema.",
-                    })
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": "Output format error. Please output valid JSON matching the schema.",
+                        }
+                    )
                 else:
                     raise LLMStructuredOutputError(
-                        "JSON parse failed after " + str(max_retries + 1) + " attempts", last_raw
+                        "JSON parse failed after " + str(max_retries + 1) + " attempts",
+                        last_raw,
                     ) from e
             except Exception as e:
                 if isinstance(e, LLMStructuredOutputError):
                     raise
                 logger.warning(
-                    "LLM structured output validation failed attempt " + str(attempt + 1) + "/" + str(max_retries + 1) + ": " + str(e)
+                    "LLM structured output validation failed attempt "
+                    + str(attempt + 1)
+                    + "/"
+                    + str(max_retries + 1)
+                    + ": "
+                    + str(e)
                 )
                 if attempt < max_retries:
-                    messages.append({
-                        "role": "user",
-                        "content": "Validation failed. Please fix and retry with correct schema.",
-                    })
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": "Validation failed. Please fix and retry with correct schema.",
+                        }
+                    )
                 else:
                     raise LLMStructuredOutputError(
-                        "Structured output validation failed after " + str(max_retries + 1) + " attempts", last_raw
+                        "Structured output validation failed after "
+                        + str(max_retries + 1)
+                        + " attempts",
+                        last_raw,
                     ) from e
 
         raise LLMStructuredOutputError("Unreachable", last_raw)

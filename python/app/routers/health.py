@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from queue import Empty, Queue
 from threading import Thread
-from typing import Any, Callable
+from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends
@@ -45,7 +46,9 @@ def _down(detail: str) -> HealthComponent:
     return HealthComponent(status="DOWN", detail=detail)
 
 
-def _run_sync_probe(name: str, probe: Callable[[], HealthComponent], settings: AppSettings) -> HealthComponent:
+def _run_sync_probe(
+    name: str, probe: Callable[[], HealthComponent], settings: AppSettings
+) -> HealthComponent:
     result_queue: Queue[HealthComponent | Exception] = Queue(maxsize=1)
 
     def _runner() -> None:
@@ -69,8 +72,9 @@ def _run_sync_probe(name: str, probe: Callable[[], HealthComponent], settings: A
 def _check_mysql(settings: AppSettings) -> HealthComponent:
     def _probe() -> HealthComponent:
         try:
-            from repositories.db import get_engine
             from sqlalchemy import text
+
+            from repositories.db import get_engine
 
             engine = get_engine(settings)
             with engine.connect() as conn:
@@ -142,7 +146,9 @@ def _check_llm(settings: AppSettings) -> HealthComponent:
                 second = client.get(f"{base}/")
                 if second.status_code < 500:
                     return _up(f"llm reachable: {second.status_code}")
-                return _down(f"llm status error: {first.status_code}/{second.status_code}")
+                return _down(
+                    f"llm status error: {first.status_code}/{second.status_code}"
+                )
         except Exception as exc:
             return _down(f"llm error: {_safe_detail(exc, settings)}")
 
@@ -160,7 +166,9 @@ def _to_component(value: Any) -> HealthComponent:
     raise TypeError("Invalid health component payload")
 
 
-def _to_business_risk_readiness_component(value: Any, default_detail: str) -> dict[str, str | None]:
+def _to_business_risk_readiness_component(
+    value: Any, default_detail: str
+) -> dict[str, str | None]:
     if value is None:
         return {"status": "UP", "detail": default_detail}
     if hasattr(value, "model_dump"):
@@ -173,7 +181,9 @@ def _to_business_risk_readiness_component(value: Any, default_detail: str) -> di
     raise TypeError("Invalid business risk readiness component payload")
 
 
-def _to_business_risk_source_readiness_status(value: Any) -> BusinessRiskSourceReadinessStatus:
+def _to_business_risk_source_readiness_status(
+    value: Any,
+) -> BusinessRiskSourceReadinessStatus:
     if isinstance(value, BusinessRiskSourceReadinessStatus):
         return value
     if isinstance(value, dict):
@@ -195,10 +205,14 @@ def _to_business_risk_source_readiness_status(value: Any) -> BusinessRiskSourceR
         )
         overall = value.get("overall")
         if overall is None:
-            overall = "UP" if all(
-                component["status"] == "UP"
-                for component in (route, config, persistence, llm)
-            ) else "DOWN"
+            overall = (
+                "UP"
+                if all(
+                    component["status"] == "UP"
+                    for component in (route, config, persistence, llm)
+                )
+                else "DOWN"
+            )
         return BusinessRiskSourceReadinessStatus(
             overall=overall,
             route=route,
@@ -237,9 +251,13 @@ async def health_check(settings: AppSettings = Depends(get_settings)):
     return JSONResponse(status_code=status_code, content=payload)
 
 
-@router.get("/health/business-risk-source", response_model=BusinessRiskSourceReadinessStatus)
+@router.get(
+    "/health/business-risk-source", response_model=BusinessRiskSourceReadinessStatus
+)
 async def business_risk_source_readiness():
-    readiness = _to_business_risk_source_readiness_status(get_business_risk_source_readiness())
+    readiness = _to_business_risk_source_readiness_status(
+        get_business_risk_source_readiness()
+    )
     payload = readiness.model_dump()
     status_code = 200 if readiness.overall == "UP" else 503
     return JSONResponse(status_code=status_code, content=payload)

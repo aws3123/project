@@ -26,7 +26,7 @@ router = APIRouter()
 def get_handoff(
     task_id: str,
     result_service=Depends(get_result_service),  # 结果服务
-    task_service=Depends(get_task_service),       # 任务服务
+    task_service=Depends(get_task_service),  # 任务服务
 ):
     """获取交接信息 —— 返回任务状态和报告 URL。
 
@@ -53,7 +53,7 @@ def get_handoff(
 @router.post("/review/handoff/{task_id}")
 def submit_handoff(
     task_id: str,
-    request: HandoffRequest,          # 交接请求体（包含决定、操作人、评论）
+    request: HandoffRequest,  # 交接请求体（包含决定、操作人、评论）
     task_service=Depends(get_task_service),
 ):
     """提交人工复核决定。
@@ -89,9 +89,11 @@ def submit_handoff(
         "status": updated.status,
         "handoff": updated.payload.get("handoff", {}),
     }
+
+
 """Endpoints handling AI-generated review handoff to other services."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
 from app.dependencies import get_result_service, get_task_service
 from schemas.api.request import HandoffRequest
@@ -101,7 +103,11 @@ router = APIRouter()
 
 @router.get("/review/handoff/{task_id}")
 @router.get("/handoff/{task_id}")
-def get_handoff(task_id: str, result_service=Depends(get_result_service), task_service=Depends(get_task_service)):
+def get_handoff(
+    task_id: str,
+    result_service=Depends(get_result_service),
+    task_service=Depends(get_task_service),
+):
     task = task_service.get(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -114,7 +120,9 @@ def get_handoff(task_id: str, result_service=Depends(get_result_service), task_s
 
 
 @router.post("/review/handoff/{task_id}")
-def submit_handoff(task_id: str, request: HandoffRequest, task_service=Depends(get_task_service)):
+def submit_handoff(
+    task_id: str, request: HandoffRequest, task_service=Depends(get_task_service)
+):
     task = task_service.get(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")

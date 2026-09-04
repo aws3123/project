@@ -44,8 +44,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from config.settings import AppSettings
 from services.image.service import ImageService
+
+from config.settings import AppSettings
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +91,9 @@ def _run_ocr(image_path: Path, settings: AppSettings) -> str:
         return text.strip()  # strip() 去除首尾的空白字符和换行
     except ImportError:
         # pytesseract 或 Pillow 没安装，给出警告但不中断
-        logger.warning("pytesseract or Pillow not installed, skipping OCR for %s", image_path)
+        logger.warning(
+            "pytesseract or Pillow not installed, skipping OCR for %s", image_path
+        )
         return ""
     except Exception as exc:
         # OCR 可能因为图片损坏等原因失败，记录警告但不中断
@@ -167,17 +170,15 @@ def ingest_incident_docs(docs_dir: Path, settings: AppSettings | None = None) ->
 
             # 第 3 步：记录这张图片的映射信息
             doc_mapping[image_file.name] = {
-                "url": url,                # MinIO 存储地址
-                "ocr_text": ocr_text,      # OCR 识别出的文字
+                "url": url,  # MinIO 存储地址
+                "ocr_text": ocr_text,  # OCR 识别出的文字
                 "source_doc": source_doc,  # 所属文档名
             }
 
         # 如果这个文档有图片，把映射加入总映射
         if doc_mapping:
             mapping[source_doc] = doc_mapping
-            logger.info(
-                "  Ingested %d images for %s", len(doc_mapping), source_doc
-            )
+            logger.info("  Ingested %d images for %s", len(doc_mapping), source_doc)
 
     # 把所有映射信息保存到文件（后续 seed_incidents 脚本会读取）
     image_service.save_mapping(mapping)

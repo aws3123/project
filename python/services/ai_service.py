@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 from graph.events import EventSink
 from schemas.api.request import ReviewRequest

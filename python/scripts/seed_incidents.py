@@ -87,8 +87,8 @@ def seed_incidents_from_json(input_path: Path, settings: AppSettings) -> None:
     for record in records:
         # 每条记录至少包含 title（标题）和 snippet（摘要/描述）
         snippet = record["snippet"]
-        image_urls: list[str] = []    # 事故相关图片的 URL 列表
-        image_texts: list[str] = []   # 图片 OCR 识别出的文字列表
+        image_urls: list[str] = []  # 事故相关图片的 URL 列表
+        image_texts: list[str] = []  # 图片 OCR 识别出的文字列表
 
         # 检查这条记录是否有关联图片
         images = record.get("images", [])  # .get 带默认值，如果 key 不存在返回空列表
@@ -102,7 +102,7 @@ def seed_incidents_from_json(input_path: Path, settings: AppSettings) -> None:
             for img_name in images:
                 # 从映射中查找这张图片的信息
                 img_info = doc_mapping.get(img_name, {})
-                url = img_info.get("url", "")          # MinIO 存储地址
+                url = img_info.get("url", "")  # MinIO 存储地址
                 ocr_text = img_info.get("ocr_text", "")  # OCR 识别的文字
 
                 if url:
@@ -121,18 +121,16 @@ def seed_incidents_from_json(input_path: Path, settings: AppSettings) -> None:
                 # id 是这条记录在 ChromaDB 中的唯一标识
                 # 格式："来源:标题"，例如 "incident-review-013:Google Cloud NPE..."
                 "id": f"{record['source']}:{record['title']}",
-                "title": record["title"],       # 事故标题
-                "snippet": snippet,             # 事故描述（可能包含 OCR 文字）
-                "source": record["source"],     # 来源标识
+                "title": record["title"],  # 事故标题
+                "snippet": snippet,  # 事故描述（可能包含 OCR 文字）
+                "source": record["source"],  # 来源标识
                 "service": record.get("service"),  # 所属服务/领域（如 "infra", "saas"）
-                "tags": record.get("tags", []),    # 标签列表（如 ["cloud", "dns"]）
-
+                "tags": record.get("tags", []),  # 标签列表（如 ["cloud", "dns"]）
                 # 调用嵌入模型把文本转成向量（1536维的浮点数数组）
                 # 这个向量会被存入 ChromaDB，用于后续的语义相似度检索
                 "embedding": _fetch_query_embedding(record["snippet"], settings),
-
-                "image_urls": image_urls,   # 关联图片 URL 列表
-                "image_texts": image_texts, # 图片 OCR 文字列表
+                "image_urls": image_urls,  # 关联图片 URL 列表
+                "image_texts": image_texts,  # 图片 OCR 文字列表
             }
         )
 

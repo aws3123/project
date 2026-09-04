@@ -12,12 +12,16 @@
   用这个引擎组装出来的一辆"业务风险检测车"——引擎相同，但装载的
   检测设备（节点）和检测目标（状态）不同。
 """
+
 from __future__ import annotations
 
-from graph.business_risk_result import build_business_risk_result
-from graph.business_risk_state import BusinessRiskGraphState
+from domain.business_risk.result import build_business_risk_result
+from domain.business_risk.state import BusinessRiskGraphState
 from graph.runner import GraphRunner
-from schemas.domain.business_risk_review import BusinessRiskReviewRequest, BusinessRiskReviewResult
+from schemas.domain.business_risk_review import (
+    BusinessRiskReviewRequest,
+    BusinessRiskReviewResult,
+)
 
 
 class BusinessRiskRunner:
@@ -29,6 +33,7 @@ class BusinessRiskRunner:
     3. 调用 GraphRunner.run_state() 执行所有业务风险分析节点
     4. 将最终状态转换为业务风险审查结果（BusinessRiskReviewResult）
     """
+
     def __init__(self, runner: GraphRunner) -> None:
         """初始化业务风险运行器。
 
@@ -49,9 +54,9 @@ class BusinessRiskRunner:
         """
         # 将请求转换为共享状态（"公共白板"），供各节点读写
         state: BusinessRiskGraphState = {
-            "task_id": request.task_id,       # 任务唯一标识
-            "run_id": request.run_id,         # 本次运行唯一标识
-            "trace_id": request.trace_id,     # 链路追踪 ID
+            "task_id": request.task_id,  # 任务唯一标识
+            "run_id": request.run_id,  # 本次运行唯一标识
+            "trace_id": request.trace_id,  # 链路追踪 ID
             "request": request.model_dump(),  # 请求的完整字典形式
             "source_package": request.source_package.model_dump(),  # 源码包（含 AST、热点等）
         }

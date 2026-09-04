@@ -6,9 +6,9 @@ from unittest.mock import Mock
 
 from repositories.result_repository import InMemoryResultRepository
 from repositories.task_repository import InMemoryTaskRepository
-from schemas.domain.enums import ReviewMode, TaskStatus
 from schemas.api.request import ReviewRequest
 from schemas.api.result import Recommendation, ReviewResult, RiskBreakdown
+from schemas.domain.enums import ReviewMode, TaskStatus
 from services.ai_service import AIService
 from services.result_service import ResultService
 from services.task_service import TaskService
@@ -62,7 +62,9 @@ def test_run_need_review_marks_need_review_state():
     result_service = ResultService(result_repo)
 
     request = build_request()
-    runner_result = build_runner_result(request).model_copy(update={"status": TaskStatus.NEED_REVIEW})
+    runner_result = build_runner_result(request).model_copy(
+        update={"status": TaskStatus.NEED_REVIEW}
+    )
     runner = Mock(return_value=runner_result)
     ai_service = AIService(task_service, result_service, runner)
 

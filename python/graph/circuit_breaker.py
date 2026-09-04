@@ -20,6 +20,7 @@
   - 如果不熔断，每次审查都会等 45 秒超时才放弃，严重拖慢整体速度
   - 熔断后直接跳过，节省时间，等冷却后再试
 """
+
 from __future__ import annotations
 
 import logging
@@ -45,10 +46,15 @@ class CircuitBreaker:
         else:
             breaker.record_failure("security")  # 失败 → 计数+1
     """
-    failure_threshold: int = 2          # 连续失败次数阈值：达到后触发熔断
-    cooldown_seconds: float = 30.0      # 冷却时间（秒）：熔断后等多久再尝试
-    _failure_counts: dict[str, int] = field(default_factory=dict)    # 各 Agent 的连续失败计数
-    _last_fail_time: dict[str, float] = field(default_factory=dict)  # 各 Agent 的最后失败时间
+
+    failure_threshold: int = 2  # 连续失败次数阈值：达到后触发熔断
+    cooldown_seconds: float = 30.0  # 冷却时间（秒）：熔断后等多久再尝试
+    _failure_counts: dict[str, int] = field(
+        default_factory=dict
+    )  # 各 Agent 的连续失败计数
+    _last_fail_time: dict[str, float] = field(
+        default_factory=dict
+    )  # 各 Agent 的最后失败时间
 
     def is_open(self, agent_name: str) -> bool:
         """检查某个 Agent 的熔断器是否处于"开启"状态（即是否应该跳过）。
@@ -91,4 +97,8 @@ class CircuitBreaker:
         self._failure_counts[agent_name] = prev + 1
         self._last_fail_time[agent_name] = time()
         if prev + 1 >= self.failure_threshold:
-            logger.warning("Circuit OPEN for agent %s after %d consecutive failures", agent_name, prev + 1)
+            logger.warning(
+                "Circuit OPEN for agent %s after %d consecutive failures",
+                agent_name,
+                prev + 1,
+            )

@@ -28,7 +28,6 @@ import logging
 import sys
 from collections import defaultdict  # 带默认值的字典，访问不存在的 key 时自动创建默认值
 from pathlib import Path
-from typing import Any
 
 # 把项目根目录加入模块搜索路径
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -38,7 +37,7 @@ from repositories.chroma import upsert_unified_chunks
 from repositories.db import _fetch_query_embedding
 from repositories.es_client import index_unified_chunks
 from services.bff_ast_client import AstChunk, BffAstClient, BffUnavailableError
-from services.code_extractor import CodeBlock, extract_sections
+from services.code_extractor import extract_sections
 from services.document_loader import LoadedDocument, load_documents_from_dir
 
 logger = logging.getLogger(__name__)
@@ -46,8 +45,28 @@ logger = logging.getLogger(__name__)
 # ── 风险类型分类关键词 ──
 # 用于根据文本内容自动判断事故文档属于哪种风险类型
 # 这些关键词会用于 RAG 检索时的风险类型过滤
-_CODE_VULN_KEYWORDS = {"sql注入", "xss", "csrf", "越权", "漏洞", "注入", "跨站", "rce", "ssrf"}
-_BIZ_RISK_KEYWORDS = {"超卖", "资损", "数据一致", "事务", "并发", "竞态", "锁", "穿透", "雪崩"}
+_CODE_VULN_KEYWORDS = {
+    "sql注入",
+    "xss",
+    "csrf",
+    "越权",
+    "漏洞",
+    "注入",
+    "跨站",
+    "rce",
+    "ssrf",
+}
+_BIZ_RISK_KEYWORDS = {
+    "超卖",
+    "资损",
+    "数据一致",
+    "事务",
+    "并发",
+    "竞态",
+    "锁",
+    "穿透",
+    "雪崩",
+}
 
 
 def _classify_risk_type(text: str) -> str:
@@ -72,7 +91,9 @@ def _classify_risk_type(text: str) -> str:
     return "general"
 
 
-def _aggregate_by_class(ast_chunks: list[AstChunk], preceding_nl: str, section_title: str, source_doc: str) -> list[dict]:
+def _aggregate_by_class(
+    ast_chunks: list[AstChunk], preceding_nl: str, section_title: str, source_doc: str
+) -> list[dict]:
     """把方法级别的代码块聚合成类级别的块。
 
     为什么要聚合？
@@ -129,68 +150,80 @@ def _aggregate_by_class(ast_chunks: list[AstChunk], preceding_nl: str, section_t
             language = first.language
             # 全限定名（FQN）：如 "com.acme.UserService"
             # 取类名部分（去掉最后的方法名）
-            fqn = first.fully_qualified_name.rsplit(".", 1)[0] if "." in first.fully_qualified_name else parent_class
+            fqn = (
+                first.fully_qualified_name.rsplit(".", 1)[0]
+                if "." in first.fully_qualified_name
+                else parent_class
+            )
             signature = f"public class {parent_class}"
 
             chunk_id = f"{source_doc}:class:{parent_class}"
 
-            unified_chunks.append({
-                "id": chunk_id,
-                "nl_description": preceding_nl,       # 自然语言描述
-                "code_content": merged_code,           # 合并后的代码
-                "embedding": None,                     # 稍后生成
-                "ast_metadata": {
-                    "entity_name": entity_name,
-                    "entity_kind": entity_kind,
-                    "fully_qualified_name": fqn,
-                    "language": language,
-                    "signature": signature,
-                    "parent_class": None,              # 类级别没有父类
-                    "line_start": chunks[0].start_line,
-                    "line_end": chunks[-1].end_line,
-                    "ast_status": "parsed",            # 已成功解析
-                },
-                "doc_metadata": {
-                    "source_doc": source_doc,
-                    "section_title": section_title,
-                    "position_in_doc": chunks[0].start_line,
-                    # 自动分类风险类型（根据 NL 描述 + 代码前200字符）
-                    "risk_type": _classify_risk_type(preceding_nl + " " + merged_code[:200]),
-                    "image_urls": [],
-                    "image_texts": [],
-                },
-            })
+            unified_chunks.append(
+                {
+                    "id": chunk_id,
+                    "nl_description": preceding_nl,  # 自然语言描述
+                    "code_content": merged_code,  # 合并后的代码
+                    "embedding": None,  # 稍后生成
+                    "ast_metadata": {
+                        "entity_name": entity_name,
+                        "entity_kind": entity_kind,
+                        "fully_qualified_name": fqn,
+                        "language": language,
+                        "signature": signature,
+                        "parent_class": None,  # 类级别没有父类
+                        "line_start": chunks[0].start_line,
+                        "line_end": chunks[-1].end_line,
+                        "ast_status": "parsed",  # 已成功解析
+                    },
+                    "doc_metadata": {
+                        "source_doc": source_doc,
+                        "section_title": section_title,
+                        "position_in_doc": chunks[0].start_line,
+                        # 自动分类风险类型（根据 NL 描述 + 代码前200字符）
+                        "risk_type": _classify_risk_type(
+                            preceding_nl + " " + merged_code[:200]
+                        ),
+                        "image_urls": [],
+                        "image_texts": [],
+                    },
+                }
+            )
         else:
             # ── 方法/函数级别 ──
             # 没有父类，或者只有一个方法 → 保持原样
             for chunk in chunks:
                 chunk_id = f"{source_doc}:method:{chunk.name}:{chunk.start_line}"
 
-                unified_chunks.append({
-                    "id": chunk_id,
-                    "nl_description": preceding_nl,
-                    "code_content": chunk.content,
-                    "embedding": None,
-                    "ast_metadata": {
-                        "entity_name": chunk.name or "anonymous",
-                        "entity_kind": chunk.chunk_type or "method",
-                        "fully_qualified_name": chunk.fully_qualified_name,
-                        "language": chunk.language,
-                        "signature": chunk.signature,
-                        "parent_class": chunk.parent_class,
-                        "line_start": chunk.start_line,
-                        "line_end": chunk.end_line,
-                        "ast_status": chunk.ast_status,
-                    },
-                    "doc_metadata": {
-                        "source_doc": source_doc,
-                        "section_title": section_title,
-                        "position_in_doc": chunk.start_line,
-                        "risk_type": _classify_risk_type(preceding_nl + " " + chunk.content[:200]),
-                        "image_urls": [],
-                        "image_texts": [],
-                    },
-                })
+                unified_chunks.append(
+                    {
+                        "id": chunk_id,
+                        "nl_description": preceding_nl,
+                        "code_content": chunk.content,
+                        "embedding": None,
+                        "ast_metadata": {
+                            "entity_name": chunk.name or "anonymous",
+                            "entity_kind": chunk.chunk_type or "method",
+                            "fully_qualified_name": chunk.fully_qualified_name,
+                            "language": chunk.language,
+                            "signature": chunk.signature,
+                            "parent_class": chunk.parent_class,
+                            "line_start": chunk.start_line,
+                            "line_end": chunk.end_line,
+                            "ast_status": chunk.ast_status,
+                        },
+                        "doc_metadata": {
+                            "source_doc": source_doc,
+                            "section_title": section_title,
+                            "position_in_doc": chunk.start_line,
+                            "risk_type": _classify_risk_type(
+                                preceding_nl + " " + chunk.content[:200]
+                            ),
+                            "image_urls": [],
+                            "image_texts": [],
+                        },
+                    }
+                )
 
     return unified_chunks
 
@@ -222,9 +255,9 @@ def ingest_document(
     sections, code_blocks = extract_sections(doc.text)
 
     stats = {
-        "ast_parsed": 0,                  # AST 成功解析的块数
-        "ast_fallback": 0,                # AST 回退（解析失败）的块数
-        "ast_boundary_unclear": 0,        # 代码边界不清的块数
+        "ast_parsed": 0,  # AST 成功解析的块数
+        "ast_fallback": 0,  # AST 回退（解析失败）的块数
+        "ast_boundary_unclear": 0,  # 代码边界不清的块数
         "total_code_blocks": len(code_blocks),  # 总代码块数
     }
 
@@ -239,14 +272,14 @@ def ingest_document(
             "embedding": None,
             "ast_metadata": {
                 "entity_name": "",
-                "entity_kind": "document",      # 类型标记为"文档"
+                "entity_kind": "document",  # 类型标记为"文档"
                 "fully_qualified_name": "",
                 "language": "unknown",
                 "signature": "",
                 "parent_class": None,
                 "line_start": 0,
                 "line_end": 0,
-                "ast_status": "no_code",        # 没有代码
+                "ast_status": "no_code",  # 没有代码
             },
             "doc_metadata": {
                 "source_doc": doc.source_file,
@@ -266,19 +299,21 @@ def ingest_document(
         if cb.language == "unknown":
             # 语言未知 → 跳过 BFF，直接用回退方案
             # 把整个代码块当作一个"fallback"块
-            ast_chunks = [AstChunk(
-                content=cb.content,
-                language="unknown",
-                file_path=doc.source_file,
-                start_line=1,
-                end_line=cb.content.count("\n") + 1,
-                chunk_type="fallback",
-                name="",
-                fully_qualified_name="",
-                signature="",
-                parent_class=None,
-                ast_status="fallback",
-            )]
+            ast_chunks = [
+                AstChunk(
+                    content=cb.content,
+                    language="unknown",
+                    file_path=doc.source_file,
+                    start_line=1,
+                    end_line=cb.content.count("\n") + 1,
+                    chunk_type="fallback",
+                    name="",
+                    fully_qualified_name="",
+                    signature="",
+                    parent_class=None,
+                    ast_status="fallback",
+                )
+            ]
             stats["ast_fallback"] += 1
         else:
             # 语言已知 → 调用 BFF 做 AST 解析
@@ -364,7 +399,12 @@ def run_ingest(docs_dir: str, settings: AppSettings | None = None) -> None:
     # ── 第 3 步：逐个处理文档 ──
     all_chunks: list[dict] = []
     # 累计统计
-    total_stats = {"ast_parsed": 0, "ast_fallback": 0, "ast_boundary_unclear": 0, "total_code_blocks": 0}
+    total_stats = {
+        "ast_parsed": 0,
+        "ast_fallback": 0,
+        "ast_boundary_unclear": 0,
+        "total_code_blocks": 0,
+    }
     total_class_chunks = 0
 
     for doc in documents:
@@ -377,13 +417,19 @@ def run_ingest(docs_dir: str, settings: AppSettings | None = None) -> None:
             total_stats[k] += stats[k]
 
         # 统计类级别的块数
-        class_chunks = sum(1 for c in chunks if c.get("ast_metadata", {}).get("entity_kind") == "class")
+        class_chunks = sum(
+            1 for c in chunks if c.get("ast_metadata", {}).get("entity_kind") == "class"
+        )
         total_class_chunks += class_chunks
 
         logger.info(
             "  %s: %d chunks (%d class-level, %d code blocks, %d parsed, %d fallback)",
-            doc.source_file, len(chunks), class_chunks,
-            stats["total_code_blocks"], stats["ast_parsed"], stats["ast_fallback"],
+            doc.source_file,
+            len(chunks),
+            class_chunks,
+            stats["total_code_blocks"],
+            stats["ast_parsed"],
+            stats["ast_fallback"],
         )
 
     if not all_chunks:
@@ -405,7 +451,9 @@ def run_ingest(docs_dir: str, settings: AppSettings | None = None) -> None:
     # ── 第 7 步：打印统计信息 ──
     total_ast = total_stats["total_code_blocks"]
     # 计算回退率（AST 解析失败的比例）
-    fallback_rate = (total_stats["ast_fallback"] / total_ast * 100) if total_ast > 0 else 0
+    fallback_rate = (
+        (total_stats["ast_fallback"] / total_ast * 100) if total_ast > 0 else 0
+    )
 
     print("\n" + "=" * 60)
     print("Import Statistics")
@@ -432,12 +480,20 @@ def run_ingest(docs_dir: str, settings: AppSettings | None = None) -> None:
         doc = chunk.get("doc_metadata", {})
         # 截取前 80/60 个字符作为预览
         nl_preview = chunk["nl_description"][:80].replace("\n", " ")
-        code_preview = chunk["code_content"][:60].replace("\n", " ") if chunk["code_content"] else "(no code)"
+        code_preview = (
+            chunk["code_content"][:60].replace("\n", " ")
+            if chunk["code_content"]
+            else "(no code)"
+        )
         print(f"  [{i+1}] {chunk['id']}")
         print(f"      NL:   {nl_preview}...")
         print(f"      Code: {code_preview}...")
-        print(f"      Entity: {ast.get('entity_name', '?')} ({ast.get('entity_kind', '?')})")
-        print(f"      Lang: {ast.get('language', '?')} | Status: {ast.get('ast_status', '?')}")
+        print(
+            f"      Entity: {ast.get('entity_name', '?')} ({ast.get('entity_kind', '?')})"
+        )
+        print(
+            f"      Lang: {ast.get('language', '?')} | Status: {ast.get('ast_status', '?')}"
+        )
         print(f"      Risk: {doc.get('risk_type', '?')}")
         print()
 
@@ -448,8 +504,12 @@ def run_ingest(docs_dir: str, settings: AppSettings | None = None) -> None:
 
 def main():
     """脚本入口：解析参数，执行摄入。"""
-    parser = argparse.ArgumentParser(description="Ingest mixed-format incident documents")
-    parser.add_argument("--docs-dir", default=None, help="Directory containing incident documents")
+    parser = argparse.ArgumentParser(
+        description="Ingest mixed-format incident documents"
+    )
+    parser.add_argument(
+        "--docs-dir", default=None, help="Directory containing incident documents"
+    )
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose logging")
     args = parser.parse_args()
 

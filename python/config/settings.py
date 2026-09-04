@@ -254,6 +254,6 @@ class AppSettings(BaseSettings):
     # .env 文件是一个纯文本文件，每行一个 "键=值"，专门用来存放环境变量。
     # 这样敏感信息（如 API 密钥）就不会出现在代码中。
     model_config = {
-        "env_file": ".env",          # 指定 .env 文件的路径
+        "env_file": ".env",  # 指定 .env 文件的路径
         "env_file_encoding": "utf-8",  # 文件编码
     }

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from tools.base import ToolContext
-from tools.diff_analyzer import DiffAnalyzerTool
 from domain.checkers.api_breaking_checker import APIBreakingCheckerTool
 from domain.checkers.config_change_checker import ConfigChangeCheckerTool
 from domain.checkers.sql_risk_checker import SQLRiskCheckerTool
-from domain.checkers.test_coverage_checker import TestCoverageCheckerTool as CoverageCheckerTool
+from domain.checkers.test_coverage_checker import (
+    TestCoverageCheckerTool as CoverageCheckerTool,
+)
+from tools.base import ToolContext
+from tools.diff_analyzer import DiffAnalyzerTool
 
 
 def make_context(task_id: str = "task-1") -> ToolContext:
@@ -68,7 +70,14 @@ def test_sql_risk_checker_returns_structured_high_risk_finding() -> None:
 def test_api_breaking_checker_returns_structured_finding() -> None:
     tool = APIBreakingCheckerTool()
     result = tool.run(
-        {"files": [{"path": "api/user_controller.java", "diff": "@Deprecated\npublic String user()"}]},
+        {
+            "files": [
+                {
+                    "path": "api/user_controller.java",
+                    "diff": "@Deprecated\npublic String user()",
+                }
+            ]
+        },
         make_context(),
     )
 

@@ -5,16 +5,22 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from repositories import mappers
-from repositories.sqlalchemy_models import NodeLogModel, ReviewResultModel, ReviewTaskModel
-from schemas.domain.enums import ReviewMode, TaskStatus
-from schemas.domain.log import NodeLog
+from repositories.sqlalchemy_models import (
+    NodeLogModel,
+    ReviewResultModel,
+    ReviewTaskModel,
+)
 from schemas.api.request import ReviewRequest
 from schemas.api.result import Recommendation, ReviewResult, RiskBreakdown
+from schemas.domain.enums import ReviewMode, TaskStatus
+from schemas.domain.log import NodeLog
 from schemas.domain.task import ReviewTask
 
 
 def _task(task_id: str = "t1") -> ReviewTask:
-    req = ReviewRequest(projectId="p1", repo="repo", branch="main", files=[], mode=ReviewMode.SYNC)
+    req = ReviewRequest(
+        projectId="p1", repo="repo", branch="main", files=[], mode=ReviewMode.SYNC
+    )
     return ReviewTask(
         id=task_id,
         project_id=req.projectId,
@@ -43,10 +49,12 @@ def test_serialize_payload_plain_dict():
 
 
 def test_serialize_payload_pydantic_model():
-    req = ReviewRequest(projectId="p1", repo="repo", branch="main", files=[], mode=ReviewMode.SYNC)
+    req = ReviewRequest(
+        projectId="p1", repo="repo", branch="main", files=[], mode=ReviewMode.SYNC
+    )
     dumped = req.model_dump(mode="json")
     serialized = mappers.serialize_payload(dumped)
-    assert 'taskId' in serialized
+    assert "taskId" in serialized
 
 
 def test_task_roundtrip_model_to_schema():
@@ -65,7 +73,9 @@ def test_task_roundtrip_model_to_schema():
 def test_apply_task_updates():
     task = _task("t-update")
     model = mappers.task_to_model(task)
-    mappers.apply_task_updates(model, {"status": TaskStatus.PROCESSING, "retry_count": 2})
+    mappers.apply_task_updates(
+        model, {"status": TaskStatus.PROCESSING, "retry_count": 2}
+    )
     assert model.status == "PROCESSING"
     assert model.retry_count == 2
 

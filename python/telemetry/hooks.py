@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import logging
+
 # Protocol 是 Python 3.8+ 提供的"结构化子类型"机制
 # 简单理解：它定义了一个"接口"，只要你的类实现了接口要求的方法，就自动算作"实现了这个接口"
 # 不需要显式继承，这叫"鸭子类型"的形式化版本
@@ -76,13 +77,15 @@ class NoOpTelemetry(TelemetryHook):
     - 作为默认值，避免调用方做 None 检查
     """
 
-    def record_node(self, log: NodeLog) -> None:  # pragma: no cover - intentionally empty
+    def record_node(
+        self, log: NodeLog
+    ) -> None:  # pragma: no cover - intentionally empty
         """什么都不做，直接返回 None。"""
-        return None
+        return
 
     def record_error(self, log: NodeLog, exc: Exception) -> None:  # pragma: no cover
         """什么都不做，直接返回 None。"""
-        return None
+        return
 
 
 # ============================================================
@@ -117,10 +120,10 @@ class LoggingTelemetryHook(TelemetryHook):
             "node_execution",  # 日志消息（事件名称）
             extra={
                 # extra 中的字段会附加到日志记录上，供日志处理器使用
-                "trace_id": "-",          # 链路追踪ID（这里暂未集成，用 "-" 占位）
-                "task_id": log.task_id,   # 当前任务的唯一标识
-                "node": log.node,         # 节点名称（如 "security_audit", "performance_analysis"）
-                "status": log.status,     # 执行状态（如 "success", "failed"）
+                "trace_id": "-",  # 链路追踪ID（这里暂未集成，用 "-" 占位）
+                "task_id": log.task_id,  # 当前任务的唯一标识
+                "node": log.node,  # 节点名称（如 "security_audit", "performance_analysis"）
+                "status": log.status,  # 执行状态（如 "success", "failed"）
                 "duration_ms": log.duration_ms,  # 执行耗时（毫秒）
             },
         )

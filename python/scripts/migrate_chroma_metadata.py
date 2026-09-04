@@ -36,14 +36,14 @@ logger = logging.getLogger(__name__)
 # 如果旧记录缺少某个字段，就用这里的默认值填充
 # 这样查询时不会因为字段缺失而报错
 DEFAULTS = {
-    "nl_description": "",          # 自然语言描述（默认为空）
-    "code_content": "",            # 代码内容（默认为空）
-    "entity_name": "",             # 实体名称（如类名、方法名）
-    "entity_kind": "unknown",      # 实体类型（class/method/function 等）
-    "language": "unknown",         # 语言（如 java, python）
+    "nl_description": "",  # 自然语言描述（默认为空）
+    "code_content": "",  # 代码内容（默认为空）
+    "entity_name": "",  # 实体名称（如类名、方法名）
+    "entity_kind": "unknown",  # 实体类型（class/method/function 等）
+    "language": "unknown",  # 语言（如 java, python）
     "programming_language": "unknown",  # 编程语言
-    "has_code": False,             # 是否包含代码
-    "ast_status": "unknown",       # AST 解析状态
+    "has_code": False,  # 是否包含代码
+    "ast_status": "unknown",  # AST 解析状态
 }
 
 # 每条记录都应该有的字段列表（从 DEFAULTS 的键生成）
@@ -79,7 +79,9 @@ def migrate_chroma(settings: AppSettings | None = None) -> dict:
     metadatas = all_data.get("metadatas", [])
 
     if not ids:
-        logger.info("No records found in ChromaDB collection '%s'", settings.chroma_collection)
+        logger.info(
+            "No records found in ChromaDB collection '%s'", settings.chroma_collection
+        )
         return {"total": 0, "migrated": 0, "skipped": 0}
 
     logger.info("Found %d records in ChromaDB", len(ids))
@@ -121,16 +123,18 @@ def migrate_chroma(settings: AppSettings | None = None) -> dict:
         logger.info("All records already have new fields. No migration needed.")
         return {"total": len(ids), "migrated": 0, "skipped": len(ids)}
 
-    logger.info("Migrating %d records (out of %d total)...", len(to_migrate_ids), len(ids))
+    logger.info(
+        "Migrating %d records (out of %d total)...", len(to_migrate_ids), len(ids)
+    )
 
     # 分批 upsert（每批 100 条）
     # 为什么要分批？因为一次请求太多数据可能导致超时或内存溢出
     batch_size = 100
     for i in range(0, len(to_migrate_ids), batch_size):
         # 用列表切片取出当前批的数据
-        batch_ids = to_migrate_ids[i:i + batch_size]
-        batch_docs = to_migrate_documents[i:i + batch_size]
-        batch_metas = to_migrate_metadatas[i:i + batch_size]
+        batch_ids = to_migrate_ids[i : i + batch_size]
+        batch_docs = to_migrate_documents[i : i + batch_size]
+        batch_metas = to_migrate_metadatas[i : i + batch_size]
 
         # upsert = update + insert
         # 如果记录已存在则更新，不存在则插入
@@ -139,7 +143,12 @@ def migrate_chroma(settings: AppSettings | None = None) -> dict:
             documents=batch_docs,
             metadatas=batch_metas,
         )
-        logger.info("  Migrated batch %d-%d/%d", i + 1, min(i + batch_size, len(to_migrate_ids)), len(to_migrate_ids))
+        logger.info(
+            "  Migrated batch %d-%d/%d",
+            i + 1,
+            min(i + batch_size, len(to_migrate_ids)),
+            len(to_migrate_ids),
+        )
 
     stats = {
         "total": len(ids),
@@ -174,7 +183,8 @@ def migrate_es(settings: AppSettings | None = None) -> dict:
     try:
         # 延迟导入 ES 相关模块（只在需要时才加载）
         from elasticsearch import helpers
-        from repositories.es_client import get_es_client, ensure_index
+
+        from repositories.es_client import ensure_index, get_es_client
 
         # 确保 ES 索引存在（不存在则创建）
         ensure_index(settings)
@@ -202,7 +212,7 @@ def migrate_es(settings: AppSettings | None = None) -> dict:
             # 组装 ES 文档（把 ChromaDB 的元数据映射到 ES 的字段结构）
             es_doc = {
                 "title": meta.get("title", "unknown"),
-                "snippet": doc or "",              # ES 中的检索文本
+                "snippet": doc or "",  # ES 中的检索文本
                 "source": meta.get("source", "unknown"),
                 "service": meta.get("service"),
                 "tags": meta.get("tags", []),
@@ -218,11 +228,13 @@ def migrate_es(settings: AppSettings | None = None) -> dict:
                 "has_code": meta.get("has_code", False),
                 "ast_status": meta.get("ast_status", "unknown"),
             }
-            actions.append({
-                "_index": index_name,    # ES 索引名
-                "_id": record_id,        # 文档 ID（与 ChromaDB 一致）
-                "_source": es_doc,       # 文档内容
-            })
+            actions.append(
+                {
+                    "_index": index_name,  # ES 索引名
+                    "_id": record_id,  # 文档 ID（与 ChromaDB 一致）
+                    "_source": es_doc,  # 文档内容
+                }
+            )
 
         if actions:
             # helpers.bulk 是 ES 的批量操作 API，比逐条写入快几十倍

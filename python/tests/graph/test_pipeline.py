@@ -5,13 +5,12 @@ from __future__ import annotations
 from app.dependencies import _build_graph_runner
 from repositories.log_repository import InMemoryLogRepository
 from repositories.task_repository import InMemoryTaskRepository
-from schemas.domain.enums import ReviewMode, TaskStatus
 from schemas.api.request import ReviewRequest
+from schemas.domain.enums import ReviewMode, TaskStatus
 from services.log_service import LogService
 from services.task_service import TaskService
 from telemetry.hooks import NoOpTelemetry
 from tools.registry import build_default_registry
-
 
 NODE_COUNT = 11  # diff, classifier, triviality_check, impact, rag, [rules, security, performance], deduplicate, scoring, report
 

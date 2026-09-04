@@ -1,4 +1,5 @@
 """报告生成领域逻辑 —— 纯函数：模板降级 + LLM 消息构建。"""
+
 from __future__ import annotations
 
 # 严重级别权重（用于排序发现，最严重的排前面）
@@ -13,10 +14,10 @@ DEFAULT_FINDING = {
 }
 
 __all__ = [
-    "SEVERITY_WEIGHT",
     "DEFAULT_FINDING",
-    "template_fallback",
+    "SEVERITY_WEIGHT",
     "build_report_messages",
+    "template_fallback",
 ]
 
 
@@ -45,8 +46,12 @@ def template_fallback(
     if not headline:
         headline = DEFAULT_FINDING["title"]
 
-    summary = f"整体风险 {risk}/100，涉及层级: {', '.join(layers)}；重点关注: {headline}"
-    details = [f"{item.get('category','')}: {item.get('detail','')}" for item in top_findings]
+    summary = (
+        f"整体风险 {risk}/100，涉及层级: {', '.join(layers)}；重点关注: {headline}"
+    )
+    details = [
+        f"{item.get('category','')}: {item.get('detail','')}" for item in top_findings
+    ]
     recommendations = [
         {
             "title": "提升覆盖率",

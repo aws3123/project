@@ -3,19 +3,20 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from aiokafka import AIOKafkaConsumer
 from aiokafka.errors import KafkaError
 
 from config.settings import AppSettings
 from mq.callback_producer import CallbackProducer
-from mq.payload_client import PayloadClient, PayloadFetchError, PayloadNotFoundError
-from schemas.api.backend_contract import parse_async_payload
+from mq.payload_client import PayloadClient, PayloadNotFoundError
 
 logger = logging.getLogger(__name__)
 
 DEDUP_KEY_PREFIX = "review:consumed:"
+
 
 # 永久失败：schema 不兼容、diff 非法、payload 不存在等，重试无意义，直接进 DEAD_LETTER
 class PermanentFailure(Exception):
@@ -39,7 +40,9 @@ class ReviewKafkaConsumer:
     def __init__(
         self,
         settings: AppSettings | None = None,
-        process_message: Callable[[dict[str, Any]], Awaitable[dict[str, Any]]] | None = None,
+        process_message: (
+            Callable[[dict[str, Any]], Awaitable[dict[str, Any]]] | None
+        ) = None,
         producer: CallbackProducer | None = None,
         payload_client: PayloadClient | None = None,
     ) -> None:
@@ -83,7 +86,9 @@ class ReviewKafkaConsumer:
         if self._settings.kafka_dedup_enabled:
             from redis.asyncio import Redis
 
-            self._redis = Redis.from_url(self._settings.redis_url, decode_responses=True)
+            self._redis = Redis.from_url(
+                self._settings.redis_url, decode_responses=True
+            )
         self._consumer = self._build_consumer()
         await self._consumer.start()
         await self._producer.start()
@@ -128,7 +133,9 @@ class ReviewKafkaConsumer:
                     for record in records:
                         tasks.append(self._handle(record.value))
                 if tasks:
-                    await asyncio.gather(*(bounded(t) for t in tasks), return_exceptions=True)
+                    await asyncio.gather(
+                        *(bounded(t) for t in tasks), return_exceptions=True
+                    )
                 await self._consumer.commit()
             except asyncio.CancelledError:
                 logger.info("Review consumer cancelled")
@@ -148,7 +155,9 @@ class ReviewKafkaConsumer:
         session_id = message.get("sessionId") or None
         trace_id = message.get("traceId") or task_id
 
-        if self._settings.kafka_dedup_enabled and not await self._acquire_dedup(task_id):
+        if self._settings.kafka_dedup_enabled and not await self._acquire_dedup(
+            task_id
+        ):
             logger.debug("Duplicate task skipped taskId=%s", task_id)
             return
 
@@ -169,7 +178,9 @@ class ReviewKafkaConsumer:
                 result=self._result_to_dict(result),
             )
         except (PayloadNotFoundError, PermanentFailure) as exc:
-            code = exc.code if isinstance(exc, PermanentFailure) else "PAYLOAD_NOT_FOUND"
+            code = (
+                exc.code if isinstance(exc, PermanentFailure) else "PAYLOAD_NOT_FOUND"
+            )
             logger.warning(
                 "Permanent failure taskId=%s code=%s: %s", task_id, code, exc
             )
@@ -183,9 +194,7 @@ class ReviewKafkaConsumer:
             )
         except Exception as exc:
             # 瞬时失败：进程内重试，耗尽后进 DEAD_LETTER（避免无限重投）
-            logger.warning(
-                "Transient failure taskId=%s, will retry: %s", task_id, exc
-            )
+            logger.warning("Transient failure taskId=%s, will retry: %s", task_id, exc)
             error_code = "TRANSIENT_FAILURE"
             error_message = str(exc)
             retries = self._settings.kafka_transient_retries
@@ -232,7 +241,9 @@ class ReviewKafkaConsumer:
                 error_message=error_message,
             )
 
-    def _build_request(self, message: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    def _build_request(
+        self, message: dict[str, Any], payload: dict[str, Any]
+    ) -> dict[str, Any]:
         """瘦身消息 + 回源 payload 合并为可被 parse_async_payload 解析的完整字典。"""
         merged = {
             "taskId": message.get("taskId"),
@@ -276,5 +287,7 @@ class ReviewKafkaConsumer:
             )
         except Exception:
             # Redis 不可用时退化为不去重（结果 upsert 天然幂等，最多重复烧 token）
-            logger.warning("Redis dedup unavailable, proceeding without dedup taskId=%s", task_id)
+            logger.warning(
+                "Redis dedup unavailable, proceeding without dedup taskId=%s", task_id
+            )
             return True

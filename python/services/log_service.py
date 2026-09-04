@@ -6,7 +6,9 @@ from telemetry.hooks import TelemetryHook
 
 
 class LogService:
-    def __init__(self, repository: LogRepositoryProtocol, telemetry: TelemetryHook | None = None) -> None:
+    def __init__(
+        self, repository: LogRepositoryProtocol, telemetry: TelemetryHook | None = None
+    ) -> None:
         self._repo = repository
         self._telemetry = telemetry
 
@@ -14,7 +16,9 @@ class LogService:
         saved = self._repo.append(log)
         if self._telemetry:
             if log.status == "FAILED":
-                self._telemetry.record_error(saved, RuntimeError(saved.output.get("error", "")))
+                self._telemetry.record_error(
+                    saved, RuntimeError(saved.output.get("error", ""))
+                )
             self._telemetry.record_node(saved)
         return saved
 

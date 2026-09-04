@@ -2,7 +2,6 @@
 
 from tools.ast_parser import ASTParserTool
 
-
 JAVA_DIFF = """diff --git a/UserService.java b/UserService.java
 @@ -10,6 +10,8 @@
  public class UserService {

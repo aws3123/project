@@ -19,7 +19,5 @@ from llm.token_counter import count_tokens, truncate_to_budget
 __all__ = ["LLMClient", "count_tokens", "truncate_to_budget"]
 """LLM client and token utilities for AI-powered code review."""
 
-from llm.client import LLMClient
-from llm.token_counter import count_tokens, truncate_to_budget
 
 __all__ = ["LLMClient", "count_tokens", "truncate_to_budget"]

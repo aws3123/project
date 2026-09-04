@@ -7,14 +7,12 @@ from unittest.mock import Mock
 import pytest
 
 from graph.builder import GraphBuilder
-from graph.runner import GraphRunner
 from graph.state import GraphState, NodeContext
 from repositories.log_repository import InMemoryLogRepository
 from services.checkpoint_service import CheckpointService
 from services.log_service import LogService
 from telemetry.hooks import TelemetryHook
 from tools.registry import ToolRegistry
-
 
 # ---------------------------------------------------------------------------
 # In-memory CheckpointService mock (no Redis needed)
@@ -29,10 +27,12 @@ class InMemoryCheckpointService(CheckpointService):
 
     def save(self, task_id: str, checkpoint: dict) -> None:
         import copy
+
         self._store[task_id] = copy.deepcopy(checkpoint)
 
     def load(self, task_id: str) -> dict | None:
         import copy
+
         data = self._store.get(task_id)
         return copy.deepcopy(data) if data else None
 
@@ -59,25 +59,31 @@ def _make_builder(ckpt: InMemoryCheckpointService) -> GraphBuilder:
 
 def _node(name: str, value: str = "ok"):
     """Create a simple node that sets state[name] = value and tracks calls."""
+
     def _fn(state: GraphState, ctx: NodeContext) -> GraphState:
         state[name] = value
         return state
+
     return _fn
 
 
 def _tracked_node(name: str, call_log: list[str], value: str = "done"):
     """Create a node that tracks calls in call_log and sets state[name] = value."""
+
     def _fn(state: GraphState, ctx: NodeContext) -> GraphState:
         call_log.append(name)
         state[name] = value
         return state
+
     return _fn
 
 
 def _failing_node(name: str, error_msg: str = "boom"):
     """Create a node that always raises."""
+
     def _fn(state: GraphState, ctx: NodeContext) -> GraphState:
         raise RuntimeError(error_msg)
+
     return _fn
 
 
@@ -110,7 +116,9 @@ def test_sequential_resume_skips_completed_phases():
     builder2 = _make_builder(ckpt)
     builder2.add_node("step_a", _tracked_node("step_a", call_log))
     builder2.add_node("step_b", _tracked_node("step_b", call_log))
-    builder2.add_node("step_c_fail", _tracked_node("step_c_fail", call_log))  # now succeeds
+    builder2.add_node(
+        "step_c_fail", _tracked_node("step_c_fail", call_log)
+    )  # now succeeds
     runner2 = builder2.build()
 
     state = runner2.run_state({"task_id": "task-seq-1", "request": {}})
@@ -140,12 +148,14 @@ def test_parallel_resume_only_reruns_failed_agents():
             call_log.append(name)
             state[f"{name}_result"] = "done"
             return state
+
         return _fn
 
     def failing_agent(name: str):
         def _fn(state: GraphState, ctx: NodeContext) -> GraphState:
             call_log.append(name)
             raise RuntimeError(f"{name} failed")
+
         return _fn
 
     ckpt = InMemoryCheckpointService()
@@ -153,10 +163,12 @@ def test_parallel_resume_only_reruns_failed_agents():
     # --- First run: sequential phase + parallel phase with one failing agent ---
     builder = _make_builder(ckpt)
     builder.add_node("setup", _tracked_node("setup", call_log))
-    builder.add_parallel_group([
-        ("agent_ok", tracked_agent("agent_ok")),
-        ("agent_fail", failing_agent("agent_fail")),
-    ])
+    builder.add_parallel_group(
+        [
+            ("agent_ok", tracked_agent("agent_ok")),
+            ("agent_fail", failing_agent("agent_fail")),
+        ]
+    )
     runner = builder.build()
 
     with pytest.raises(RuntimeError, match="agent_fail failed"):
@@ -171,10 +183,12 @@ def test_parallel_resume_only_reruns_failed_agents():
     call_log.clear()
     builder2 = _make_builder(ckpt)
     builder2.add_node("setup", _tracked_node("setup", call_log))
-    builder2.add_parallel_group([
-        ("agent_ok", tracked_agent("agent_ok")),
-        ("agent_fail", tracked_agent("agent_fail")),  # now succeeds
-    ])
+    builder2.add_parallel_group(
+        [
+            ("agent_ok", tracked_agent("agent_ok")),
+            ("agent_fail", tracked_agent("agent_fail")),  # now succeeds
+        ]
+    )
     runner2 = builder2.build()
 
     state = runner2.run_state({"task_id": "task-par-1", "request": {}})
@@ -225,7 +239,9 @@ def test_no_checkpoint_service_works_normally():
 
     builder = GraphBuilder(
         registry=ToolRegistry(),
-        log_service=LogService(InMemoryLogRepository(), telemetry=Mock(spec=TelemetryHook)),
+        log_service=LogService(
+            InMemoryLogRepository(), telemetry=Mock(spec=TelemetryHook)
+        ),
         telemetry=Mock(spec=TelemetryHook),
         # No checkpoint_service
     )

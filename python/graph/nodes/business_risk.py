@@ -16,6 +16,7 @@
   化验报告（不变量）、影像检查（语义分析）、体征监测（方法问题）
   都看完了，最后给出一个整体诊断。
 """
+
 from __future__ import annotations
 
 from graph.state import GraphState, NodeContext
@@ -60,11 +61,11 @@ def assess_business_risk(state: GraphState, ctx: NodeContext) -> GraphState:
 
     # 根据规则判定风险等级
     if semantic_count > 0 or violation_count > 0:
-        level = "HIGH"      # 有不变量违反或语义发现 → 高风险
+        level = "HIGH"  # 有不变量违反或语义发现 → 高风险
     elif issue_count > 0 or path_count > 3:
-        level = "MEDIUM"    # 有方法问题或数据流路径过多 → 中风险
+        level = "MEDIUM"  # 有方法问题或数据流路径过多 → 中风险
     else:
-        level = "LOW"       # 以上都没有 → 低风险
+        level = "LOW"  # 以上都没有 → 低风险
 
     # 生成摘要文本
     if violation_count > 0:
@@ -78,13 +79,13 @@ def assess_business_risk(state: GraphState, ctx: NodeContext) -> GraphState:
 
     # 将业务风险报告写入共享状态
     state["business_risk_report"] = {
-        "level": level,                          # 风险等级（HIGH/MEDIUM/LOW）
-        "summary": summary,                      # 摘要文本
-        "violation_count": violation_count,       # 不变量违反数
-        "semantic_count": semantic_count,         # 语义发现数
-        "method_issue_count": issue_count,        # 方法问题数
-        "path_count": path_count,                 # 数据流路径数
-        "need_human_review": level != "LOW",      # 非低风险 → 需要人工审查
+        "level": level,  # 风险等级（HIGH/MEDIUM/LOW）
+        "summary": summary,  # 摘要文本
+        "violation_count": violation_count,  # 不变量违反数
+        "semantic_count": semantic_count,  # 语义发现数
+        "method_issue_count": issue_count,  # 方法问题数
+        "path_count": path_count,  # 数据流路径数
+        "need_human_review": level != "LOW",  # 非低风险 → 需要人工审查
         "status": "READY",
     }
     return state

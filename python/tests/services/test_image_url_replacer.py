@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from services.image_url_replacer import extract_image_references, replace_markdown_image_urls
+from services.image_url_replacer import (
+    extract_image_references,
+    replace_markdown_image_urls,
+)
 
 ENDPOINT = "http://localhost:9000"
 BUCKET = "incident-images"

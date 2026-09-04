@@ -34,10 +34,13 @@ def check_triviality(state: GraphState, ctx: NodeContext) -> GraphState:
     """
     diff_analysis = state.get("diff_analysis", {})
     diff_summary = diff_analysis.get("summary", {})
-    diff_size = diff_summary.get("added_lines", 0) + diff_summary.get("deleted_lines", 0)
+    diff_size = diff_summary.get("added_lines", 0) + diff_summary.get(
+        "deleted_lines", 0
+    )
 
     # 延迟导入避免循环依赖
     from graph.agent_selector import CORE_RISK_KEYWORDS
+
     if is_trivial(diff_analysis, CORE_RISK_KEYWORDS):
         state["trivial"] = True
         layers = state.get("classification", {}).get("layers", [])

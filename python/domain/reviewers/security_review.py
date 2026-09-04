@@ -1,4 +1,5 @@
 """安全审查领域逻辑 —— 纯函数，可与流水线解耦独立测试。"""
+
 from __future__ import annotations
 
 import re
@@ -7,26 +8,86 @@ from domain.reviewers._findings import merge_findings, parse_llm_response
 
 __all__ = [
     "DETERMINISTIC_PATTERNS",
-    "scan_deterministic",
     "build_audit_messages",
     "merge_findings",
     "parse_llm_response",
+    "scan_deterministic",
 ]
 
 # 确定性安全模式列表
 # 每项：(正则表达式, 严重级别, 标题, 详情, 修复建议)
 # 覆盖 OWASP Top 10 中的高频漏洞模式
 DETERMINISTIC_PATTERNS = [
-    ("password\\s*=\\s*[\"'].*[\"']", "HIGH", "硬编码密码", "代码中直接写入密码字符串", "移至环境变量或密钥管理服务"),
-    ("secret\\s*=\\s*[\"'].*[\"']", "HIGH", "硬编码密钥", "代码中直接写入密钥", "移至环境变量或密钥管理服务"),
-    ("api_key\\s*=\\s*[\"'].*[\"']", "HIGH", "硬编码 API Key", "代码中直接写入 API 密钥", "移至环境变量"),
-    ("execute\\(.*\\+.*\\)", "HIGH", "SQL 注入风险", "字符串拼接构建 SQL 语句", "使用参数化查询"),
-    ("innerHTML|document\\.write", "MEDIUM", "XSS 风险", "直接操作 innerHTML 或 document.write", "使用 textContent 或 DOMPurify"),
-    ("@RequestMapping.*method.*GET.*password", "MEDIUM", "敏感参数暴露", "密码参数可能在 URL 中暴露", "使用 POST + RequestBody"),
-    ("logger\\.(info|debug)\\(.*password", "MEDIUM", "敏感信息日志泄露", "密码可能在日志中泄露", "脱敏处理敏感字段"),
-    ("Thread\\.sleep", "LOW", "不安全的线程挂起", "Thread.sleep 可能被用于时序攻击防御", "使用安全随机延迟"),
-    ("DES|DESede|ECB", "MEDIUM", "弱加密算法", "使用过时的加密算法", "使用 AES-GCM 或 ChaCha20-Poly1305"),
-    ("System\\.exit", "LOW", "非正常退出", "调用 System.exit 可能导致服务不可用", "抛出异常由框架处理"),
+    (
+        "password\\s*=\\s*[\"'].*[\"']",
+        "HIGH",
+        "硬编码密码",
+        "代码中直接写入密码字符串",
+        "移至环境变量或密钥管理服务",
+    ),
+    (
+        "secret\\s*=\\s*[\"'].*[\"']",
+        "HIGH",
+        "硬编码密钥",
+        "代码中直接写入密钥",
+        "移至环境变量或密钥管理服务",
+    ),
+    (
+        "api_key\\s*=\\s*[\"'].*[\"']",
+        "HIGH",
+        "硬编码 API Key",
+        "代码中直接写入 API 密钥",
+        "移至环境变量",
+    ),
+    (
+        "execute\\(.*\\+.*\\)",
+        "HIGH",
+        "SQL 注入风险",
+        "字符串拼接构建 SQL 语句",
+        "使用参数化查询",
+    ),
+    (
+        "innerHTML|document\\.write",
+        "MEDIUM",
+        "XSS 风险",
+        "直接操作 innerHTML 或 document.write",
+        "使用 textContent 或 DOMPurify",
+    ),
+    (
+        "@RequestMapping.*method.*GET.*password",
+        "MEDIUM",
+        "敏感参数暴露",
+        "密码参数可能在 URL 中暴露",
+        "使用 POST + RequestBody",
+    ),
+    (
+        "logger\\.(info|debug)\\(.*password",
+        "MEDIUM",
+        "敏感信息日志泄露",
+        "密码可能在日志中泄露",
+        "脱敏处理敏感字段",
+    ),
+    (
+        "Thread\\.sleep",
+        "LOW",
+        "不安全的线程挂起",
+        "Thread.sleep 可能被用于时序攻击防御",
+        "使用安全随机延迟",
+    ),
+    (
+        "DES|DESede|ECB",
+        "MEDIUM",
+        "弱加密算法",
+        "使用过时的加密算法",
+        "使用 AES-GCM 或 ChaCha20-Poly1305",
+    ),
+    (
+        "System\\.exit",
+        "LOW",
+        "非正常退出",
+        "调用 System.exit 可能导致服务不可用",
+        "抛出异常由框架处理",
+    ),
 ]
 
 
@@ -46,17 +107,19 @@ def scan_deterministic(files: list[dict]) -> list[dict]:
         for idx, line in enumerate(diff.splitlines(), start=1):
             for pattern, severity, title, detail, suggestion in DETERMINISTIC_PATTERNS:
                 if line.startswith("+") and re.search(pattern, line):
-                    findings.append({
-                        "severity": severity,
-                        "category": "security",
-                        "title": title,
-                        "detail": f"{detail}: {path}",
-                        "file": path,
-                        "line": idx,
-                        "evidence": line.strip()[:120],
-                        "suggestion": suggestion,
-                        "confidence": 0.85,
-                    })
+                    findings.append(
+                        {
+                            "severity": severity,
+                            "category": "security",
+                            "title": title,
+                            "detail": f"{detail}: {path}",
+                            "file": path,
+                            "line": idx,
+                            "evidence": line.strip()[:120],
+                            "suggestion": suggestion,
+                            "confidence": 0.85,
+                        }
+                    )
     return findings
 
 

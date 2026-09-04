@@ -1,4 +1,5 @@
 """平凡变更判定领域逻辑 —— 纯函数，判断变更是否可跳过深度分析。"""
+
 from __future__ import annotations
 
 # 平凡变更阈值：变更行数（新增+删除）低于此值才进入平凡判定
@@ -7,18 +8,26 @@ TRIVIAL_DIFF_THRESHOLD = 20
 # 纯文档/配置文件后缀
 DOC_FILE_SUFFIXES = (".md", ".txt", ".rst", ".adoc", ".license", "license")
 CONFIG_FILE_SUFFIXES = (
-    ".yml", ".yaml", ".json", ".xml", ".properties",
-    ".ini", ".env", ".toml", ".conf", ".cfg",
+    ".yml",
+    ".yaml",
+    ".json",
+    ".xml",
+    ".properties",
+    ".ini",
+    ".env",
+    ".toml",
+    ".conf",
+    ".cfg",
 )
 
 # 注释行前缀（覆盖主流语言）
 COMMENT_PREFIXES = ("#", "//", "*", "/*", "*/", "<!--", "--", "!")
 
 __all__ = [
-    "TRIVIAL_DIFF_THRESHOLD",
-    "DOC_FILE_SUFFIXES",
-    "CONFIG_FILE_SUFFIXES",
     "COMMENT_PREFIXES",
+    "CONFIG_FILE_SUFFIXES",
+    "DOC_FILE_SUFFIXES",
+    "TRIVIAL_DIFF_THRESHOLD",
     "is_comment_or_blank",
     "is_doc_or_config_file",
     "is_trivial",
@@ -61,7 +70,9 @@ def is_trivial(
         是否平凡。
     """
     diff_summary = diff_analysis.get("summary", {})
-    diff_size = diff_summary.get("added_lines", 0) + diff_summary.get("deleted_lines", 0)
+    diff_size = diff_summary.get("added_lines", 0) + diff_summary.get(
+        "deleted_lines", 0
+    )
     files = diff_analysis.get("files", [])
 
     # 条件1：变更行数 >= 阈值 → 非平凡
@@ -76,9 +87,7 @@ def is_trivial(
 
     # 条件3a：所有文件都是文档/配置文件
     all_doc_or_config = (
-        all(is_doc_or_config_file(f.get("path", "")) for f in files)
-        if files
-        else False
+        all(is_doc_or_config_file(f.get("path", "")) for f in files) if files else False
     )
 
     # 条件3b：所有新增行都是注释/空行

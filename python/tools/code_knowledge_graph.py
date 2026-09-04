@@ -32,19 +32,26 @@ class CodeKnowledgeGraphTool(Tool):
         graph = nx.DiGraph()
 
         for e in entities:
-            qname = e.get("fully_qualified_name") or f"{e.get('file_path','')}::{e.get('name','')}"
-            graph.add_node(qname, **{
-                "kind": e.get("kind", "unknown"),
-                "file": e.get("file_path", ""),
-                "line": e.get("line_start", 0),
-                "language": e.get("language", ""),
-                "modifiers": e.get("modifiers", []),
-                "signature": e.get("signature", ""),
-            })
+            qname = (
+                e.get("fully_qualified_name")
+                or f"{e.get('file_path','')}::{e.get('name','')}"
+            )
+            graph.add_node(
+                qname,
+                kind=e.get("kind", "unknown"),
+                file=e.get("file_path", ""),
+                line=e.get("line_start", 0),
+                language=e.get("language", ""),
+                modifiers=e.get("modifiers", []),
+                signature=e.get("signature", ""),
+            )
 
         for r in relations:
-            graph.add_edge(r.get("source", ""), r.get("target", ""),
-                          relation=r.get("relation_type", "REFERENCES"))
+            graph.add_edge(
+                r.get("source", ""),
+                r.get("target", ""),
+                relation=r.get("relation_type", "REFERENCES"),
+            )
 
         impact = self._compute_decay_impact(graph, entities, changed_files)
 
@@ -54,21 +61,27 @@ class CodeKnowledgeGraphTool(Tool):
             graph_data = {"nodes": [], "links": []}
 
         return ToolResult(
-            name=self.name,
-            payload={"graph_data": graph_data, "impact": impact}
+            name=self.name, payload={"graph_data": graph_data, "impact": impact}
         )
 
-    def _compute_decay_impact(self, graph: nx.DiGraph,
-                               entities: list[dict],
-                               changed_files: list[str]) -> dict[str, Any]:
+    def _compute_decay_impact(
+        self, graph: nx.DiGraph, entities: list[dict], changed_files: list[str]
+    ) -> dict[str, Any]:
         changed_nodes: list[str] = []
         for e in entities:
             if e.get("file_path", "") in changed_files:
-                qname = e.get("fully_qualified_name") or f"{e.get('file_path','')}::{e.get('name','')}"
+                qname = (
+                    e.get("fully_qualified_name")
+                    or f"{e.get('file_path','')}::{e.get('name','')}"
+                )
                 changed_nodes.append(qname)
 
         if not changed_nodes or graph.number_of_nodes() == 0:
-            return {"changed_files": changed_files, "affected": [], "total_impact_score": 0}
+            return {
+                "changed_files": changed_files,
+                "affected": [],
+                "total_impact_score": 0,
+            }
 
         # Weighted BFS with decay
         affected: dict[str, float] = {}  # node -> impact_score
@@ -76,8 +89,9 @@ class CodeKnowledgeGraphTool(Tool):
             if node not in graph:
                 continue
             node_data = graph.nodes[node]
-            visibility = self._get_visibility(node_data.get("modifiers", []),
-                                              node_data.get("kind", ""))
+            visibility = self._get_visibility(
+                node_data.get("modifiers", []), node_data.get("kind", "")
+            )
             if visibility == 0:
                 continue
             affected[node] = IMPACT_DECAY[0] * visibility
@@ -95,8 +109,9 @@ class CodeKnowledgeGraphTool(Tool):
                 continue
 
             node_data = graph.nodes[node]
-            visibility = self._get_visibility(node_data.get("modifiers", []),
-                                              node_data.get("kind", ""))
+            visibility = self._get_visibility(
+                node_data.get("modifiers", []), node_data.get("kind", "")
+            )
             new_score = inherited_score * IMPACT_DECAY[depth] * visibility
             if new_score <= 0.01:
                 continue
@@ -109,10 +124,13 @@ class CodeKnowledgeGraphTool(Tool):
                     queue.append((neighbor, depth + 1, new_score))
 
         affected_sorted = sorted(affected.items(), key=lambda x: x[1], reverse=True)
-        affected_files = list({
-            graph.nodes[n].get("file", "") for n, _ in affected_sorted
-            if n in graph and graph.nodes[n].get("file")
-        })
+        affected_files = list(
+            {
+                graph.nodes[n].get("file", "")
+                for n, _ in affected_sorted
+                if n in graph and graph.nodes[n].get("file")
+            }
+        )
 
         return {
             "changed_files": changed_files,

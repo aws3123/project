@@ -15,12 +15,16 @@ from __future__ import annotations
 
 # argparse 用于解析命令行参数
 import argparse
+
 # json 用于格式化输出
 import json
+
 # sys 用于操作 Python 路径
 import sys
+
 # Path 用于文件路径操作
 from pathlib import Path
+
 # uuid5 基于命名空间生成确定性 UUID（相同输入总是生成相同 ID）
 from uuid import NAMESPACE_DNS, uuid5
 
@@ -31,8 +35,8 @@ if str(ROOT) not in sys.path:
 
 # 导入项目模块
 from app.dependencies import get_ai_service
-from schemas.domain.enums import ReviewMode
 from schemas.api.request import ReviewRequest
+from schemas.domain.enums import ReviewMode
 
 # 示例 diff 内容（用于演示）
 SAMPLE_DIFF = """diff --git a/app.py b/app.py
@@ -49,7 +53,9 @@ def main():
     # 创建命令行参数解析器
     parser = argparse.ArgumentParser(description="Run LangGraph sample")
     parser.add_argument("--task", default="demo")  # 任务名称
-    parser.add_argument("--mode", default="SYNC", choices=[mode.value for mode in ReviewMode])
+    parser.add_argument(
+        "--mode", default="SYNC", choices=[mode.value for mode in ReviewMode]
+    )
     args = parser.parse_args()
 
     # 构建审查请求

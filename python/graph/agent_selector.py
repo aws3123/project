@@ -28,6 +28,7 @@ Agent 选择器模块
 - "RAG"（检索增强生成）= 从历史事故知识库中检索相关案例来辅助审查，
   已改为在本模块之前独立运行的前置节点
 """
+
 from __future__ import annotations  # 延迟求值类型注解，提升启动速度
 
 from graph.state import GraphState  # 流水线共享状态对象，所有节点通过它传递数据
@@ -66,7 +67,7 @@ LARGE_DIFF_THRESHOLD = 200  # 新增 + 删除行数总和超过此值 → 全量
 
 # 变更行数低于此值 → 视为"微小变更"，只跑基础规则（如命名规范、代码风格），
 # 安全/性能分析在这种规模下意义不大（比如改了一行注释，不需要检查 SQL 注入）
-SMALL_DIFF_THRESHOLD = 30   # 新增 + 删除行数总和低于此值 → 仅规则检查
+SMALL_DIFF_THRESHOLD = 30  # 新增 + 删除行数总和低于此值 → 仅规则检查
 
 # ── 代码层次分类 ──────────────────────────────────────────────────
 # 根据变更文件所属的代码层次（通过目录名/包名推断），决定审查方向：
@@ -84,6 +85,7 @@ PERFORMANCE_LAYERS = {"service", "sql", "repository", "dao"}
 # ══════════════════════════════════════════════════════════════════════
 # 第二部分：辅助函数
 # ══════════════════════════════════════════════════════════════════════
+
 
 def _has_core_risk(state: GraphState) -> bool:
     """
@@ -117,6 +119,7 @@ def _has_core_risk(state: GraphState) -> bool:
 # ══════════════════════════════════════════════════════════════════════
 # 第三部分：核心选择函数
 # ══════════════════════════════════════════════════════════════════════
+
 
 def select_agents(state: GraphState) -> list:
     """
@@ -156,7 +159,7 @@ def select_agents(state: GraphState) -> list:
     """
     # 延迟导入（Lazy Import）：只在函数被调用时才导入，而不是模块加载时
     # 好处：避免循环引用（A import B, B import A 的死锁），同时加快模块加载速度
-    from graph.nodes import audit_security, analyze_performance, run_rule_checks
+    from graph.nodes import analyze_performance, audit_security, run_rule_checks
 
     # ── 第一层：平凡变更直接跳过 ──────────────────────────────────
     # trivial 标记由上游节点（如 diff 分析器）设定，例如：
@@ -184,9 +187,9 @@ def select_agents(state: GraphState) -> list:
     # 类比：就像医生看病，不仅看病人外表（文件路径），
     # 还要看化验单（AST 注解/方法名），综合判断该挂哪个科
     entities = state.get("diff_analysis", {}).get("entities", [])
-    has_transactional = False      # 是否涉及事务注解 @Transactional
-    has_security_entity = False    # 是否涉及安全相关方法/注解
-    has_performance_entity = False # 是否涉及性能相关方法
+    has_transactional = False  # 是否涉及事务注解 @Transactional
+    has_security_entity = False  # 是否涉及安全相关方法/注解
+    has_performance_entity = False  # 是否涉及性能相关方法
 
     for entity in entities:
         annotations = entity.get("annotations", [])
@@ -201,15 +204,23 @@ def select_agents(state: GraphState) -> list:
             # Spring Security 注解 → 涉及权限控制，需要安全审查
             # @PreAuthorize / @Secured / @RolesAllowed / @PermitAll
             # 这些都是 Spring Security 框架中用于方法级权限控制的注解
-            if any(kw in ann_lower for kw in ("preauthorize", "secured", "rolesallowed", "permitall")):
+            if any(
+                kw in ann_lower
+                for kw in ("preauthorize", "secured", "rolesallowed", "permitall")
+            ):
                 has_security_entity = True
 
         # 从方法名/类名中"闻味道"（命名约定推断意图）
         # 安全相关命名 → 很可能处理密码、Token、加密逻辑
-        if any(kw in name for kw in ("auth", "login", "password", "token", "encrypt", "decrypt")):
+        if any(
+            kw in name
+            for kw in ("auth", "login", "password", "token", "encrypt", "decrypt")
+        ):
             has_security_entity = True
         # 性能相关命名 → 很可能涉及批量操作、循环、数据库查询、缓存
-        if any(kw in name for kw in ("batch", "loop", "stream", "query", "fetch", "cache")):
+        if any(
+            kw in name for kw in ("batch", "loop", "stream", "query", "fetch", "cache")
+        ):
             has_performance_entity = True
 
     # ── 第三层：影响范围感知 ──────────────────────────────────────
@@ -248,7 +259,11 @@ def select_agents(state: GraphState) -> list:
             agents.append(("security", audit_security))
 
         # 性能审查条件：有事务注解 OR 性能相关方法名 OR 文件在性能敏感层次
-        if has_transactional or has_performance_entity or any(layer in PERFORMANCE_LAYERS for layer in layers):
+        if (
+            has_transactional
+            or has_performance_entity
+            or any(layer in PERFORMANCE_LAYERS for layer in layers)
+        ):
             agents.append(("performance", analyze_performance))
 
         # 保守兜底：如果层次被标记为 "other"（无法归类）且没有任何语义信号，

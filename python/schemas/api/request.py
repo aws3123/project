@@ -16,9 +16,9 @@
 
 # UUID 是"通用唯一识别码"，用来给每个任务生成一个不重复的 ID。
 # uuid4 是基于随机数生成 UUID 的函数。
-from uuid import UUID, uuid4
 # Any 表示"任意类型"，Optional 表示"可以是 None"，List/Dict 是列表和字典的类型提示
-from typing import Any, Optional, List, Dict
+from typing import Any
+from uuid import UUID, uuid4
 
 # BaseModel 是 Pydantic 的数据模型基类
 # Field 用于给字段添加额外的约束和描述信息
@@ -38,6 +38,7 @@ class ReviewFileChange(BaseModel):
         path: 文件路径，比如 "src/main/java/com/acme/UserService.java"
         diff: 文件的 diff 内容（即 Git 风格的差异描述，记录了哪些行新增、哪些行删除）
     """
+
     # 文件在仓库中的路径
     path: str
     # diff 格式的代码变更内容
@@ -63,34 +64,34 @@ class ReviewRequest(BaseModel):
     # 分支名称（要审查哪个分支的代码）
     branch: str
     # diff 的 URL 地址（可选），如果 diff 内容太大，可能只传一个 URL
-    diffUrl: Optional[str] = None
+    diffUrl: str | None = None
     # 变更的文件列表，每个元素是一个 ReviewFileChange 对象
-    files: List[ReviewFileChange]
+    files: list[ReviewFileChange]
     # 审查模式：同步（SYNC）还是异步（ASYNC）
     mode: ReviewMode
     # 风险偏好配置，比如 {"security": 0.8, "performance": 0.5}
     # key 是风险维度名称，value 是权重（0~1）
-    riskPreferences: Dict[str, float] = Field(default_factory=dict)
+    riskPreferences: dict[str, float] = Field(default_factory=dict)
     # 额外的元数据，比如项目名称、来源等附加信息
-    metadata: Dict[str, str] = Field(default_factory=dict)
+    metadata: dict[str, str] = Field(default_factory=dict)
     # 链路追踪 ID，用于在分布式系统中串联一次请求的完整调用链
-    traceId: Optional[str] = None
+    traceId: str | None = None
     # 会话 ID，用于多轮对话场景（同一个对话上下文共享同一个 session）
-    session_id: Optional[str] = None
+    session_id: str | None = None
     # 请求 ID，标识当前这一次请求
-    request_id: Optional[str] = None
+    request_id: str | None = None
     # 对话轮次（第几轮对话），用于多轮对话场景
-    dialog_turn: Optional[int] = None
+    dialog_turn: int | None = None
     # 记忆上下文：之前对话中积累的关键信息摘要，避免每次都重复分析
-    memory_context: Dict[str, Any] = Field(default_factory=dict)
+    memory_context: dict[str, Any] = Field(default_factory=dict)
     # 记忆版本号，用于判断记忆是否过期需要刷新
-    memory_version: Optional[str] = None
+    memory_version: str | None = None
     # 用户反馈信号：用户对之前审查结果的反馈（比如"这个误报了"）
-    user_feedback_signals: Dict[str, Any] = Field(default_factory=dict)
+    user_feedback_signals: dict[str, Any] = Field(default_factory=dict)
     # 代码实体列表（类、方法等），由 Java 端 AST 解析得到
-    entities: Optional[List[Dict[str, Any]]] = None
+    entities: list[dict[str, Any]] | None = None
     # 实体之间的关系（比如"方法 A 调用了方法 B"）
-    relations: Optional[List[Dict[str, Any]]] = None
+    relations: list[dict[str, Any]] | None = None
 
     # Pydantic 模型配置
     model_config = {
@@ -110,16 +111,19 @@ class HandoffRequest(BaseModel):
     当 AI 审查后不确定结果时，会交给人类审查。
     人类做出决策后，通过这个模型提交决策结果。
     """
+
     # 决策结果：通过 / 拒绝 / 需要修改
     decision: HandoffDecision
     # 操作人（做出决策的人的用户名或 ID）
     operator: str
     # 备注/评论（可选），比如"这里确实有 SQL 注入风险"
-    comment: Optional[str] = None
+    comment: str | None = None
+
+
 """Pydantic models describing incoming review requests."""
 
+from typing import Any
 from uuid import UUID, uuid4
-from typing import Any, Optional, List, Dict
 
 from pydantic import BaseModel, Field
 
@@ -136,20 +140,20 @@ class ReviewRequest(BaseModel):
     projectId: str
     repo: str
     branch: str
-    diffUrl: Optional[str] = None
-    files: List[ReviewFileChange]
+    diffUrl: str | None = None
+    files: list[ReviewFileChange]
     mode: ReviewMode
-    riskPreferences: Dict[str, float] = Field(default_factory=dict)
-    metadata: Dict[str, str] = Field(default_factory=dict)
-    traceId: Optional[str] = None
-    session_id: Optional[str] = None
-    request_id: Optional[str] = None
-    dialog_turn: Optional[int] = None
-    memory_context: Dict[str, Any] = Field(default_factory=dict)
-    memory_version: Optional[str] = None
-    user_feedback_signals: Dict[str, Any] = Field(default_factory=dict)
-    entities: Optional[List[Dict[str, Any]]] = None
-    relations: Optional[List[Dict[str, Any]]] = None
+    riskPreferences: dict[str, float] = Field(default_factory=dict)
+    metadata: dict[str, str] = Field(default_factory=dict)
+    traceId: str | None = None
+    session_id: str | None = None
+    request_id: str | None = None
+    dialog_turn: int | None = None
+    memory_context: dict[str, Any] = Field(default_factory=dict)
+    memory_version: str | None = None
+    user_feedback_signals: dict[str, Any] = Field(default_factory=dict)
+    entities: list[dict[str, Any]] | None = None
+    relations: list[dict[str, Any]] | None = None
 
     model_config = {
         "populate_by_name": True,
@@ -160,4 +164,4 @@ class ReviewRequest(BaseModel):
 class HandoffRequest(BaseModel):
     decision: HandoffDecision
     operator: str
-    comment: Optional[str] = None
+    comment: str | None = None

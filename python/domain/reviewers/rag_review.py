@@ -1,12 +1,13 @@
 """RAG 领域逻辑 —— 纯函数，包含检索查询构建、结果格式化与 LLM 文本构建。"""
+
 from __future__ import annotations
 
 __all__ = [
     "build_code_metadata",
-    "build_retrieval_query",
-    "format_retrieval_results",
     "build_context_text",
     "build_rag_messages",
+    "build_retrieval_query",
+    "format_retrieval_results",
 ]
 
 #: 检索时最多携带的代码实体数量（避免查询过长）
@@ -30,12 +31,14 @@ def build_code_metadata(state: dict) -> list[dict] | None:
 
     code_metadata: list[dict] = []
     for entity in entities[:_MAX_ENTITIES]:
-        code_metadata.append({
-            "name": entity.get("name", ""),
-            "kind": entity.get("kind", "unknown"),
-            "language": entity.get("language", ""),
-            "signature": entity.get("signature", ""),
-        })
+        code_metadata.append(
+            {
+                "name": entity.get("name", ""),
+                "kind": entity.get("kind", "unknown"),
+                "language": entity.get("language", ""),
+                "signature": entity.get("signature", ""),
+            }
+        )
     return code_metadata or None
 
 
@@ -56,7 +59,9 @@ def format_retrieval_results(fused: list[dict]) -> list[dict]:
         {
             "source": item.get("source", "unknown"),
             "topic": item.get("title", "unknown"),
-            "snippet": (item.get("nl_description", "") or item.get("snippet", "")) + "\n" + (item.get("code_content", "") or "")[:_CODE_EXCERPT],
+            "snippet": (item.get("nl_description", "") or item.get("snippet", ""))
+            + "\n"
+            + (item.get("code_content", "") or "")[:_CODE_EXCERPT],
             "score": item.get("score", 0),
             "image_urls": item.get("image_urls", []),
             "image_texts": item.get("image_texts", []),

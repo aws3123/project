@@ -11,28 +11,33 @@ schemas 包初始化文件
 """
 
 # --- 枚举类型 ---
-from schemas.domain.enums import HandoffDecision, RAGStatus, ReviewMode, TaskStatus, Tier
-
-# --- 业务风险分析相关模型 ---
-from schemas.domain.business_risk import (
-    BusinessInvariant,       # 业务不变量定义
-    BusinessRiskItem,        # 业务风险条目
-    BusinessRiskReport,      # 业务风险报告
-    BusinessRiskRequest,     # 业务风险请求
-    BusinessRiskResponse,    # 业务风险响应
-    DataFlowPath,            # 数据流路径
-    InvariantViolation,      # 不变量违反
-    MethodIssue,             # 方法问题
-)
-
-# --- 日志模型 ---
-from schemas.domain.log import NodeLog     # 节点执行日志
-
 # --- 请求模型 ---
 from schemas.api.request import HandoffRequest, ReviewRequest
 
 # --- 结果模型 ---
 from schemas.api.result import BusinessRiskResult, ReviewResult, RiskBreakdown
+
+# --- 业务风险分析相关模型 ---
+from schemas.domain.business_risk import (
+    BusinessInvariant,  # 业务不变量定义
+    BusinessRiskItem,  # 业务风险条目
+    BusinessRiskReport,  # 业务风险报告
+    BusinessRiskRequest,  # 业务风险请求
+    BusinessRiskResponse,  # 业务风险响应
+    DataFlowPath,  # 数据流路径
+    InvariantViolation,  # 不变量违反
+    MethodIssue,  # 方法问题
+)
+from schemas.domain.enums import (
+    HandoffDecision,
+    RAGStatus,
+    ReviewMode,
+    TaskStatus,
+    Tier,
+)
+
+# --- 日志模型 ---
+from schemas.domain.log import NodeLog  # 节点执行日志
 
 # --- 任务模型 ---
 from schemas.domain.task import ReviewTask

@@ -14,18 +14,17 @@ RAG 是什么？
   比如：历史上"缓存和数据库双写"导致过数据不一致，
   那这次如果也有类似模式，就应该提醒开发者注意
 """
+
 from __future__ import annotations
 
 import logging
 
 # 安全地获取异常详情
 from app.utils import safe_detail
+
 # 导入应用配置
 from config.settings import AppSettings
-# 导入 diff 提取器（用于构建代码片段给 LLM 看）
-from domain.shared.diff_extractor import build_diff_snippet
-# 导入图状态和节点上下文
-from graph.state import GraphState, NodeContext
+
 # RAG 领域纯函数
 from domain.reviewers.rag_review import (
     build_code_metadata,
@@ -34,12 +33,22 @@ from domain.reviewers.rag_review import (
     build_retrieval_query,
     format_retrieval_results,
 )
+
+# 导入 diff 提取器（用于构建代码片段给 LLM 看）
+from domain.shared.diff_extractor import build_diff_snippet
+
+# 导入图状态和节点上下文
+from graph.state import GraphState, NodeContext
+
 # 导入 LLM 结构化输出异常
 from llm.client import LLMStructuredOutputError
+
 # 导入 Token 预算截断函数
 from llm.token_counter import truncate_to_budget
+
 # 导入 RAG 分析输出模型
 from schemas.domain.llm_output import RAGAnalysisOutput
+
 # 导入统一检索服务
 from services.rag_retrieval_service import RagRetrievalService
 
@@ -85,18 +94,22 @@ def run_rag(state: GraphState, ctx: NodeContext) -> GraphState:
 
     state["rag_context"] = rag_findings
     state["rag_status"] = retrieval_status
-    state.setdefault("tool_logs", []).append({
-        "findings": rag_findings,
-        "status": retrieval_status,
-        "reason": retrieval_reason,
-        "method": "vector+bm25+rrf+rerank",
-    })
+    state.setdefault("tool_logs", []).append(
+        {
+            "findings": rag_findings,
+            "status": retrieval_status,
+            "reason": retrieval_reason,
+            "method": "vector+bm25+rrf+rerank",
+        }
+    )
 
     # LLM 分析：把检索结果 + 代码变更一起发给 LLM
     if ctx.llm_client is not None and fused:
         try:
             # 截断到 Token 预算内（避免超出 LLM 上下文窗口）
-            budgeted = truncate_to_budget(fused, text_key="snippet", max_tokens=settings.rag_max_tokens)
+            budgeted = truncate_to_budget(
+                fused, text_key="snippet", max_tokens=settings.rag_max_tokens
+            )
             # 构建上下文文本
             context_text = build_context_text(budgeted)
 
@@ -105,8 +118,12 @@ def run_rag(state: GraphState, ctx: NodeContext) -> GraphState:
             impact_radius = state.get("impact_radius")
             code_graph = state.get("code_graph")
             diff_snippet, _ = build_diff_snippet(
-                diff_files, max_files=3, max_chars_per_file=1500, max_chars_total=3000,
-                impact_radius=impact_radius, code_graph=code_graph,
+                diff_files,
+                max_files=3,
+                max_chars_per_file=1500,
+                max_chars_total=3000,
+                impact_radius=impact_radius,
+                code_graph=code_graph,
             )
 
             # 构建 LLM 消息

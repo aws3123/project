@@ -8,7 +8,7 @@
 """
 
 # Any 表示任意类型，List 表示列表
-from typing import Any, List
+from typing import Any
 
 # BaseModel 是 Pydantic 的数据模型基类
 # Field 用于给字段添加约束（如范围限制）
@@ -29,6 +29,7 @@ class RiskBreakdown(BaseModel):
       - 性能:   60 分
       - 可维护性: 50 分
     """
+
     # 维度名称，比如 "security"、"performance"
     dimension: str
     # 该维度的评分（0~100）。ge=0 表示最小值 0，le=100 表示最大值 100
@@ -43,6 +44,7 @@ class Recommendation(BaseModel):
 
     每条建议有一个简短的标题和详细的说明。
     """
+
     # 建议标题，比如 "建议使用参数化查询"
     title: str
     # 建议的详细说明，解释为什么要改、怎么改
@@ -67,11 +69,11 @@ class ReviewResult(BaseModel):
     # 风险摘要（一句话概括审查发现的主要风险）
     riskSummary: str | None = None
     # 详细发现列表（每条是一个具体的风险发现描述）
-    details: List[str] = Field(default_factory=list)
+    details: list[str] = Field(default_factory=list)
     # 各维度的风险评分细分（安全性、性能等）
-    riskBreakdown: List[RiskBreakdown] = Field(default_factory=list)
+    riskBreakdown: list[RiskBreakdown] = Field(default_factory=list)
     # 改进建议列表
-    recommendations: List[Recommendation] = Field(default_factory=list)
+    recommendations: list[Recommendation] = Field(default_factory=list)
     # 审查报告的 URL（报告通常以文件形式存储在 MinIO 中）
     reportUrl: str | None = None
     # 是否需要人工复核（AI 不确定时会标记为需要人工介入）
@@ -106,6 +108,7 @@ class HealthComponent(BaseModel):
 
     比如 MySQL 组件的健康状态：status="up" 或 status="down"。
     """
+
     # 状态：通常是 "up"（正常）或 "down"（异常）
     status: str
     # 附加说明，比如 "连接超时" 或 "版本 8.0"
@@ -117,14 +120,15 @@ class HealthStatus(BaseModel):
 
     调用 /health 接口时返回这个结构，运维人员可以一眼看到哪个组件出了问题。
     """
+
     # 整体状态：所有组件都正常时为 "healthy"，否则为 "degraded" 或 "unhealthy"
     overall: str
     # 各组件的健康状态
-    mysql: HealthComponent     # MySQL 数据库
-    redis: HealthComponent     # Redis 缓存
-    minio: HealthComponent     # MinIO 对象存储
-    vector: HealthComponent    # 向量数据库（ChromaDB）
-    llm: HealthComponent       # 大语言模型服务
+    mysql: HealthComponent  # MySQL 数据库
+    redis: HealthComponent  # Redis 缓存
+    minio: HealthComponent  # MinIO 对象存储
+    vector: HealthComponent  # 向量数据库（ChromaDB）
+    llm: HealthComponent  # 大语言模型服务
 
 
 # =============================================================================
@@ -132,6 +136,7 @@ class HealthStatus(BaseModel):
 # =============================================================================
 class BusinessRiskReadinessComponent(BaseModel):
     """业务风险模块中单个组件的就绪状态。"""
+
     status: str
     detail: str | None = None
 
@@ -141,6 +146,7 @@ class BusinessRiskSourceReadinessStatus(BaseModel):
 
     在处理业务风险请求之前，需要检查各个依赖组件是否就绪。
     """
+
     # 整体就绪状态
     overall: str
     # 路由组件是否就绪
@@ -161,6 +167,7 @@ class BusinessRiskResult(BaseModel):
 
     和 ReviewResult 类似，但专门用于业务风险场景（如"订单金额超限"等）。
     """
+
     # 任务 ID
     taskId: str
     # 任务状态
@@ -170,7 +177,7 @@ class BusinessRiskResult(BaseModel):
     # 风险摘要
     riskSummary: str | None = None
     # 详细发现列表
-    details: List[str] = Field(default_factory=list)
+    details: list[str] = Field(default_factory=list)
     # 建议的记忆更新
     proposedMemoryUpdates: dict[str, Any] = Field(
         default_factory=dict,
@@ -178,9 +185,11 @@ class BusinessRiskResult(BaseModel):
     )
     # 链路追踪 ID
     traceId: str | None = None
+
+
 """Schemas representing review results and scoring details."""
 
-from typing import Any, List
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -202,9 +211,9 @@ class ReviewResult(BaseModel):
     status: TaskStatus
     riskScore: int = Field(ge=0, le=100)
     riskSummary: str | None = None
-    details: List[str] = Field(default_factory=list)
-    riskBreakdown: List[RiskBreakdown] = Field(default_factory=list)
-    recommendations: List[Recommendation] = Field(default_factory=list)
+    details: list[str] = Field(default_factory=list)
+    riskBreakdown: list[RiskBreakdown] = Field(default_factory=list)
+    recommendations: list[Recommendation] = Field(default_factory=list)
     reportUrl: str | None = None
     needHumanReview: bool = False
     ragStatus: RAGStatus = RAGStatus.NORMAL
@@ -254,7 +263,7 @@ class BusinessRiskResult(BaseModel):
     status: TaskStatus
     runId: str = Field(validation_alias="run_id")
     riskSummary: str | None = None
-    details: List[str] = Field(default_factory=list)
+    details: list[str] = Field(default_factory=list)
     proposedMemoryUpdates: dict[str, Any] = Field(
         default_factory=dict,
         validation_alias="proposed_memory_updates",
