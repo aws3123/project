@@ -24,7 +24,7 @@ from app.utils import safe_detail
 # 导入应用配置
 from config.settings import AppSettings
 # 导入 diff 提取器（用于构建代码片段给 LLM 看）
-from graph.nodes.diff_extractor import build_diff_snippet
+from domain.shared.diff_extractor import build_diff_snippet
 # 导入图状态和节点上下文
 from graph.state import GraphState, NodeContext
 # 导入 LLM 结构化输出异常

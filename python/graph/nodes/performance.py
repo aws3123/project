@@ -16,7 +16,7 @@
 """
 from __future__ import annotations
 
-from graph.nodes.diff_extractor import build_diff_snippet
+from domain.shared.diff_extractor import build_diff_snippet
 from graph.state import GraphState, NodeContext
 from llm.client import LLMStructuredOutputError
 
