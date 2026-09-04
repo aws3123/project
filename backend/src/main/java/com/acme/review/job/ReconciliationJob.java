@@ -4,13 +4,11 @@ import com.acme.review.config.OrchestratorProperties;
 import com.acme.review.entity.OutboxEvent;
 import com.acme.review.entity.ReviewResult;
 import com.acme.review.entity.ReviewTask;
-import com.acme.review.entity.ReviewTaskPayload;
 import com.acme.review.entity.ReviewTaskStatus;
 import com.acme.review.entity.TaskAuditLog;
 import com.acme.review.repository.mapper.OutboxEventMapper;
 import com.acme.review.repository.mapper.ReviewResultMapper;
 import com.acme.review.repository.mapper.ReviewTaskMapper;
-import com.acme.review.repository.mapper.ReviewTaskPayloadMapper;
 import com.acme.review.repository.mapper.TaskAuditLogMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -44,7 +42,6 @@ public class ReconciliationJob {
     private final OutboxEventMapper outboxMapper;
     private final ReviewResultMapper resultRepo;
     private final TaskAuditLogMapper auditLogMapper;
-    private final ReviewTaskPayloadMapper payloadMapper;
     private final OrchestratorProperties orchProps;
     private final ObjectMapper objectMapper;
 
@@ -155,23 +152,20 @@ public class ReconciliationJob {
     }
 
     private String buildReconciledPayload(ReviewTask task) {
-        String diffContent = payloadMapper.findByTaskId(task.getTaskId())
-                .map(ReviewTaskPayload::getDiffContent)
-                .orElse("");
-        // 使用 ObjectMapper 安全序列化，避免手动拼接 JSON 的转义问题
+        // 消息只带小字段，diffContent 由 Python 从载荷表回源拉取
         try {
             return objectMapper.writeValueAsString(Map.of(
                     "taskId", task.getTaskId(),
                     "projectId", task.getProjectId() != null ? task.getProjectId() : "",
                     "projectName", task.getProjectName() != null ? task.getProjectName() : "",
                     "prUrl", task.getPrUrl() != null ? task.getPrUrl() : "",
-                    "diffContent", diffContent,
                     "traceId", task.getTraceId() != null ? task.getTraceId() : "",
+                    "sessionId", "",
                     "mode", task.getMode() != null ? task.getMode() : "ASYNC"
             ));
         } catch (Exception e) {
             log.error("Failed to serialize reconciled payload taskId={}", task.getTaskId(), e);
-            return "{\"taskId\":\"" + task.getTaskId() + "\",\"diffContent\":\"\"}";
+            return "{\"taskId\":\"" + task.getTaskId() + "\"}";
         }
     }
 }

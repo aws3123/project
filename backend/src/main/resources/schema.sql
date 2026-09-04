@@ -52,9 +52,15 @@ CREATE INDEX idx_review_task_created_at ON review_task(created_at DESC);
 CREATE TABLE IF NOT EXISTS review_task_payload (
     task_id VARCHAR(128) PRIMARY KEY COMMENT '关联 review_task.task_id',
     diff_content LONGTEXT NOT NULL COMMENT '原始 diff 内容',
+    entities_json LONGTEXT NULL COMMENT 'Java TreeSitter AST 实体序列化 JSON',
+    relations_json LONGTEXT NULL COMMENT 'Java TreeSitter AST 关系序列化 JSON',
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
+
+-- 存量库迁移: 新部署走上面 CREATE TABLE, 存量库走下面 ALTER (continue-on-error 兜底重复列)
+ALTER TABLE review_task_payload ADD COLUMN entities_json LONGTEXT NULL COMMENT 'Java TreeSitter AST 实体序列化 JSON' AFTER diff_content;
+ALTER TABLE review_task_payload ADD COLUMN relations_json LONGTEXT NULL COMMENT 'Java TreeSitter AST 关系序列化 JSON' AFTER entities_json;
 
 -- result 联合 task_id + created_at 避免回表
 CREATE INDEX idx_review_result_task_created ON review_result(task_id, created_at);

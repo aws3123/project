@@ -33,6 +33,8 @@ public class ReviewSyncRequest {
 
     private String taskId;
 
+    private String sessionId;
+
     private String question;
 
     private List<Map<String, Object>> entities;

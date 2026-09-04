@@ -8,7 +8,6 @@ import com.acme.review.entity.TaskAuditLog;
 import com.acme.review.repository.mapper.OutboxEventMapper;
 import com.acme.review.repository.mapper.ReviewResultMapper;
 import com.acme.review.repository.mapper.ReviewTaskMapper;
-import com.acme.review.repository.mapper.ReviewTaskPayloadMapper;
 import com.acme.review.repository.mapper.TaskAuditLogMapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,7 +29,6 @@ class ReconciliationJobTest {
     private OutboxEventMapper outboxMapper;
     private ReviewResultMapper resultRepo;
     private TaskAuditLogMapper auditLogMapper;
-    private ReviewTaskPayloadMapper payloadMapper;
     private ReconciliationJob job;
 
     @BeforeEach
@@ -39,10 +37,9 @@ class ReconciliationJobTest {
         outboxMapper = mock(OutboxEventMapper.class);
         resultRepo = mock(ReviewResultMapper.class);
         auditLogMapper = mock(TaskAuditLogMapper.class);
-        payloadMapper = mock(ReviewTaskPayloadMapper.class);
 
         OrchestratorProperties orchProps = new OrchestratorProperties(4, 16, 200, 60, 5000, 60000);
-        job = new ReconciliationJob(taskRepo, outboxMapper, resultRepo, auditLogMapper, payloadMapper, orchProps, new ObjectMapper());
+        job = new ReconciliationJob(taskRepo, outboxMapper, resultRepo, auditLogMapper, orchProps, new ObjectMapper());
     }
 
     @Test
