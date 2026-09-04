@@ -1,7 +1,7 @@
 import pytest
 
 from config.settings import AppSettings
-from schemas.result import BusinessRiskReadinessComponent, BusinessRiskSourceReadinessStatus
+from schemas.api.result import BusinessRiskReadinessComponent, BusinessRiskSourceReadinessStatus
 from services.business_risk_worker_state import BusinessRiskWorkerState
 from services.worker_registry import WorkerRegistry
 

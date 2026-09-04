@@ -7,7 +7,7 @@ from __future__ import annotations
 from domain.reviewers.report_review import build_report_messages, template_fallback
 from graph.state import GraphState, NodeContext
 from llm.client import LLMStructuredOutputError
-from schemas.llm_output import ReportOutput
+from schemas.domain.llm_output import ReportOutput
 
 
 def summarize(state: GraphState, ctx: NodeContext) -> GraphState:

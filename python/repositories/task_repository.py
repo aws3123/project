@@ -6,7 +6,7 @@ from threading import RLock
 from typing import Dict
 
 from repositories.base import TaskRepositoryProtocol
-from schemas.task import ReviewTask
+from schemas.domain.task import ReviewTask
 
 
 class InMemoryTaskRepository(TaskRepositoryProtocol):

@@ -6,9 +6,9 @@ from unittest.mock import Mock
 
 from repositories.result_repository import InMemoryResultRepository
 from repositories.task_repository import InMemoryTaskRepository
-from schemas.enums import ReviewMode, TaskStatus
-from schemas.request import ReviewRequest
-from schemas.result import Recommendation, ReviewResult, RiskBreakdown
+from schemas.domain.enums import ReviewMode, TaskStatus
+from schemas.api.request import ReviewRequest
+from schemas.api.result import Recommendation, ReviewResult, RiskBreakdown
 from services.ai_service import AIService
 from services.result_service import ResultService
 from services.task_service import TaskService

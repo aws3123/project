@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from app.dependencies import get_business_risk_source_readiness
 from app.utils import safe_detail
 from config.settings import AppSettings
-from schemas.result import (
+from schemas.api.result import (
     BusinessRiskSourceReadinessStatus,
     HealthComponent,
     HealthStatus,

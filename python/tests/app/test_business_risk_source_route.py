@@ -3,8 +3,8 @@ from fastapi.testclient import TestClient
 from app.dependencies import get_business_risk_service
 from app.main import app
 from app.routers import business_risk_source as source_router
-from schemas.business_risk_review import BusinessRiskReviewResult
-from schemas.result import BusinessRiskSourceReadinessStatus
+from schemas.domain.business_risk_review import BusinessRiskReviewResult
+from schemas.api.result import BusinessRiskSourceReadinessStatus
 
 client = TestClient(app)
 

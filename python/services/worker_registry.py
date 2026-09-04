@@ -10,7 +10,7 @@ import httpx
 
 from app.utils import safe_detail
 from config.settings import AppSettings
-from schemas.result import BusinessRiskSourceReadinessStatus
+from schemas.api.result import BusinessRiskSourceReadinessStatus
 from services.business_risk_worker_state import BusinessRiskWorkerState
 
 logger = logging.getLogger(__name__)

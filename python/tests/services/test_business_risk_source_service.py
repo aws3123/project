@@ -2,7 +2,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from schemas.business_risk_review import BusinessRiskReviewRequest
+from schemas.domain.business_risk_review import BusinessRiskReviewRequest
 from services.business_risk_source_service import BusinessRiskSourceService
 from services.business_risk_worker_state import BusinessRiskWorkerState
 

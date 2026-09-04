@@ -1,12 +1,22 @@
 """风险评分领域逻辑 —— 纯函数，包含所有评分公式与文本构建。"""
 from __future__ import annotations
 
-# Agent 权重：不同 Agent 的发现对最终评分的贡献权重
-AGENT_WEIGHT = {"security": 3, "rules": 2, "performance": 1.5, "rag": 1}
-# 严重级别乘数：HIGH 的问题影响是 LOW 的 3 倍
-SEVERITY_MULTIPLIER = {"HIGH": 3, "MEDIUM": 2, "LOW": 1, "INFO": 0.5}
+from domain.reviewers._findings import AGENT_WEIGHT, SEVERITY_MULTIPLIER, cross_validate
 
-# ===== 确定性评分（降级模式）的参数 =====
+__all__ = [
+    "AGENT_WEIGHT",
+    "SEVERITY_MULTIPLIER",
+    "cross_validate",
+    "compute_deterministic",
+    "build_findings_text",
+    "build_cross_text",
+    "build_impact_text",
+    "build_scoring_messages",
+    "parse_scoring_result",
+]
+
+#: 参与交叉验证的 Agent 来源顺序
+_SOURCES = ("rules", "security", "performance")
 _BASE_SCORE = 0.2
 _RULE_HIGH_WEIGHT = 0.2
 _RULE_HIGH_CAP = 0.5

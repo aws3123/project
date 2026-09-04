@@ -12,11 +12,11 @@ from repositories import db as db_module
 from repositories.log_repository_sql import SQLLogRepository
 from repositories.result_repository_sql import SQLResultRepository
 from repositories.task_repository_sql import SQLTaskRepository
-from schemas.enums import ReviewMode, TaskStatus
-from schemas.log import NodeLog
-from schemas.request import ReviewRequest
-from schemas.result import Recommendation, ReviewResult, RiskBreakdown
-from schemas.task import ReviewTask
+from schemas.domain.enums import ReviewMode, TaskStatus
+from schemas.domain.log import NodeLog
+from schemas.api.request import ReviewRequest
+from schemas.api.result import Recommendation, ReviewResult, RiskBreakdown
+from schemas.domain.task import ReviewTask
 from services.task_service import TaskService
 
 

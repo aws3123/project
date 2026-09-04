@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from schemas.semantic_finding import SemanticFindingSchema
+from schemas.domain.semantic_finding import SemanticFindingSchema
 
 
 def test_minimal_valid_payload_has_risk_false():

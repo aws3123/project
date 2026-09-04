@@ -6,8 +6,8 @@ from unittest.mock import Mock
 
 from config.settings import AppSettings
 from repositories.result_repository import InMemoryResultRepository
-from schemas.enums import TaskStatus
-from schemas.result import Recommendation, ReviewResult, RiskBreakdown
+from schemas.domain.enums import TaskStatus
+from schemas.api.result import Recommendation, ReviewResult, RiskBreakdown
 from services.result_service import ResultService
 
 

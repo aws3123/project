@@ -31,8 +31,8 @@ if str(ROOT) not in sys.path:
 
 # 导入项目模块
 from app.dependencies import get_ai_service
-from schemas.enums import ReviewMode
-from schemas.request import ReviewRequest
+from schemas.domain.enums import ReviewMode
+from schemas.api.request import ReviewRequest
 
 # 示例 diff 内容（用于演示）
 SAMPLE_DIFF = """diff --git a/app.py b/app.py

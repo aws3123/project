@@ -6,11 +6,11 @@ from datetime import UTC, datetime
 
 from repositories import mappers
 from repositories.sqlalchemy_models import NodeLogModel, ReviewResultModel, ReviewTaskModel
-from schemas.enums import ReviewMode, TaskStatus
-from schemas.log import NodeLog
-from schemas.request import ReviewRequest
-from schemas.result import Recommendation, ReviewResult, RiskBreakdown
-from schemas.task import ReviewTask
+from schemas.domain.enums import ReviewMode, TaskStatus
+from schemas.domain.log import NodeLog
+from schemas.api.request import ReviewRequest
+from schemas.api.result import Recommendation, ReviewResult, RiskBreakdown
+from schemas.domain.task import ReviewTask
 
 
 def _task(task_id: str = "t1") -> ReviewTask:

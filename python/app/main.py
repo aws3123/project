@@ -31,7 +31,7 @@ from app.dependencies import (
 from app.routers import review, health, handoff, business_risk_source
 from app.utils import create_trace_id
 from config.logging import configure_logging
-from services.registry import WorkerRegistry
+from services.worker_registry import WorkerRegistry
 
 # 初始化日志系统（在应用启动时执行一次）
 configure_logging()

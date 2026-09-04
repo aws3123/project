@@ -4,7 +4,7 @@ from threading import RLock
 from typing import Dict, List
 
 from repositories.base import LogRepositoryProtocol
-from schemas.log import NodeLog
+from schemas.domain.log import NodeLog
 
 
 class InMemoryLogRepository(LogRepositoryProtocol):

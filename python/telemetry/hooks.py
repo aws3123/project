@@ -27,7 +27,7 @@ from typing import Protocol
 
 # NodeLog 是一个数据类，包含了某个节点执行后的日志信息
 # 比如：task_id（任务ID）、node（节点名）、status（状态）、duration_ms（耗时）等
-from schemas.log import NodeLog
+from schemas.domain.log import NodeLog
 
 
 # ============================================================

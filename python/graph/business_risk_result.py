@@ -9,7 +9,7 @@
 """
 from __future__ import annotations
 
-from schemas.business_risk_review import (
+from schemas.domain.business_risk_review import (
     BusinessRiskReviewRequest,
     BusinessRiskReviewResult,
 )

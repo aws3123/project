@@ -28,7 +28,7 @@ from typing import Any
 from config.settings import AppSettings
 from graph.state import GraphState, NodeContext
 from llm.client import LLMStructuredOutputError
-from schemas.semantic_finding import SemanticFindingSchema
+from schemas.domain.semantic_finding import SemanticFindingSchema
 
 logger = logging.getLogger(__name__)
 

@@ -4,9 +4,9 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from repositories.base import TaskRepositoryProtocol
-from schemas.enums import HandoffDecision, TaskStatus
-from schemas.request import ReviewRequest
-from schemas.task import ReviewTask
+from schemas.domain.enums import HandoffDecision, TaskStatus
+from schemas.api.request import ReviewRequest
+from schemas.domain.task import ReviewTask
 
 
 class TaskService:

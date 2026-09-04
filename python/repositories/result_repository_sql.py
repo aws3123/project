@@ -4,7 +4,7 @@ from repositories.base import ResultRepositoryProtocol
 from repositories.db import get_session
 from repositories.mappers import result_to_model, result_to_schema
 from repositories.sqlalchemy_models import Base, ReviewResultModel
-from schemas.result import ReviewResult
+from schemas.api.result import ReviewResult
 
 
 class SQLResultRepository(ResultRepositoryProtocol):

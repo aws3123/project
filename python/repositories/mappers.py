@@ -15,10 +15,10 @@ import json
 from pydantic import BaseModel
 
 from repositories.sqlalchemy_models import NodeLogModel, ReviewResultModel, ReviewTaskModel
-from schemas.enums import ReviewMode, TaskStatus
-from schemas.log import NodeLog
-from schemas.result import ReviewResult
-from schemas.task import ReviewTask
+from schemas.domain.enums import ReviewMode, TaskStatus
+from schemas.domain.log import NodeLog
+from schemas.api.result import ReviewResult
+from schemas.domain.task import ReviewTask
 
 
 # ---------------------------------------------------------------------------

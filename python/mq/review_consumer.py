@@ -11,7 +11,7 @@ from aiokafka.errors import KafkaError
 from config.settings import AppSettings
 from mq.callback_producer import CallbackProducer
 from mq.payload_client import PayloadClient, PayloadFetchError, PayloadNotFoundError
-from schemas.backend_contract import parse_async_payload
+from schemas.api.backend_contract import parse_async_payload
 
 logger = logging.getLogger(__name__)
 

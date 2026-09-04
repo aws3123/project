@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from graph.business_risk_runner import BusinessRiskRunner
-from schemas.business_risk_review import BusinessRiskReviewRequest, BusinessRiskReviewResult
+from schemas.domain.business_risk_review import BusinessRiskReviewRequest, BusinessRiskReviewResult
 from services.business_risk_worker_state import BusinessRiskWorkerState
 
 
