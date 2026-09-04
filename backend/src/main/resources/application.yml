@@ -15,28 +15,25 @@ spring:
           contentType: application/json
           producer:
             partition-key-expression: payload.taskId
-        reviewTaskIn-in-0:
-          destination: ${MQ_TOPIC:ai.review.tasks}
-          group: ${MQ_CONSUMER_GROUP:java-orchestrator}
+        reviewCallbackIn-in-0:
+          destination: ${MQ_CALLBACK_TOPIC:${REVIEW_CALLBACK_TOPIC:ai.review.callbacks}}
+          group: ${MQ_CALLBACK_GROUP:java-orchestrator-callback}
           consumer:
             max-attempts: 3
             back-off-initial-interval: 2000
             back-off-max-interval: 10000
             back-off-multiplier: 2.0
-        reviewTaskDlqIn-in-0:
-          destination: ${MQ_TOPIC:ai.review.tasks}-dlq
-          group: ${MQ_CONSUMER_GROUP:java-orchestrator}-dlq
       kafka:
         bindings:
-          reviewTaskIn-in-0:
+          reviewCallbackIn-in-0:
             consumer:
               enableDlq: true
-              dlqName: ${MQ_TOPIC:ai.review.tasks}-dlq
+              dlqName: ${MQ_CALLBACK_TOPIC:ai.review.callbacks}-dlq
               dlqProducerProperties:
                 configuration:
                   key.serializer: org.apache.kafka.common.serialization.StringSerializer
     function:
-      definition: reviewTaskIn;reviewTaskDlqIn
+      definition: reviewCallbackIn
 
 rate-limit:
   enabled: ${RATE_LIMIT_ENABLED:true}
@@ -61,13 +58,6 @@ resilience4j:
     instances:
       pythonService:
         base-config: default
-  timelimiter:
-    configs:
-      default:
-        timeout-duration: ${ORCHESTRATOR_SYNC_TIMEOUT:120s}
-    instances:
-      pythonService:
-        base-config: default
 
 orchestrator:
   core-pool-size: ${ORCHESTRATOR_CORE_POOL:4}
@@ -77,10 +67,6 @@ orchestrator:
   sync-timeout-ms: ${ORCHESTRATOR_SYNC_TIMEOUT:120000}
   async-timeout-ms: ${ORCHESTRATOR_ASYNC_TIMEOUT:180000}
 
-reconciliation:
-  stuck-pending-minutes: ${RECONCILIATION_STUCK_PENDING_MINUTES:30}
-  processing-timeout-multiplier: ${RECONCILIATION_PROC_TIMEOUT_MULT:2}
-
 webhook:
   dedup-lock-ttl-seconds: 120
 
@@ -89,12 +75,6 @@ security:
   api-key: ${API_KEY:dev-key}
   callback-token: ${CALLBACK_TOKEN:dev-callback}
 
-minio:
-  endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
-  access-key: ${MINIO_ACCESS_KEY:admin}
-  secret-key: ${MINIO_SECRET_KEY:admin123}
-  image-bucket: ${MINIO_IMAGE_BUCKET:incident-images}
-
 python:
   base-url: ${PYTHON_BASE_URL:http://localhost:8000}
   sync-path: ${PYTHON_SYNC_PATH:/ai/review/sync}
@@ -102,7 +82,6 @@ python:
   timeout-ms: ${PYTHON_TIMEOUT_MS:60000}
   connect-timeout-ms: 3000
   discovery-enabled: ${PYTHON_DISCOVERY_ENABLED:true}
-  health-path: ${PYTHON_HEALTH_PATH:/ai/health}
   business-risk-health-path: ${PYTHON_BUSINESS_RISK_HEALTH_PATH:/ai/health/business-risk-source}
 
 review:
