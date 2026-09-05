@@ -7,7 +7,8 @@ import org.springframework.context.annotation.Configuration;
 @EnableConfigurationProperties({
         OrchestratorProperties.class,
         com.acme.review.service.WebhookDedupProperties.class,
-        ReviewStreamEventCacheProperties.class
+        ReviewStreamEventCacheProperties.class,
+        BillingProperties.class
 })
 public class OrchestratorConfiguration {
 }

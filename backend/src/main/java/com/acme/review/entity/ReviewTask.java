@@ -86,6 +86,7 @@ public class ReviewTask {
         task.setProjectName(request.getProjectName());
         task.setPrUrl(request.getPrUrl());
         task.setQuestion(request.getQuestion());
+        task.setSubmitter(request.getSubmitter());
         task.setStatus(ReviewTaskStatus.PENDING);
         task.setMode(request.getMode() != null ? request.getMode().name() : ReviewMode.SYNC.name());
         return task;

@@ -69,6 +69,7 @@ class CallbackProducer:
         result: dict[str, Any] | None = None,
         error_code: str | None = None,
         error_message: str | None = None,
+        usage: dict[str, Any] | None = None,
     ) -> None:
         if self._producer is None:
             raise RuntimeError("CallbackProducer not started")
@@ -81,6 +82,7 @@ class CallbackProducer:
             "result": result,
             "errorCode": error_code,
             "errorMessage": error_message,
+            "usage": usage,
         }
         await self._producer.send_and_wait(
             self._settings.kafka_review_callbacks_topic,

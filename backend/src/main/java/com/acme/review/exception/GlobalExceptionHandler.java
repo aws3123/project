@@ -103,6 +103,19 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(error);
     }
 
+    @ExceptionHandler(BillingQuotaExceededException.class)
+    public ResponseEntity<ApiError> handleBillingQuotaExceeded(BillingQuotaExceededException ex, HttpServletRequest request) {
+        ApiError error = new ApiError(
+                Instant.now(),
+                HttpStatus.PAYMENT_REQUIRED.value(),
+                "BillingQuotaExceeded",
+                ex.getMessage(),
+                request.getRequestURI(),
+                extractTraceId(request)
+        );
+        return ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED).body(error);
+    }
+
     @ExceptionHandler(AsyncDispatchException.class)
     public ResponseEntity<ApiError> handleAsyncDispatchException(AsyncDispatchException ex, HttpServletRequest request) {
         ApiError error = new ApiError(
