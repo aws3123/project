@@ -19,7 +19,8 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from app import exceptions
 from app.dependencies import (
@@ -101,6 +102,20 @@ async def lifespan(app: FastAPI):
 
 # 创建 FastAPI 应用实例
 app = FastAPI(title="AI Code Review Sentinel AI Layer", lifespan=lifespan)
+
+
+@app.get("/metrics", include_in_schema=False)
+async def metrics() -> PlainTextResponse:
+    """Prometheus 指标端点 —— 供 Prometheus 抓取（默认注册表）。
+
+    包含进程级指标（process_*、python_gc 等）以及遥测钩子写入的
+    review_node_* 业务指标。
+    """
+    return PlainTextResponse(
+        generate_latest(), media_type=CONTENT_TYPE_LATEST
+    )
+
+
 # 注册路由（将 URL 路径映射到处理函数）
 app.include_router(review.router, prefix="/ai", tags=["review"])
 app.include_router(
