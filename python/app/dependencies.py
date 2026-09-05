@@ -71,7 +71,13 @@ from services.log_service import LogService
 from services.memory_service import MemoryService
 from services.result_service import ResultService
 from services.task_service import TaskService
-from telemetry.hooks import LoggingTelemetryHook, NoOpTelemetry, TelemetryHook
+from telemetry.hooks import (
+    CompositeTelemetryHook,
+    LoggingTelemetryHook,
+    NoOpTelemetry,
+    TelemetryHook,
+)
+from telemetry.prometheus_hook import PrometheusTelemetryHook
 from tools.registry import ToolRegistry, build_default_registry
 
 # ---------------------------------------------------------------------------
@@ -308,11 +314,16 @@ def _build_business_risk_runner(
 def _resolve_telemetry(settings: AppSettings) -> TelemetryHook:
     """根据配置选择遥测实现。
 
-    "noop" = 不做任何遥测（开发/测试用）
-    其他 = 使用日志遥测（将遥测数据写入日志）
+    "noop"       = 不做任何遥测（开发/测试用）
+    "prometheus" = 日志 + Prometheus 指标双写（扇出到两个钩子）
+    其他         = 使用日志遥测（将遥测数据写入日志）
     """
     if settings.telemetry_backend == "noop":
         return NoOpTelemetry()
+    if settings.telemetry_backend == "prometheus":
+        return CompositeTelemetryHook(
+            hooks=[LoggingTelemetryHook(), PrometheusTelemetryHook()]
+        )
     return LoggingTelemetryHook()
 
 
