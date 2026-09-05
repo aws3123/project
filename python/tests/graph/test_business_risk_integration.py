@@ -7,10 +7,10 @@ from unittest.mock import Mock
 from app.dependencies import _build_business_risk_runner
 from graph.business_risk_runner import BusinessRiskRunner
 from repositories.log_repository import InMemoryLogRepository
-from schemas.business_risk_review import (
+from schemas.domain.business_risk_review import (
     BusinessRiskReviewRequest,
 )
-from schemas.business_risk_source import (
+from schemas.domain.business_risk_source import (
     BusinessRiskHotspot,
     BusinessRiskSourceFile,
     BusinessRiskSourcePackage,

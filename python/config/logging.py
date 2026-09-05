@@ -20,6 +20,7 @@
 - 统一的格式（尤其是 trace_id 和 task_id 字段）可以和 Java 后端、ELK 日志平台对接，
   实现"一条请求在所有服务间的日志一键串联"
 """
+
 from __future__ import annotations  # 延迟求值类型注解，提升启动速度
 
 import logging  # Python 内置的日志库，就像程序自带的"行车记录仪 SDK"
@@ -38,7 +39,9 @@ import sys  # 系统相关功能，这里用来把日志输出到终端（stdout
 # 答：结构化字段可以被 ELK 等日志平台自动解析、搜索、聚合——
 #     就像 Excel 表格里每个字段都有独立列，可以一键筛选，
 #     如果全塞在 message 里就只能靠人眼 grep 了
-LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s trace=%(trace_id)s task=%(task_id)s %(message)s"
+LOG_FORMAT = (
+    "%(asctime)s %(levelname)s %(name)s trace=%(trace_id)s task=%(task_id)s %(message)s"
+)
 
 
 class _DefaultTraceFilter(logging.Filter):

@@ -7,6 +7,7 @@
   就像工厂里的"质检关卡"——用固定的检测标准（模板）逐个检查产品，
   不符合标准的就标记出来。不需要"专家判断"，规则说了算。
 """
+
 from __future__ import annotations
 
 from graph.state import GraphState, NodeContext
@@ -14,23 +15,23 @@ from tools.base import ToolContext, ToolResult
 
 # 规则工具列表 —— 每个工具名对应 tools/ 目录下的一个检查器
 RULE_TOOLS = [
-    "sql_risk_checker",       # SQL 风险检查：检测危险的 SQL 操作
-    "api_breaking_checker",   # API 破坏性检查：检测接口兼容性破坏
+    "sql_risk_checker",  # SQL 风险检查：检测危险的 SQL 操作
+    "api_breaking_checker",  # API 破坏性检查：检测接口兼容性破坏
     "config_change_checker",  # 配置变更检查：检测可能出问题的配置改动
 ]
 
 # 默认发现模板 —— 当工具没有发现任何问题时，用这个"占位"结果
 # 为什么需要占位？避免前端处理空列表，统一数据格式
 DEFAULT_FINDING = {
-    "severity": "INFO",       # 严重级别：INFO（最低，仅通知）
-    "category": "general",    # 分类：通用
-    "title": "No findings",   # 标题：无发现
+    "severity": "INFO",  # 严重级别：INFO（最低，仅通知）
+    "category": "general",  # 分类：通用
+    "title": "No findings",  # 标题：无发现
     "detail": "No rule findings",  # 详情
-    "file": None,             # 不涉及具体文件
-    "line": None,             # 不涉及具体行号
-    "evidence": "",           # 无证据
+    "file": None,  # 不涉及具体文件
+    "line": None,  # 不涉及具体行号
+    "evidence": "",  # 无证据
     "suggestion": "No action required",  # 无需操作
-    "confidence": 1.0,        # 置信度 100%（确定没问题）
+    "confidence": 1.0,  # 置信度 100%（确定没问题）
 }
 
 
@@ -49,7 +50,9 @@ def _normalize_finding(item: dict, tool: str) -> dict:
     """
     return {
         "severity": item.get("severity", DEFAULT_FINDING["severity"]),
-        "category": item.get("category", tool.replace("_checker", "").replace("_tool", "")),
+        "category": item.get(
+            "category", tool.replace("_checker", "").replace("_tool", "")
+        ),
         "title": item.get("title", DEFAULT_FINDING["title"]),
         "detail": item.get("detail", DEFAULT_FINDING["detail"]),
         "file": item.get("file"),
@@ -85,12 +88,14 @@ def run_rule_checks(state: GraphState, ctx: NodeContext) -> GraphState:
         for item in tool_findings:
             findings.append(_normalize_finding(item, tool))
         # 记录工具调用日志（方便溯源和调试）
-        state.setdefault("tool_logs", []).append({
-            "node": "rules",
-            "tool": tool,
-            "findings_count": len(tool_findings),
-            "status": "success",
-        })
+        state.setdefault("tool_logs", []).append(
+            {
+                "node": "rules",
+                "tool": tool,
+                "findings_count": len(tool_findings),
+                "status": "success",
+            }
+        )
     # 将所有规则发现写入共享状态
     state["rule_findings"] = findings
     return state

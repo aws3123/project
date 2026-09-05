@@ -3,6 +3,7 @@ import type { ReviewTaskPayload, ResolvedSubmissionMode, SubmissionMode } from '
 import { useReviewSubmission } from '../hooks/useReviewSubmission'
 import { useResultStore } from '../store/resultStore'
 import { useTaskStore } from '../store/taskStore'
+import { ReviewProgressPanel } from './ReviewProgressPanel'
 
 interface ReviewSubmitFormProps {
   onSubmitted?: (options: { sourceMode: SubmissionMode; resolvedMode: ResolvedSubmissionMode; taskId: string }) => void
@@ -21,7 +22,7 @@ export function ReviewSubmitForm({ onSubmitted }: ReviewSubmitFormProps) {
   const [payload, setPayload] = useState(defaultPayload)
   const [mode, setMode] = useState<SubmissionMode>('sync')
   const [validationError, setValidationError] = useState<string | null>(null)
-  const { submit, loading, error } = useReviewSubmission()
+  const { submit, loading, error, steps } = useReviewSubmission()
   const upsertTasks = useTaskStore((state) => state.upsertTasks)
   const setResult = useResultStore((state) => state.setResult)
 
@@ -160,9 +161,10 @@ export function ReviewSubmitForm({ onSubmitted }: ReviewSubmitFormProps) {
       </div>
       <div className="submit-actions">
         <button type="submit" disabled={loading}>
-          {loading ? '提交中…' : '提交审查'}
+          {loading ? '审查进行中…' : '提交审查'}
         </button>
       </div>
+      <ReviewProgressPanel steps={steps} active={loading} />
       {validationError && <p className="error-text">{validationError}</p>}
       {error && <p className="error-text">{error}</p>}
     </form>

@@ -14,6 +14,7 @@ import com.acme.review.service.TreeSitterPreprocessService;
 import com.acme.review.service.strategy.ReviewStrategyFactory;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -60,6 +62,24 @@ public class ReviewController {
         enrichRequestWithAst(request);
         ReviewSyncResponse response = reviewStrategyFactory.getSyncStrategy().executeSync(request);
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 触发流式同步审核任务
+     * 接口立即返回 SSE 连接，审查进度逐事件推送
+     * (run_started, step_started, step_finished, heartbeat)，
+     * 终态事件 run_finished 携带完整审核结果（与同步接口响应契约一致）
+     *
+     * @param request 审核同步请求参数（必须指定 mode 为 SYNC）
+     * @return SSE 事件流发射器
+     */
+    @PostMapping(value = "/sync/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter runSyncReviewStream(@Valid @RequestBody ReviewSyncRequest request) {
+        if (request.getMode() != ReviewMode.SYNC) {
+            throw new IllegalArgumentException("Only SYNC mode is supported in this endpoint");
+        }
+        enrichRequestWithAst(request);
+        return reviewStrategyFactory.getSyncStrategy().executeSyncStream(request);
     }
 
     /**

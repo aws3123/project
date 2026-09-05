@@ -13,11 +13,29 @@ def _mock_component(status: str, detail: str = "") -> dict:
 
 
 def test_health_returns_200_and_overall_up_when_all_required_components_up(monkeypatch):
-    monkeypatch.setattr(health_router, "_check_mysql", lambda settings: _mock_component("UP", "mysql ok"))
-    monkeypatch.setattr(health_router, "_check_redis", lambda settings: _mock_component("UP", "redis ok"))
-    monkeypatch.setattr(health_router, "_check_minio", lambda settings: _mock_component("UP", "minio ok"))
-    monkeypatch.setattr(health_router, "_check_vector", lambda settings: _mock_component("UP", "vector ok"))
-    monkeypatch.setattr(health_router, "_check_llm", lambda settings: _mock_component("UP", "llm ok"))
+    monkeypatch.setattr(
+        health_router,
+        "_check_mysql",
+        lambda settings: _mock_component("UP", "mysql ok"),
+    )
+    monkeypatch.setattr(
+        health_router,
+        "_check_redis",
+        lambda settings: _mock_component("UP", "redis ok"),
+    )
+    monkeypatch.setattr(
+        health_router,
+        "_check_minio",
+        lambda settings: _mock_component("UP", "minio ok"),
+    )
+    monkeypatch.setattr(
+        health_router,
+        "_check_vector",
+        lambda settings: _mock_component("UP", "vector ok"),
+    )
+    monkeypatch.setattr(
+        health_router, "_check_llm", lambda settings: _mock_component("UP", "llm ok")
+    )
 
     response = client.get("/ai/health")
 
@@ -27,11 +45,29 @@ def test_health_returns_200_and_overall_up_when_all_required_components_up(monke
 
 
 def test_health_returns_503_when_mysql_is_down(monkeypatch):
-    monkeypatch.setattr(health_router, "_check_mysql", lambda settings: _mock_component("DOWN", "connect timeout"))
-    monkeypatch.setattr(health_router, "_check_redis", lambda settings: _mock_component("UP", "redis ok"))
-    monkeypatch.setattr(health_router, "_check_minio", lambda settings: _mock_component("UP", "minio ok"))
-    monkeypatch.setattr(health_router, "_check_vector", lambda settings: _mock_component("UP", "vector ok"))
-    monkeypatch.setattr(health_router, "_check_llm", lambda settings: _mock_component("UP", "llm ok"))
+    monkeypatch.setattr(
+        health_router,
+        "_check_mysql",
+        lambda settings: _mock_component("DOWN", "connect timeout"),
+    )
+    monkeypatch.setattr(
+        health_router,
+        "_check_redis",
+        lambda settings: _mock_component("UP", "redis ok"),
+    )
+    monkeypatch.setattr(
+        health_router,
+        "_check_minio",
+        lambda settings: _mock_component("UP", "minio ok"),
+    )
+    monkeypatch.setattr(
+        health_router,
+        "_check_vector",
+        lambda settings: _mock_component("UP", "vector ok"),
+    )
+    monkeypatch.setattr(
+        health_router, "_check_llm", lambda settings: _mock_component("UP", "llm ok")
+    )
 
     response = client.get("/ai/health")
 
@@ -42,11 +78,31 @@ def test_health_returns_503_when_mysql_is_down(monkeypatch):
 
 
 def test_health_returns_503_when_llm_probe_fails(monkeypatch):
-    monkeypatch.setattr(health_router, "_check_mysql", lambda settings: _mock_component("UP", "mysql ok"))
-    monkeypatch.setattr(health_router, "_check_redis", lambda settings: _mock_component("UP", "redis ok"))
-    monkeypatch.setattr(health_router, "_check_minio", lambda settings: _mock_component("UP", "minio ok"))
-    monkeypatch.setattr(health_router, "_check_vector", lambda settings: _mock_component("UP", "vector ok"))
-    monkeypatch.setattr(health_router, "_check_llm", lambda settings: _mock_component("DOWN", "llm timeout"))
+    monkeypatch.setattr(
+        health_router,
+        "_check_mysql",
+        lambda settings: _mock_component("UP", "mysql ok"),
+    )
+    monkeypatch.setattr(
+        health_router,
+        "_check_redis",
+        lambda settings: _mock_component("UP", "redis ok"),
+    )
+    monkeypatch.setattr(
+        health_router,
+        "_check_minio",
+        lambda settings: _mock_component("UP", "minio ok"),
+    )
+    monkeypatch.setattr(
+        health_router,
+        "_check_vector",
+        lambda settings: _mock_component("UP", "vector ok"),
+    )
+    monkeypatch.setattr(
+        health_router,
+        "_check_llm",
+        lambda settings: _mock_component("DOWN", "llm timeout"),
+    )
 
     response = client.get("/ai/health")
 

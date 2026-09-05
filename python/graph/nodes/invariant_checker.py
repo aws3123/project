@@ -12,6 +12,7 @@
   就像检查"操作规范是否被遵守"——
   比如规定"带电操作必须戴绝缘手套"，如果发现有人带电操作但没戴手套，就是违反。
 """
+
 from __future__ import annotations
 
 from graph.state import GraphState, NodeContext
@@ -33,19 +34,29 @@ def check_invariants(state: GraphState, ctx: NodeContext) -> GraphState:
     """
     invariants = state.get("business_invariants", {})
     items = invariants.get("items", []) if isinstance(invariants, dict) else []
-    inferred_methods = invariants.get("inferred_methods", []) if isinstance(invariants, dict) else []
+    inferred_methods = (
+        invariants.get("inferred_methods", []) if isinstance(invariants, dict) else []
+    )
 
     violations = []
     for method in inferred_methods:
         annotations = method.get("annotations", []) or []
         key_calls = method.get("key_calls", []) or []
         # 如果方法有 @Transactional 注解且调用了 Repository → 有事务保护，安全
-        if any("Transactional" in str(annotation) for annotation in annotations) and any(
-            "Repository" in str(call) or ".save" in str(call) or ".update" in str(call) for call in key_calls
+        if any(
+            "Transactional" in str(annotation) for annotation in annotations
+        ) and any(
+            "Repository" in str(call) or ".save" in str(call) or ".update" in str(call)
+            for call in key_calls
         ):
             continue
         # 如果方法调用了"状态变更"操作（如扣库存、扣余额）→ 检查是否有事务保护
-        if any("reserve" in str(call).lower() or "deduct" in str(call).lower() or "decrease" in str(call).lower() for call in key_calls):
+        if any(
+            "reserve" in str(call).lower()
+            or "deduct" in str(call).lower()
+            or "decrease" in str(call).lower()
+            for call in key_calls
+        ):
             violations.append(
                 {
                     "path": method.get("path", ""),
@@ -56,8 +67,8 @@ def check_invariants(state: GraphState, ctx: NodeContext) -> GraphState:
 
     # 将违反列表写入共享状态
     state["invariant_violations"] = {
-        "violations": violations,                                    # 违反列表
-        "checked_count": len(items) + len(inferred_methods),        # 检查的方法总数
+        "violations": violations,  # 违反列表
+        "checked_count": len(items) + len(inferred_methods),  # 检查的方法总数
         "status": "READY",
     }
     return state

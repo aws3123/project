@@ -16,34 +16,8 @@
 
 from __future__ import annotations
 
+from domain.reviewers.triviality_review import is_trivial, prefilled_fields
 from graph.state import GraphState, NodeContext
-
-# 平凡变更阈值：变更行数（新增+删除）低于此值才进入平凡判定
-TRIVIAL_DIFF_THRESHOLD = 20
-
-# 纯文档/配置文件后缀 — 如果所有变更文件都是这些类型，视为平凡
-DOC_FILE_SUFFIXES = (".md", ".txt", ".rst", ".adoc", ".license", "license")
-CONFIG_FILE_SUFFIXES = (
-    ".yml", ".yaml", ".json", ".xml", ".properties",
-    ".ini", ".env", ".toml", ".conf", ".cfg",
-)
-
-# 注释行前缀（覆盖主流语言）
-COMMENT_PREFIXES = ("#", "//", "*", "/*", "*/", "<!--", "--", "!")
-
-
-def _is_comment_or_blank(line: str) -> bool:
-    """判断一行是否为注释行或空行。"""
-    stripped = line.strip()
-    if not stripped:
-        return True
-    return any(stripped.startswith(prefix) for prefix in COMMENT_PREFIXES)
-
-
-def _is_doc_or_config_file(path: str) -> bool:
-    """判断文件是否为纯文档或配置文件。"""
-    path_lower = path.lower()
-    return path_lower.endswith(DOC_FILE_SUFFIXES + CONFIG_FILE_SUFFIXES)
 
 
 def check_triviality(state: GraphState, ctx: NodeContext) -> GraphState:
@@ -60,73 +34,17 @@ def check_triviality(state: GraphState, ctx: NodeContext) -> GraphState:
     """
     diff_analysis = state.get("diff_analysis", {})
     diff_summary = diff_analysis.get("summary", {})
-    diff_size = diff_summary.get("added_lines", 0) + diff_summary.get("deleted_lines", 0)
-    files = diff_analysis.get("files", [])
-
-    # 条件1：变更行数 >= 阈值 → 非平凡
-    if diff_size >= TRIVIAL_DIFF_THRESHOLD:
-        state["trivial"] = False
-        return state
-
-    # 条件2：含核心风险关键词 → 非平凡
-    # 延迟导入避免循环依赖
-    from graph.agent_selector import CORE_RISK_KEYWORDS
-    for f in files:
-        diff_text = f.get("diff", "").lower()
-        if any(kw.lower() in diff_text for kw in CORE_RISK_KEYWORDS):
-            state["trivial"] = False
-            return state
-
-    # 条件3a：所有文件都是文档/配置文件
-    all_doc_or_config = (
-        all(_is_doc_or_config_file(f.get("path", "")) for f in files)
-        if files
-        else False
+    diff_size = diff_summary.get("added_lines", 0) + diff_summary.get(
+        "deleted_lines", 0
     )
 
-    # 条件3b：所有新增行都是注释/空行
-    all_comment_lines = True
-    for f in files:
-        diff_text = f.get("diff", "")
-        for line in diff_text.split("\n"):
-            # 跳过 diff 元信息行（+++、---、@@等）
-            if line.startswith(("+++", "---", "@@", "diff ", "index ")):
-                continue
-            # 新增行（以 + 开头）检查是否为注释
-            if line.startswith("+"):
-                content = line[1:]
-                if not _is_comment_or_blank(content):
-                    all_comment_lines = False
-                    break
-        if not all_comment_lines:
-            break
+    # 延迟导入避免循环依赖
+    from graph.agent_selector import CORE_RISK_KEYWORDS
 
-    is_trivial = all_doc_or_config or all_comment_lines
-
-    if is_trivial:
+    if is_trivial(diff_analysis, CORE_RISK_KEYWORDS):
         state["trivial"] = True
         layers = state.get("classification", {}).get("layers", [])
-        # 预填充结果字段，后续节点会跳过重计算
-        state["risk_score"] = 0.1
-        state["breakdown"] = [
-            {"dimension": "规则检查", "score": 0, "count": 0},
-            {"dimension": "安全审计", "score": 0, "count": 0},
-            {"dimension": "性能分析", "score": 0, "count": 0},
-            {"dimension": "历史关联", "score": 0, "count": 0},
-            {"dimension": "影响范围", "score": 0, "count": 0},
-            {"dimension": "测试覆盖", "score": 0},
-        ]
-        state["need_human_review"] = False
-        state["force_human_review"] = False
-        state["cross_validated_findings"] = []
-        state["summary"] = (
-            f"变更判定为低风险（平凡变更），涉及 {diff_size} 行，"
-            f"层级: {', '.join(layers) if layers else '未知'}"
-        )
-        state["details"] = ["本次变更仅涉及注释/文档/配置，未检测到代码逻辑变更。"]
-        state["recommendations"] = [
-            {"title": "无需特别关注", "detail": "本次变更为平凡变更，风险极低。"}
-        ]
+        state.update(prefilled_fields(layers=layers, diff_size=diff_size))
     else:
         state["trivial"] = False
 

@@ -12,6 +12,7 @@ import com.acme.review.repository.mapper.ReviewTaskMapper;
 import com.acme.review.repository.mapper.TaskAuditLogMapper;
 import com.acme.review.service.ConcurrentMetricsService;
 import com.acme.review.service.SseRegistry;
+import com.acme.review.service.TokenUsageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
@@ -48,6 +49,7 @@ public class ReviewCallbackConsumer {
     private final ConsumedMessageMapper consumedMessageMapper;
     private final SseRegistry sseRegistry;
     private final ConcurrentMetricsService metrics;
+    private final TokenUsageService tokenUsageService;
 
     @Bean
     public Consumer<Message<ReviewCallbackMessage>> reviewCallbackIn() {
@@ -140,6 +142,9 @@ public class ReviewCallbackConsumer {
             reviewResult.setDetails(String.join("\n", result.getDetails()));
         }
         resultRepo.upsert(reviewResult);
+
+        // 记账：Python 侧采集的真实 token 用量随回调落库
+        tokenUsageService.record(task, callback.getUsage());
 
         writeAudit(task.getTaskId(), prev, target.name(), "CALLBACK", "Python completed review (RESULT callback)");
         if (target == ReviewTaskStatus.FAILED) {

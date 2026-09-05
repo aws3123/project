@@ -26,10 +26,13 @@ import logging
 
 # safe_detail 安全地获取异常详情（避免泄露敏感信息）
 from app.utils import safe_detail
+
 # AppSettings 应用配置
 from config.settings import AppSettings
+
 # search_incidents_chromadb 从 ChromaDB 搜索事故
 from repositories.chroma import search_incidents_chromadb
+
 # 导入工具基础类型
 from tools.base import Tool, ToolContext, ToolResult
 
@@ -70,12 +73,12 @@ class IncidentSearchTool(Tool):
             findings = [
                 {
                     "source": row.get("source", default_source),  # 数据来源
-                    "topic": row.get("title", "unknown"),         # 事故标题
-                    "snippet": row.get("snippet", ""),            # 事故摘要
-                    "score": row.get("score", 0),                 # 相似度分数
-                    "image_urls": row.get("image_urls", []),      # 相关图片 URL
-                    "image_texts": row.get("image_texts", []),    # 图片描述文本
-                    "citation": {                                 # 引用信息（用于溯源）
+                    "topic": row.get("title", "unknown"),  # 事故标题
+                    "snippet": row.get("snippet", ""),  # 事故摘要
+                    "score": row.get("score", 0),  # 相似度分数
+                    "image_urls": row.get("image_urls", []),  # 相关图片 URL
+                    "image_texts": row.get("image_texts", []),  # 图片描述文本
+                    "citation": {  # 引用信息（用于溯源）
                         "source": row.get("source", default_source),
                         "title": row.get("title", "unknown"),
                         "snippet": row.get("snippet", ""),
@@ -87,10 +90,18 @@ class IncidentSearchTool(Tool):
             ]
 
             # 返回正常结果
-            return ToolResult(name=self.name, payload={"findings": findings, "status": "NORMAL", "reason": None})
+            return ToolResult(
+                name=self.name,
+                payload={"findings": findings, "status": "NORMAL", "reason": None},
+            )
 
         except Exception as exc:
             # 如果搜索失败，记录警告日志并返回降级结果
             reason = safe_detail(exc, max_len=120)  # 安全地获取异常信息
-            logger.warning("Incident search degraded for task %s: %s", context.task_id, reason)
-            return ToolResult(name=self.name, payload={"findings": [], "status": "DEGRADED", "reason": reason})
+            logger.warning(
+                "Incident search degraded for task %s: %s", context.task_id, reason
+            )
+            return ToolResult(
+                name=self.name,
+                payload={"findings": [], "status": "DEGRADED", "reason": reason},
+            )

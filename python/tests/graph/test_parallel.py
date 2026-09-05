@@ -12,6 +12,7 @@ def _identity(name: str):
     def _fn(state: GraphState, ctx: NodeContext) -> GraphState:
         state[name] = True
         return state
+
     return _fn
 
 
@@ -20,10 +21,12 @@ def _slow_factory(delay: float = 0.1):
         time.sleep(delay)
         state["slow_done"] = True
         return state
+
     return _fn
 
 
 # ---- circuit breaker ----
+
 
 def test_circuit_breaker_closed_initially():
     cb = CircuitBreaker()

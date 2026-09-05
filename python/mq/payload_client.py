@@ -41,7 +41,9 @@ class PayloadClient:
         try:
             resp = await self._client.get(url, headers=headers)
         except (httpx.ConnectError, httpx.TimeoutException) as exc:
-            raise PayloadFetchError(f"Payload fetch failed for taskId={task_id}: {exc}") from exc
+            raise PayloadFetchError(
+                f"Payload fetch failed for taskId={task_id}: {exc}"
+            ) from exc
 
         if resp.status_code == 404:
             raise PayloadNotFoundError(f"Payload not found for taskId={task_id}")

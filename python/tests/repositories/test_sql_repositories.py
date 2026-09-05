@@ -12,11 +12,11 @@ from repositories import db as db_module
 from repositories.log_repository_sql import SQLLogRepository
 from repositories.result_repository_sql import SQLResultRepository
 from repositories.task_repository_sql import SQLTaskRepository
-from schemas.enums import ReviewMode, TaskStatus
-from schemas.log import NodeLog
-from schemas.request import ReviewRequest
-from schemas.result import Recommendation, ReviewResult, RiskBreakdown
-from schemas.task import ReviewTask
+from schemas.api.request import ReviewRequest
+from schemas.api.result import Recommendation, ReviewResult, RiskBreakdown
+from schemas.domain.enums import ReviewMode, TaskStatus
+from schemas.domain.log import NodeLog
+from schemas.domain.task import ReviewTask
 from services.task_service import TaskService
 
 
@@ -38,13 +38,19 @@ def _patch_sqlite(monkeypatch):
 
     redis_client = _FakeRedis()
     monkeypatch.setattr(db_module, "get_engine", lambda settings_arg=None: engine)
-    monkeypatch.setattr(db_module, "get_session_factory", lambda settings_arg=None: factory)
+    monkeypatch.setattr(
+        db_module, "get_session_factory", lambda settings_arg=None: factory
+    )
     monkeypatch.setattr(db_module, "get_session", lambda settings_arg=None: factory())
-    monkeypatch.setattr(db_module, "get_redis_client", lambda settings_arg=None: redis_client)
+    monkeypatch.setattr(
+        db_module, "get_redis_client", lambda settings_arg=None: redis_client
+    )
 
 
 def _task(task_id: str = "t1") -> ReviewTask:
-    req = ReviewRequest(projectId="p1", repo="repo", branch="main", files=[], mode=ReviewMode.SYNC)
+    req = ReviewRequest(
+        projectId="p1", repo="repo", branch="main", files=[], mode=ReviewMode.SYNC
+    )
     return ReviewTask(
         id=task_id,
         project_id=req.projectId,
@@ -84,7 +90,9 @@ def test_sql_task_repository_save_serializes_uuid_payload(monkeypatch):
     _patch_sqlite(monkeypatch)
     repo = SQLTaskRepository()
     service = TaskService(repo)
-    request = ReviewRequest(projectId="p1", repo="repo", branch="main", files=[], mode=ReviewMode.SYNC)
+    request = ReviewRequest(
+        projectId="p1", repo="repo", branch="main", files=[], mode=ReviewMode.SYNC
+    )
 
     task = service.enqueue(request)
 
@@ -100,7 +108,9 @@ def test_sql_task_repository_update_serializes_uuid_payload(monkeypatch):
     task = _task("t-uuid")
     repo.save(task)
 
-    request = ReviewRequest(projectId="p1", repo="repo", branch="main", files=[], mode=ReviewMode.SYNC)
+    request = ReviewRequest(
+        projectId="p1", repo="repo", branch="main", files=[], mode=ReviewMode.SYNC
+    )
     updated = repo.update("t-uuid", payload=request.model_dump(by_alias=True))
 
     assert updated is not None

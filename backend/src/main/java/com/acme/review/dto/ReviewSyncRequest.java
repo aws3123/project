@@ -37,6 +37,9 @@ public class ReviewSyncRequest {
 
     private String question;
 
+    /** 调用方标识（计费归属），可选；不传则任务不计入任何调用方配额 */
+    private String submitter;
+
     private List<Map<String, Object>> entities;
 
     private List<Map<String, Object>> relations;

@@ -17,7 +17,9 @@ def test_bootstrap_chromadb_creates_collection_in_configured_path(monkeypatch):
         def __init__(self, path: str, settings=None) -> None:
             captured["path"] = path
 
-        def get_or_create_collection(self, name: str, configuration=None, embedding_function=None):
+        def get_or_create_collection(
+            self, name: str, configuration=None, embedding_function=None
+        ):
             captured["collection_name"] = name
             captured["configuration"] = configuration
             captured["embedding_function"] = embedding_function
@@ -52,7 +54,9 @@ def test_bootstrap_chromadb_uses_cosine_hnsw_space(monkeypatch):
         def __init__(self, path: str, settings=None) -> None:
             captured["path"] = path
 
-        def get_or_create_collection(self, name: str, configuration=None, embedding_function=None):
+        def get_or_create_collection(
+            self, name: str, configuration=None, embedding_function=None
+        ):
             captured["collection_name"] = name
             captured["configuration"] = configuration
             captured["embedding_function"] = embedding_function
@@ -79,7 +83,9 @@ def test_upsert_incident_rows_omits_empty_tags_from_metadata(monkeypatch):
             captured["embeddings"] = embeddings
             captured["metadatas"] = metadatas
 
-    monkeypatch.setattr(chroma_repo, "get_incident_collection", lambda settings=None: FakeCollection())
+    monkeypatch.setattr(
+        chroma_repo, "get_incident_collection", lambda settings=None: FakeCollection()
+    )
 
     chroma_repo.upsert_incident_rows(
         [
@@ -116,15 +122,31 @@ def test_search_incidents_chromadb_maps_distance_to_score(monkeypatch):
             assert include == ["documents", "metadatas", "distances"]
             return {
                 "documents": [["first snippet", "second snippet"]],
-                "metadatas": [[
-                    {"title": "incident-a", "source": "source-a", "service": "svc", "tags": ["cache"]},
-                    {"title": "incident-b", "source": "source-b", "service": "svc", "tags": ["tx"]},
-                ]],
+                "metadatas": [
+                    [
+                        {
+                            "title": "incident-a",
+                            "source": "source-a",
+                            "service": "svc",
+                            "tags": ["cache"],
+                        },
+                        {
+                            "title": "incident-b",
+                            "source": "source-b",
+                            "service": "svc",
+                            "tags": ["tx"],
+                        },
+                    ]
+                ],
                 "distances": [[0.1, 0.4]],
             }
 
-    monkeypatch.setattr(chroma_repo, "get_incident_collection", lambda settings=None: FakeCollection())
-    monkeypatch.setattr(chroma_repo, "_fetch_query_embedding", lambda query, settings: [0.1, 0.2, 0.3])
+    monkeypatch.setattr(
+        chroma_repo, "get_incident_collection", lambda settings=None: FakeCollection()
+    )
+    monkeypatch.setattr(
+        chroma_repo, "_fetch_query_embedding", lambda query, settings: [0.1, 0.2, 0.3]
+    )
 
     rows = chroma_repo.search_incidents_chromadb(
         "service cache",

@@ -24,7 +24,7 @@ def replace_markdown_image_urls(text: str, minio_endpoint: str, bucket: str) -> 
         alt_text = match.group(2)
         url = match.group(3)
         if url.startswith(PLACEHOLDER_PREFIX):
-            relative = url[len(PLACEHOLDER_PREFIX):]
+            relative = url[len(PLACEHOLDER_PREFIX) :]
             resolved = f"{endpoint}/{bucket}/images/{relative}"
             return f"![{alt_text}]({resolved})"
         return full_match

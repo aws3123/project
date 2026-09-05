@@ -48,7 +48,19 @@ doc-ingest = [
 ]
 
 [tool.uv]
-dev-dependencies = ["black", "ruff", "mypy", "pytest"]
+dev-dependencies = [
+    "black",
+    "ruff",
+    "mypy",
+    "pytest",
+    "pytest-asyncio",
+]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+# 分层约束：领域层禁止反向依赖基础设施/编排层（graph/services/app）
+"graph".msg = "domain must not import infrastructure/orchestration (graph/services/app)"
+"services".msg = "domain must not import infrastructure/orchestration (graph/services/app)"
+"app".msg = "domain must not import infrastructure/orchestration (graph/services/app)"
 
 [tool.pytest.ini_options]
 addopts = "--import-mode=importlib"

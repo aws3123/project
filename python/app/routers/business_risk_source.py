@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from hashlib import sha256
 import json
 import logging
+from hashlib import sha256
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import ValidationError
@@ -15,10 +15,10 @@ from app.dependencies import (
 )
 from app.utils import safe_detail
 from config.settings import AppSettings
-from schemas.business_risk_review import BusinessRiskReviewRequest
-from schemas.business_risk_source import BusinessRiskSourceRequest
-from schemas.business_risk_source_result import BusinessRiskSourceResponse
-from schemas.result import BusinessRiskSourceReadinessStatus
+from schemas.api.result import BusinessRiskSourceReadinessStatus
+from schemas.domain.business_risk_review import BusinessRiskReviewRequest
+from schemas.domain.business_risk_source import BusinessRiskSourceRequest
+from schemas.domain.business_risk_source_result import BusinessRiskSourceResponse
 from services.memory_service import MemoryService
 
 router = APIRouter()
@@ -75,7 +75,9 @@ def _build_run_id(request: BusinessRiskSourceRequest) -> str:
     return f"business-risk-{sha256(run_id_seed.encode('utf-8')).hexdigest()[:16]}"
 
 
-def _to_business_risk_request(request: BusinessRiskSourceRequest, trace_id: str) -> BusinessRiskReviewRequest:
+def _to_business_risk_request(
+    request: BusinessRiskSourceRequest, trace_id: str
+) -> BusinessRiskReviewRequest:
     run_id = _build_run_id(request)
     task_id = request.task_id or run_id
     request_id = request.request_id or run_id
@@ -159,7 +161,9 @@ async def analyze_source_business_risk(
             trace_id=result.trace_id or resolved_trace_id,
         )
     except Exception as exc:
-        logger.exception("business-risk source analysis failed run_id=%s", review_request.run_id)
+        logger.exception(
+            "business-risk source analysis failed run_id=%s", review_request.run_id
+        )
 
         # P3: Persist error memory updates on failure too
         error_updates = {

@@ -21,6 +21,7 @@ com\acme\review\health\PythonHealthIndicator.class
 com\acme\review\config\OrchestratorProperties.class
 com\acme\review\dto\HandoffDecision.class
 com\acme\review\service\TreeSitterPreprocessService.class
+com\acme\review\service\TokenUsageService.class
 com\acme\review\service\LightweightRouteClassifier.class
 com\acme\review\dto\BusinessRiskSourcePackage.class
 com\acme\review\dto\HandoffRequest.class
@@ -29,6 +30,7 @@ com\acme\review\config\ApiAuthenticationEntryPoint.class
 com\acme\review\dto\ReviewCallbackMessage$CallbackResult.class
 com\acme\review\client\PythonServiceRegistry.class
 com\acme\review\dto\BusinessRiskHotspot.class
+com\acme\review\service\ReviewStreamEventStore.class
 com\acme\review\repository\mapper\ConsumedMessageMapper.class
 com\acme\review\util\MarkdownImageProcessor.class
 com\acme\review\dto\BusinessRiskLineMap.class
@@ -40,6 +42,7 @@ com\acme\review\dto\TaskListResponse.class
 com\acme\review\dto\BusinessRiskPythonSourceRequest$SourceFile.class
 com\acme\review\config\SecurityConfig.class
 com\acme\review\controller\InternalBusinessRiskCallbackController.class
+com\acme\review\client\PythonComputeClient$1.class
 com\acme\review\service\ReviewDispatchFeatures.class
 com\acme\review\dto\TaskDetailResponse$TaskInfo.class
 com\acme\review\service\BusinessRiskSourcePreprocessService.class
@@ -49,6 +52,7 @@ com\acme\review\exception\ApiError.class
 com\acme\review\repository\mapper\ReviewTaskPayloadMapper.class
 com\acme\review\dto\BusinessRiskSourceMetadataRequest.class
 com\acme\review\dto\BusinessRiskCallbackRequest.class
+com\acme\review\dto\ReviewCallbackMessage$Usage.class
 com\acme\review\config\ApiKeyAuthenticationFilter.class
 com\acme\review\repository\mapper\ReviewResultMapper.class
 com\acme\review\service\BusinessRiskWorkerRegistryService.class
@@ -62,17 +66,23 @@ com\acme\review\config\MyBatisPlusConfig.class
 com\acme\review\config\SecurityProperties.class
 com\acme\review\entity\TaskAuditLog.class
 com\acme\review\ast\TreeSitterNativeParser$1.class
+com\acme\review\exception\BillingQuotaExceededException.class
 com\acme\review\service\ConcurrentMetricsService.class
 com\acme\review\dto\ReviewCallbackMessage.class
 com\acme\review\repository\mapper\TaskAuditLogMapper.class
 com\acme\review\dto\BusinessRiskSourceFile.class
 com\acme\review\dto\BusinessRiskSourceSubmitResponse.class
+com\acme\review\dto\ReviewStreamFinishedEvent.class
 com\acme\review\service\BusinessRiskMetricsService.class
+com\acme\review\dto\ReviewStreamErrorEvent.class
 com\acme\review\dto\SseBusinessRiskEvent.class
 com\acme\review\service\ReviewService$1.class
+com\acme\review\service\strategy\SyncStrategy$StreamContext.class
 com\acme\review\controller\InternalReviewPayloadController.class
 com\acme\review\health\MqHealthIndicator.class
 com\acme\review\controller\FeedbackController$SubmitRequest.class
+com\acme\review\aop\BillingAspect.class
+com\acme\review\config\BillingProperties.class
 com\acme\review\service\BusinessRiskEventStore.class
 com\acme\review\service\strategy\ReviewExecutionStrategy.class
 com\acme\review\config\RateLimitProperties.class
@@ -101,6 +111,7 @@ com\acme\review\exception\AsyncDispatchException.class
 com\acme\review\controller\FeedbackController.class
 com\acme\review\repository\mapper\ReviewTaskMapper.class
 com\acme\review\ast\CodeChunk.class
+com\acme\review\service\StreamResumeService.class
 com\acme\review\controller\BusinessRiskSseController.class
 com\acme\review\dto\ReviewSyncResponse.class
 com\acme\review\controller\ChunkController.class
@@ -109,7 +120,10 @@ com\acme\review\repository\mapper\OutboxEventMapper.class
 com\acme\review\ast\AstChunker.class
 com\acme\review\dto\BusinessRiskBudgetDecision.class
 com\acme\review\entity\ReviewTaskStatusTypeHandler.class
+com\acme\review\service\ReviewStreamEventStore$StoredEvent.class
+com\acme\review\config\ReviewStreamEventCacheProperties.class
 com\acme\review\dto\ReviewMode.class
+com\acme\review\repository\mapper\TokenUsageRecordMapper.class
 com\acme\review\service\BusinessRiskWorkerRegistryService$StoredHeartbeat.class
 com\acme\review\controller\ReviewController.class
 com\acme\review\ast\CodeChunkResult.class
@@ -120,6 +134,7 @@ com\acme\review\dto\BusinessRiskPreparedCallEdge.class
 com\acme\review\ast\AstPreprocessedResult.class
 com\acme\review\dto\BusinessRiskPythonSourceRequest$MethodSkeleton.class
 com\acme\review\config\OrchestratorThreadPoolConfig.class
+com\acme\review\entity\TokenUsageRecord.class
 com\acme\review\service\strategy\SyncStrategy.class
 com\acme\review\dto\BusinessRiskSourceBundle.class
 com\acme\review\service\strategy\DispatchStrategy.class

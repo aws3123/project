@@ -3,9 +3,8 @@
 __all__ 定义了模块的公开接口，表示"这个包只导出这四个路由模块"。
 """
 
-from . import review, health, handoff, business_risk_source
+from . import business_risk_source, handoff, health, review
 
-__all__ = ["review", "health", "handoff", "business_risk_source"]
-from . import review, health, handoff, business_risk_source
+__all__ = ["business_risk_source", "handoff", "health", "review"]
 
-__all__ = ["review", "health", "handoff", "business_risk_source"]
+__all__ = ["business_risk_source", "handoff", "health", "review"]

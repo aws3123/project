@@ -125,3 +125,22 @@ CREATE TABLE IF NOT EXISTS user_feedback (
     INDEX idx_feedback_session (session_id),
     INDEX idx_feedback_type_created (feedback_type, created_at)
 );
+
+-- ==========================================
+-- Token 用量记录表: LLM 调用真实计量与计费
+-- 数据源: Python 层 LLM 响应 usage, 经 RESULT 回调携带落库
+-- ==========================================
+CREATE TABLE IF NOT EXISTS token_usage_record (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    task_id VARCHAR(128) NOT NULL COMMENT '关联 review_task.task_id',
+    submitter VARCHAR(255) COMMENT '计费归属方（无则空串）',
+    model VARCHAR(64) COMMENT 'LLM 模型名',
+    prompt_tokens INT NOT NULL DEFAULT 0 COMMENT '输入 token 数',
+    completion_tokens INT NOT NULL DEFAULT 0 COMMENT '输出 token 数',
+    total_tokens INT NOT NULL DEFAULT 0 COMMENT '总 token 数',
+    unit_price_snapshot DECIMAL(10,6) COMMENT '单价快照（元/千 token），防止调价后历史账目漂移',
+    cost_amount DECIMAL(12,6) COMMENT '本次调用费用 = total_tokens * unit_price_snapshot / 1000',
+    created_at TIMESTAMP NOT NULL,
+    INDEX idx_usage_task (task_id),
+    INDEX idx_usage_submitter (submitter, created_at)
+);

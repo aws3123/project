@@ -10,8 +10,8 @@ from graph.builder import GraphBuilder
 from graph.runner import GraphRunner
 from graph.state import GraphState, NodeContext
 from repositories.log_repository import InMemoryLogRepository
-from schemas.enums import ReviewMode, TaskStatus
-from schemas.request import ReviewRequest
+from schemas.api.request import ReviewRequest
+from schemas.domain.enums import ReviewMode, TaskStatus
 from services.log_service import LogService
 from telemetry.hooks import TelemetryHook
 from tools.registry import ToolRegistry
@@ -31,7 +31,9 @@ def test_graph_builder_creates_runner():
     registry = ToolRegistry()
     telemetry = Mock(spec=TelemetryHook)
     log_service = LogService(InMemoryLogRepository(), telemetry=telemetry)
-    builder = GraphBuilder(registry=registry, log_service=log_service, telemetry=telemetry)
+    builder = GraphBuilder(
+        registry=registry, log_service=log_service, telemetry=telemetry
+    )
 
     def node(state: GraphState, ctx: NodeContext) -> GraphState:
         state["summary"] = "ok"
@@ -62,7 +64,9 @@ def test_runner_maps_need_human_review_to_need_review_status():
     registry = ToolRegistry()
     telemetry = Mock(spec=TelemetryHook)
     log_service = LogService(InMemoryLogRepository(), telemetry=telemetry)
-    builder = GraphBuilder(registry=registry, log_service=log_service, telemetry=telemetry)
+    builder = GraphBuilder(
+        registry=registry, log_service=log_service, telemetry=telemetry
+    )
 
     def risk_node(state: GraphState, ctx: NodeContext) -> GraphState:
         state["need_human_review"] = True
@@ -84,7 +88,9 @@ def test_runner_logs_selector_failure_and_falls_back(caplog):
         registry=registry,
         log_service=log_service,
         telemetry=telemetry,
-        agent_selector=lambda state: (_ for _ in ()).throw(RuntimeError("selector blew up token=super-secret-token")),
+        agent_selector=lambda state: (_ for _ in ()).throw(
+            RuntimeError("selector blew up token=super-secret-token")
+        ),
     )
 
     def first_node(state: GraphState, ctx: NodeContext) -> GraphState:
@@ -95,10 +101,12 @@ def test_runner_logs_selector_failure_and_falls_back(caplog):
         state["details"] = ["ran"]
         return state
 
-    runner = builder.add_parallel_group([
-        ("first", first_node),
-        ("second", second_node),
-    ]).build()
+    runner = builder.add_parallel_group(
+        [
+            ("first", first_node),
+            ("second", second_node),
+        ]
+    ).build()
 
     with caplog.at_level("WARNING"):
         state = runner.run_state({"task_id": "task-1", "request": {}})

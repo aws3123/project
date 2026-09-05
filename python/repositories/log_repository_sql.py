@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import json
-
 from sqlalchemy import select
 
 from repositories.base import LogRepositoryProtocol
 from repositories.db import get_session
+from repositories.mappers import log_to_model, log_to_schema
 from repositories.sqlalchemy_models import Base, NodeLogModel
-from schemas.log import NodeLog
+from schemas.domain.log import NodeLog
 
 
 class SQLLogRepository(LogRepositoryProtocol):
@@ -22,7 +21,7 @@ class SQLLogRepository(LogRepositoryProtocol):
     def append(self, log: NodeLog) -> NodeLog:
         session = self._session_factory()
         try:
-            model = NodeLogModel(task_id=log.task_id, payload=log.model_dump_json())
+            model = log_to_model(log)
             session.add(model)
             session.commit()
             return log
@@ -33,8 +32,10 @@ class SQLLogRepository(LogRepositoryProtocol):
         session = self._session_factory()
         try:
             rows = session.execute(
-                select(NodeLogModel.payload).where(NodeLogModel.task_id == task_id).order_by(NodeLogModel.id.asc())
+                select(NodeLogModel.payload)
+                .where(NodeLogModel.task_id == task_id)
+                .order_by(NodeLogModel.id.asc())
             ).all()
-            return [NodeLog(**json.loads(row[0])) for row in rows]
+            return [log_to_schema(row[0]) for row in rows]
         finally:
             session.close()

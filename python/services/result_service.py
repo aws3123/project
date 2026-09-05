@@ -4,8 +4,8 @@ from io import BytesIO
 
 from repositories.base import ResultRepositoryProtocol
 from repositories.db import get_minio_client
-from schemas.enums import TaskStatus
-from schemas.result import Recommendation, ReviewResult, RiskBreakdown
+from schemas.api.result import Recommendation, ReviewResult, RiskBreakdown
+from schemas.domain.enums import TaskStatus
 
 
 class ResultService:
@@ -64,7 +64,9 @@ class ResultService:
             or result.reportUrl.startswith("reports/")
         )
         if should_persist_report:
-            result = result.model_copy(update={"reportUrl": self.persist_report(result)})
+            result = result.model_copy(
+                update={"reportUrl": self.persist_report(result)}
+            )
         return self._repo.save(result)
 
     def get(self, task_id: str) -> ReviewResult | None:

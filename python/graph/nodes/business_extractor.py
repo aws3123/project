@@ -8,6 +8,7 @@
   就像从一本操作手册中提取"安全守则"——
   先找出哪些章节包含了安全规则，后续检查这些规则是否被违反。
 """
+
 from __future__ import annotations
 
 from graph.state import GraphState, NodeContext
@@ -28,7 +29,11 @@ def extract_business_invariants(state: GraphState, ctx: NodeContext) -> GraphSta
     """
     request = state.get("request", {})
     metadata = request.get("metadata", {}) if isinstance(request, dict) else {}
-    source_package = state.get("source_package", {}) if isinstance(state.get("source_package", {}), dict) else {}
+    source_package = (
+        state.get("source_package", {})
+        if isinstance(state.get("source_package", {}), dict)
+        else {}
+    )
     files = source_package.get("files", []) if isinstance(source_package, dict) else []
 
     # 从方法骨架中推断可能涉及业务状态变更的方法
@@ -37,7 +42,9 @@ def extract_business_invariants(state: GraphState, ctx: NodeContext) -> GraphSta
         if not isinstance(source_file, dict):
             continue
         path = source_file.get("path", "")
-        methods = source_file.get("methods") or source_file.get("method_skeletons") or []
+        methods = (
+            source_file.get("methods") or source_file.get("method_skeletons") or []
+        )
         for method in methods:
             if not isinstance(method, dict):
                 continue
@@ -50,15 +57,16 @@ def extract_business_invariants(state: GraphState, ctx: NodeContext) -> GraphSta
                         "path": path,
                         "signature": method.get("signature", "unknown"),
                         "annotations": annotations,  # 方法注解（如 @Transactional）
-                        "key_calls": key_calls,       # 关键调用（如 repository.save）
+                        "key_calls": key_calls,  # 关键调用（如 repository.save）
                     }
                 )
 
     # 将提取结果写入共享状态
     state["business_invariants"] = {
         "source": "source_package",
-        "items": metadata.get("business_invariants", []) or [],  # 请求中显式声明的不变量
-        "inferred_methods": inferred,                              # 从源码推断的不变量方法
+        "items": metadata.get("business_invariants", [])
+        or [],  # 请求中显式声明的不变量
+        "inferred_methods": inferred,  # 从源码推断的不变量方法
         "status": "READY",
     }
     return state

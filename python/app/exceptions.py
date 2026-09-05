@@ -30,4 +30,3 @@ class ServiceError(HTTPException):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,  # 500 内部服务器错误
             detail={"message": message, "traceId": trace_id},
         )
-

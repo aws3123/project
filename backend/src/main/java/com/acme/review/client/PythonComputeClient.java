@@ -12,12 +12,16 @@ import io.netty.channel.ChannelOption;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
+import org.springframework.http.codec.ServerSentEvent;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import reactor.netty.http.client.HttpClient;
 
 import java.time.Duration;
@@ -30,6 +34,12 @@ import java.util.concurrent.ConcurrentHashMap;
 public class PythonComputeClient {
 
     private static final String TRACE_ID_KEY = "traceId";
+
+    /**
+     * 流式调用空闲超时：任意相邻 SSE 信号（含心跳）之间的最大间隔。
+     * Python 侧心跳间隔 15s，这里取 4 倍余量。
+     */
+    private static final long STREAM_IDLE_TIMEOUT_MS = 60_000L;
 
     private final WebClient defaultWebClient;
     private final PythonClientProperties pyProps;
@@ -82,6 +92,36 @@ public class PythonComputeClient {
     @CircuitBreaker(name = "pythonService", fallbackMethod = "fallbackCompute")
     public ReviewSyncResponse computeSync(ReviewSyncRequest request) {
         return compute(request, orchProps.syncTimeoutMs());
+    }
+
+    /**
+     * 流式同步审查：订阅 Python 的 SSE 事件流，全程不阻塞调用线程。
+     *
+     * 保护层级：
+     * 1. 连接超时：buildWebClient 中的 CONNECT_TIMEOUT_MILLIS（默认 3s）
+     * 2. 空闲超时：Flux.timeout(60s)——Python 侧每 15s 发心跳，
+     *    60s 无任何信号意味着 Python 进程死亡或网络中断
+     * 3. 总预算：由调用方（SyncStrategy）按 sync-timeout-ms 检查
+     *
+     * 事件转发：所有事件（含 heartbeat）原样上抛，由调用方决定转发策略。
+     */
+    public Flux<ServerSentEvent<String>> computeSyncStream(ReviewSyncRequest request) {
+        String traceId = MDC.get(TRACE_ID_KEY);
+        WebClient client = resolveWebClient();
+        log.info("Calling Python compute stream taskId={}", request.getTaskId());
+        return client.post()
+                .uri(pyProps.getSyncPath() + "/stream")
+                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .header("X-Trace-Id", traceId != null ? traceId : "")
+                .bodyValue(request)
+                .retrieve()
+                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+                        response -> response.bodyToMono(String.class)
+                                .defaultIfEmpty("<empty>")
+                                .flatMap(body -> Mono.error(
+                                        new PythonServiceException("Python service error: " + response.statusCode() + " body=" + body))))
+                .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {})
+                .timeout(Duration.ofMillis(STREAM_IDLE_TIMEOUT_MS));
     }
 
     @SuppressWarnings("unchecked")

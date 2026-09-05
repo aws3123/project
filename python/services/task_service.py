@@ -4,9 +4,9 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from repositories.base import TaskRepositoryProtocol
-from schemas.enums import HandoffDecision, TaskStatus
-from schemas.request import ReviewRequest
-from schemas.task import ReviewTask
+from schemas.api.request import ReviewRequest
+from schemas.domain.enums import HandoffDecision, TaskStatus
+from schemas.domain.task import ReviewTask
 
 
 class TaskService:
@@ -57,8 +57,12 @@ class TaskService:
             },
         }
         if decision == HandoffDecision.APPROVED:
-            return self._repo.update(task_id, status=TaskStatus.SUCCEEDED, payload=handoff_payload)
-        return self._repo.update(task_id, status=TaskStatus.FAILED, payload=handoff_payload)
+            return self._repo.update(
+                task_id, status=TaskStatus.SUCCEEDED, payload=handoff_payload
+            )
+        return self._repo.update(
+            task_id, status=TaskStatus.FAILED, payload=handoff_payload
+        )
 
     def fail(self, task_id: str, reason: str) -> ReviewTask | None:
         existing = self._repo.get(task_id)

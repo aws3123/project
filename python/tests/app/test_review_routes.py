@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
-from app.main import app
 from app.dependencies import get_task_service
+from app.main import app
 
 client = TestClient(app)
 
@@ -52,7 +52,9 @@ def test_sync_review_accepts_backend_payload_and_returns_summary_fields() -> Non
         "mode": "SYNC",
     }
 
-    response = client.post("/ai/review/sync", json=payload, headers={"X-Trace-Id": "trace-1"})
+    response = client.post(
+        "/ai/review/sync", json=payload, headers={"X-Trace-Id": "trace-1"}
+    )
 
     assert response.status_code == 200
     body = response.json()

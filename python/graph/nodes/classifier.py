@@ -7,6 +7,7 @@
   就像快递分拣——先判断包裹属于哪个区域（楼层），
   再送到对应的处理工位。
 """
+
 from __future__ import annotations
 
 from graph.state import GraphState, NodeContext
@@ -35,7 +36,9 @@ def classify_changes(state: GraphState, ctx: NodeContext) -> GraphState:
     diff_meta = state.get("diff_analysis", {})
     payload = diff_meta or {"files": state["request"].get("files", [])}
     # 调用测试覆盖率检查工具，获取额外的覆盖率信息
-    result: ToolResult = ctx.registry.run("test_coverage_checker", payload, ToolContext(task_id=ctx.task_id))
+    result: ToolResult = ctx.registry.run(
+        "test_coverage_checker", payload, ToolContext(task_id=ctx.task_id)
+    )
     files = payload.get("files", [])
     # 根据文件路径关键词判断所属架构层
     layers = []
@@ -44,14 +47,14 @@ def classify_changes(state: GraphState, ctx: NodeContext) -> GraphState:
         if "controller" in path:
             layers.append("controller")  # 接口层：处理 HTTP 请求
         elif "service" in path:
-            layers.append("service")     # 业务逻辑层：核心业务代码
+            layers.append("service")  # 业务逻辑层：核心业务代码
         elif "sql" in path:
-            layers.append("sql")         # 数据访问层：SQL 语句
+            layers.append("sql")  # 数据访问层：SQL 语句
         else:
-            layers.append("other")       # 其他：工具类、配置等
+            layers.append("other")  # 其他：工具类、配置等
     # 将分类结果和覆盖率信息写入共享状态
     state["classification"] = {
         "layers": layers or ["other"],  # 涉及的架构层列表
-        "summary": result.payload,       # 工具返回的覆盖率等摘要信息
+        "summary": result.payload,  # 工具返回的覆盖率等摘要信息
     }
     return state

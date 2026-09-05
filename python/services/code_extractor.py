@@ -11,12 +11,12 @@ logger = logging.getLogger(__name__)
 class CodeBlock:
     """A code block extracted from document text."""
 
-    content: str           # Original code text (including comments)
-    language: str          # java / python / typescript / sql / unknown
-    position_in_doc: int   # Position index in document (1-based)
-    preceding_nl: str      # Associated NL description (preceding paragraph)
-    section_title: str     # Section heading the block belongs to
-    ast_status: str        # pending / parsed / fallback / boundary_unclear
+    content: str  # Original code text (including comments)
+    language: str  # java / python / typescript / sql / unknown
+    position_in_doc: int  # Position index in document (1-based)
+    preceding_nl: str  # Associated NL description (preceding paragraph)
+    section_title: str  # Section heading the block belongs to
+    ast_status: str  # pending / parsed / fallback / boundary_unclear
 
 
 @dataclass
@@ -36,20 +36,43 @@ class ExtractedSection:
 # ---------------------------------------------------------------------------
 
 _LANG_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
-    ("java", re.compile(r"\b(public\s+class|private\s+void|@Override|import\s+java\.)", re.I)),
-    ("python", re.compile(r"\b(def\s+\w+|import\s+\w+|from\s+\w+\s+import|if\s+__name__)", re.I)),
-    ("typescript", re.compile(r"\b(interface\s+\w+|export\s+(class|function|const)|=>\s)", re.I)),
-    ("sql", re.compile(r"\b(SELECT\s+|CREATE\s+TABLE|INSERT\s+INTO|UPDATE\s+\w+\s+SET)", re.I)),
+    (
+        "java",
+        re.compile(
+            r"\b(public\s+class|private\s+void|@Override|import\s+java\.)",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "python",
+        re.compile(
+            r"\b(def\s+\w+|import\s+\w+|from\s+\w+\s+import|if\s+__name__)",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "typescript",
+        re.compile(
+            r"\b(interface\s+\w+|export\s+(class|function|const)|=>\s)", re.IGNORECASE
+        ),
+    ),
+    (
+        "sql",
+        re.compile(
+            r"\b(SELECT\s+|CREATE\s+TABLE|INSERT\s+INTO|UPDATE\s+\w+\s+SET)",
+            re.IGNORECASE,
+        ),
+    ),
 ]
 
 _CODE_KEYWORDS = re.compile(
     r"\b(public|private|protected|class|void|return|if|else|for|while|"
     r"def|import|from|function|var|let|const|interface|export|"
     r"SELECT|INSERT|UPDATE|DELETE|CREATE|TABLE)\b",
-    re.I,
+    re.IGNORECASE,
 )
 
-_CHINESE_PUNCT = re.compile(r"[，。？！；：、""''（）【】《》]")
+_CHINESE_PUNCT = re.compile(r"[，。？！；：、" "''（）【】《》]")
 
 
 def _detect_language(code: str) -> str:
@@ -62,15 +85,15 @@ def _detect_language(code: str) -> str:
 
 
 # Heuristic scoring thresholds for code paragraph detection
-_SEMICOLON_RATE_THRESHOLD = 0.02   # ~1 semicolon per 50 chars
+_SEMICOLON_RATE_THRESHOLD = 0.02  # ~1 semicolon per 50 chars
 _BRACE_RATE_THRESHOLD = 0.02
-_KEYWORD_SCORE_HIGH = 2            # 2+ keyword hits
-_KEYWORD_SCORE_LOW = 1             # 1 keyword hit
+_KEYWORD_SCORE_HIGH = 2  # 2+ keyword hits
+_KEYWORD_SCORE_LOW = 1  # 1 keyword hit
 _KEYWORD_SCORE_PARTIAL = 0.5
-_INDENTED_LINE_RATIO = 0.5         # >50% lines indented
+_INDENTED_LINE_RATIO = 0.5  # >50% lines indented
 _CHINESE_PUNCT_PENALTY = -2
-_CODE_SCORE_THRESHOLD = 3          # score >= this means "definitely code"
-_BOUNDARY_UNCLEAR_MAX_SCORE = 3    # 0 < score < this means "boundary unclear"
+_CODE_SCORE_THRESHOLD = 3  # score >= this means "definitely code"
+_BOUNDARY_UNCLEAR_MAX_SCORE = 3  # 0 < score < this means "boundary unclear"
 
 
 def _is_code_paragraph(text: str) -> tuple[bool, float]:
@@ -105,7 +128,9 @@ def _is_code_paragraph(text: str) -> tuple[bool, float]:
         score += _KEYWORD_SCORE_PARTIAL
 
     # Indentation (leading spaces >= 4 on most lines)
-    indented_lines = sum(1 for line in lines if line.startswith("    ") or line.startswith("\t"))
+    indented_lines = sum(
+        1 for line in lines if line.startswith("    ") or line.startswith("\t")
+    )
     if len(lines) > 1 and indented_lines / len(lines) > _INDENTED_LINE_RATIO:
         score += 1
 
@@ -122,7 +147,9 @@ def _is_code_paragraph(text: str) -> tuple[bool, float]:
 # ---------------------------------------------------------------------------
 
 _FENCE_RE = re.compile(r"```(\w*)\n(.*?)```", re.DOTALL)
-_HTML_CODE_RE = re.compile(r"<pre><code(?:\s+class=\"(\w+)\")?>(.*?)</code></pre>", re.DOTALL | re.IGNORECASE)
+_HTML_CODE_RE = re.compile(
+    r"<pre><code(?:\s+class=\"(\w+)\")?>(.*?)</code></pre>", re.DOTALL | re.IGNORECASE
+)
 
 _SECTION_HEADER_RE = re.compile(r"^(#{1,6}\s+.+)$", re.MULTILINE)
 
@@ -147,7 +174,12 @@ def _extract_html_code_tags(text: str) -> list[tuple[int, int, str, str]]:
         lang_hint = match.group(1).lower() or ""
         code = match.group(2).strip()
         # Basic HTML entity decoding
-        code = code.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&").replace("&quot;", '"')
+        code = (
+            code.replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&amp;", "&")
+            .replace("&quot;", '"')
+        )
         results.append((match.start(), match.end(), lang_hint, code))
     return results
 
@@ -155,6 +187,7 @@ def _extract_html_code_tags(text: str) -> list[tuple[int, int, str, str]]:
 # ---------------------------------------------------------------------------
 # Main extraction
 # ---------------------------------------------------------------------------
+
 
 def _extract_with_structured_blocks(
     text: str,
@@ -181,28 +214,40 @@ def _extract_with_structured_blocks(
                 nl_paras = [p.strip() for p in nl_text.split("\n\n") if p.strip()]
                 for para in nl_paras:
                     position += 1
-                    sections.append(ExtractedSection(
-                        type="nl", content=para,
-                        section_title=current_section, position_in_doc=position,
-                    ))
+                    sections.append(
+                        ExtractedSection(
+                            type="nl",
+                            content=para,
+                            section_title=current_section,
+                            position_in_doc=position,
+                        )
+                    )
                     last_nl = para
 
         # Add the code block
         code_position += 1
         language = lang_hint or _detect_language(code_content)
         cb = CodeBlock(
-            content=code_content, language=language,
-            position_in_doc=code_position, preceding_nl=last_nl,
-            section_title=current_section, ast_status="pending",
+            content=code_content,
+            language=language,
+            position_in_doc=code_position,
+            preceding_nl=last_nl,
+            section_title=current_section,
+            ast_status="pending",
         )
         code_blocks.append(cb)
 
         position += 1
-        sections.append(ExtractedSection(
-            type="code", content=code_content,
-            associated_code=code_content, code_language=language,
-            section_title=current_section, position_in_doc=position,
-        ))
+        sections.append(
+            ExtractedSection(
+                type="code",
+                content=code_content,
+                associated_code=code_content,
+                code_language=language,
+                section_title=current_section,
+                position_in_doc=position,
+            )
+        )
         cursor = block_end
 
     # Remaining text after last code block
@@ -212,10 +257,14 @@ def _extract_with_structured_blocks(
             nl_paras = [p.strip() for p in remaining.split("\n\n") if p.strip()]
             for para in nl_paras:
                 position += 1
-                sections.append(ExtractedSection(
-                    type="nl", content=para,
-                    section_title=current_section, position_in_doc=position,
-                ))
+                sections.append(
+                    ExtractedSection(
+                        type="nl",
+                        content=para,
+                        section_title=current_section,
+                        position_in_doc=position,
+                    )
+                )
                 last_nl = para
 
     return sections, code_blocks
@@ -242,10 +291,14 @@ def _extract_with_heuristic(
         if header_match:
             current_section = para
             position += 1
-            sections.append(ExtractedSection(
-                type="nl", content=para,
-                section_title=current_section, position_in_doc=position,
-            ))
+            sections.append(
+                ExtractedSection(
+                    type="nl",
+                    content=para,
+                    section_title=current_section,
+                    position_in_doc=position,
+                )
+            )
             last_nl = para
             continue
 
@@ -255,39 +308,59 @@ def _extract_with_heuristic(
             code_position += 1
             language = _detect_language(para)
             cb = CodeBlock(
-                content=para, language=language,
-                position_in_doc=code_position, preceding_nl=last_nl,
-                section_title=current_section, ast_status="pending",
+                content=para,
+                language=language,
+                position_in_doc=code_position,
+                preceding_nl=last_nl,
+                section_title=current_section,
+                ast_status="pending",
             )
             code_blocks.append(cb)
             position += 1
-            sections.append(ExtractedSection(
-                type="code", content=para,
-                associated_code=para, code_language=language,
-                section_title=current_section, position_in_doc=position,
-            ))
+            sections.append(
+                ExtractedSection(
+                    type="code",
+                    content=para,
+                    associated_code=para,
+                    code_language=language,
+                    section_title=current_section,
+                    position_in_doc=position,
+                )
+            )
         elif 0 < score < _BOUNDARY_UNCLEAR_MAX_SCORE:
             # Boundary unclear — treat as code with fallback status
             code_position += 1
             language = _detect_language(para)
             cb = CodeBlock(
-                content=para, language=language,
-                position_in_doc=code_position, preceding_nl=last_nl,
-                section_title=current_section, ast_status="boundary_unclear",
+                content=para,
+                language=language,
+                position_in_doc=code_position,
+                preceding_nl=last_nl,
+                section_title=current_section,
+                ast_status="boundary_unclear",
             )
             code_blocks.append(cb)
             position += 1
-            sections.append(ExtractedSection(
-                type="code", content=para,
-                associated_code=para, code_language=language,
-                section_title=current_section, position_in_doc=position,
-            ))
+            sections.append(
+                ExtractedSection(
+                    type="code",
+                    content=para,
+                    associated_code=para,
+                    code_language=language,
+                    section_title=current_section,
+                    position_in_doc=position,
+                )
+            )
         else:
             position += 1
-            sections.append(ExtractedSection(
-                type="nl", content=para,
-                section_title=current_section, position_in_doc=position,
-            ))
+            sections.append(
+                ExtractedSection(
+                    type="nl",
+                    content=para,
+                    section_title=current_section,
+                    position_in_doc=position,
+                )
+            )
             last_nl = para
 
     return sections, code_blocks

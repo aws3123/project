@@ -8,6 +8,7 @@
   就像老师批改作文时"标记重点段落"——
   Java 端已经标记了哪些段落可疑，这里把详细内容提取出来供后续分析。
 """
+
 from __future__ import annotations
 
 from graph.state import GraphState, NodeContext
@@ -26,11 +27,15 @@ def deep_read_methods(state: GraphState, ctx: NodeContext) -> GraphState:
     返回:
         更新后的 state，新增了 method_issues 字段
     """
-    source_package = state.get("source_package", {}) if isinstance(state.get("source_package", {}), dict) else {}
+    source_package = (
+        state.get("source_package", {})
+        if isinstance(state.get("source_package", {}), dict)
+        else {}
+    )
     files = source_package.get("files", []) if isinstance(source_package, dict) else []
 
-    issues = []          # 提取的热点问题列表
-    scanned_files = []   # 扫描过的文件路径列表
+    issues = []  # 提取的热点问题列表
+    scanned_files = []  # 扫描过的文件路径列表
     for source_file in files:
         if not isinstance(source_file, dict):
             continue
@@ -42,18 +47,24 @@ def deep_read_methods(state: GraphState, ctx: NodeContext) -> GraphState:
                 continue
             issues.append(
                 {
-                    "path": path,                                                    # 文件路径
-                    "reason": hotspot.get("reason", "unknown hotspot"),              # 热点原因（为什么被标记）
-                    "snippet": hotspot.get("snippet") or hotspot.get("raw_snippet") or "",  # 代码片段
-                    "start_line": hotspot.get("start_line") or (hotspot.get("line_map") or {}).get("start_line"),  # 起始行号
-                    "end_line": hotspot.get("end_line") or (hotspot.get("line_map") or {}).get("end_line"),        # 结束行号
+                    "path": path,  # 文件路径
+                    "reason": hotspot.get(
+                        "reason", "unknown hotspot"
+                    ),  # 热点原因（为什么被标记）
+                    "snippet": hotspot.get("snippet")
+                    or hotspot.get("raw_snippet")
+                    or "",  # 代码片段
+                    "start_line": hotspot.get("start_line")
+                    or (hotspot.get("line_map") or {}).get("start_line"),  # 起始行号
+                    "end_line": hotspot.get("end_line")
+                    or (hotspot.get("line_map") or {}).get("end_line"),  # 结束行号
                 }
             )
 
     # 将方法问题列表写入共享状态
     state["method_issues"] = {
-        "issues": issues,              # 热点问题列表
-        "scanned_files": scanned_files, # 扫描的文件列表
+        "issues": issues,  # 热点问题列表
+        "scanned_files": scanned_files,  # 扫描的文件列表
         "status": "READY",
     }
     return state
