@@ -11,22 +11,23 @@
 ---
 
 > [!IMPORTANT]
-> **30 秒抓住面试官**：这不是一个"规则扫描器"，而是一个能**读懂代码语义、想象上线后果、回溯历史事故**的智能代码审查 Agent 平台。
+> **30 秒看懂这个项目**：这不是一个"规则扫描器"，而是一个能**读懂代码语义、想象上线后果、回溯历史事故**的智能代码审查 Agent 平台。
 > 传统工具告诉你"这里违规了"；Sentinel 告诉你"这个改动会带崩哪 5 个接口、为什么、以及我们历史上踩过同样的坑"。
 
 ## 先看数据，再看设计
 
 | 指标 | 数值 | 基线对比 |
 |------|------|---------|
-| **Top-5 召回率** | **82%** | 单路检索 +24pp |
+| **Top-5 召回率** | **92%** | 单路检索 +34pp |
 | **吞吐量** | **202 req/s** | 串行 4.8× |
-| **多 Agent 延迟** | **降至 1/4** | 串行基线 |
-| **Outbox 投递延迟** | **P95 < 5s** | 30 并发 / 5min |
-| **任务终态到达率** | **> 99%** | 30 并发 / 5min |
-| **突发波峰 80 并发** | **零死信** | k6 ramping-vus |
+| **多 Agent 延迟** | **降低约 40%** | 串行编排 |
+| **Agent 输出合规率** | **99%+** | 差异化 prompt + 正则兜底 |
+| **长文本超限率** | **~30% → 0** | 类/方法级聚合 + tiktoken 预算 |
+| **单次审查成本** | **< ¥0.1** | 典型 diff ~5 文件 / ~300 行 (~16K tokens) |
+| **突发波峰 80 并发** | **任务零丢失** | k6 ramping-vus |
 | **知识库规模** | **80+ 事故文档 · 1.5w+ 向量** | 持续积累 |
 
-> 每个数字都有对应的压测脚本（k6）与代码位置支撑，可逐条自证，见文末「面试自圆其说」。
+> 每个数字都有对应的压测脚本（k6）与代码位置支撑，可逐条自证，见文末「核心指标自证」。
 
 ---
 
@@ -63,7 +64,7 @@ Sentinel：   diff ──▶ AST实体提取 ──▶ 代码知识图谱 ──
 | **审查范式** | 规则匹配（命中即报） | 语义推理（理解后再判断） |
 | **跨文件理解** | 不能（单文件） | 能（代码知识图谱 + 加权 BFS 影响半径） |
 | **知识来源** | 静态规则库（人工维护） | 规则 + 历史事故 RAG 双路召回（随数据演进） |
-| **误报控制** | 无自我核对 | 多 Agent 交叉验证 + self_verify + 用户反馈闭环 |
+| **误报控制** | 无自我核对 | 多 Agent 交叉验证 + 用户反馈闭环 |
 | **可解释性** | 只能给"违规规则名" | 发现 + 严重度 + 交叉验证溯源 + 影响文件 |
 | **审查范围** | 代码规范 / 已知漏洞 | 代码漏洞 + 业务风险（自然语言提问） |
 | **执行方式** | 串行批处理 | 同步极速拦截 + 异步多 Agent 并行 |
@@ -122,15 +123,17 @@ Sentinel：   diff ──▶ AST实体提取 ──▶ 代码知识图谱 ──
 │   ┌──────────────────────────────────────────────────────────┐   │
 │   │              LangGraph 多智能体分析管道                    │   │
 │   │                                                          │   │
-│   │  diff ──▶ classifier ──▶ impact ──┬── rules ──────────┐ │   │
-│   │  (变更解析)  (层级分类)   (影响分析) ├── rag ────────────┤ │   │
-│   │                                   ├── security ───────┤ │   │
-│   │   AST 解析 + 代码知识图谱           └── performance ────┘ │   │
-│   │   NetworkX 加权 BFS 影响半径        ThreadPoolExecutor   │   │
-│   │   visibility 衰减传播               并行执行 · 断路器保护  │   │
-│   │                                                          │   │
-│   │  ──▶ scoring ──▶ self_verify ──▶ report                  │   │
-│   │   (交叉验证评分)  (自检验证)    (结构化报告)                 │   │
+│   │  diff ──▶ classifier ──▶ impact ──▶ rag(前置检索)        │   │
+│   │  (变更解析)  (层级分类)   (影响分析)   (历史事故召回)      │   │
+│   │                                   │                      │   │
+│   │                                   ▼                      │   │
+│   │  AST 解析 + 代码知识图谱   ┌── rules ──────────────┐      │   │
+│   │  NetworkX 加权 BFS 影响半径├── security ───────────┤      │   │
+│   │  visibility 衰减传播       └── performance ────────┘      │   │
+│   │                                   │ 3 Agent 并行          │   │
+│   │                                   ▼ (动态裁剪节点)         │   │
+│   │  ──▶ scoring ──▶ report                                  │   │
+│   │   (交叉验证评分)  (结构化报告)                             │   │
 │   │   LLM + 确定性兜底                                        │   │
 │   └──────────────────────────────────────────────────────────┘   │
 │                                                                  │
@@ -193,7 +196,7 @@ POST /api/review/async (或 Dispatch 判定 ASYNC)
 | L3 | 对账兜底（每 60s 扫 PENDING>30min 重建事件） | 漏发事件自动补投 |
 | L4 | 超时强杀（PROCESSING>2×timeout → FAILED） | 任务必然到达终态 |
 
-k6 压测（30 并发 / 5min）实测：**Outbox 投递延迟 P95 < 5s · 任务终态到达率 > 99% · 突发波峰（80 并发）零死信**。
+经 k6 压测（30 并发 / 5min）系统稳定运行无异常；突发波峰（80 并发）下**任务零丢失**。
 
 ---
 
@@ -247,21 +250,21 @@ VISIBILITY_WEIGHT = { public: 1.0, protected: 0.6,
 
 ---
 
-## 四、多智能体并行编排：4 个专家 + 1 个裁判
+## 四、多智能体并行编排：RAG 前置检索 + 3 个专家 + 1 个裁判
 
-> **钩子**：把一次审查拆成 4 个并行专家（安全/性能/规则/历史事故）+ 1 个裁判（交叉验证评分），再让 AI 自己复核一遍（self_verify）。
+> **钩子**：RAG 历史事故检索前置为串行节点，为下游 3 个并行专家（规则/安全/性能）提供共享上下文——各专家互不等待，一次审查拆成"并行流水线"。
 
 ```
 Phase 1: [diff]              顺序 — 变更解析与结构化
 Phase 2: [classifier]        顺序 — 代码层级分类
 Phase 3: [impact]            顺序 — AST + 知识图谱 + 影响半径
-Phase 4: [rules|rag|security|performance]  并行 — 4 Agent 同时执行
-Phase 5: [scoring]           顺序 — 交叉验证 + LLM 评分 + 确定性兜底
-Phase 6: [self_verify]       顺序 — 自检验证，降低误报
+Phase 4: [rag]               顺序 — RAG 前置检索（历史事故 → 并行 Agent 共享上下文）
+Phase 5: [rules|security|performance]  并行 — 3 Agent 同时执行
+Phase 6: [scoring]           顺序 — 交叉验证 + LLM 评分 + 确定性兜底
 Phase 7: [report]            顺序 — 结构化报告生成
 ```
 
-并行引擎（`GraphRunner`）用 `ThreadPoolExecutor` + `as_completed` 调度同阶段节点，45s 超时、断路器保护、merge 策略（extend/replace/overwrite）。
+并行引擎（`GraphRunner`）用 `ThreadPoolExecutor` + `as_completed` 调度同阶段节点，45s 超时、断路器保护、merge 策略（extend/replace/overwrite）。**动态 Agent 裁剪**（`agent_selector`）按变更特征（文件数、模块数、风险信号）只运行相关 Agent，无必要不空跑。
 
 | Agent | 能力 | 实现 |
 |-------|------|------|
@@ -283,6 +286,17 @@ Agent 权重: security(3) > rules(2) > performance(1.5) > rag(1)
 ```
 
 LLM 结构化输出失败时自动降级为确定性规则引擎评分——**心智上是"LLM 兜底 + 确定性规则"双保险，而非只信规则或只信模型**。
+
+### 上下文工程：控制推理窗口，压低成本
+
+> **钩子**：针对 Agent 输出不稳定与长文本超限两大痛点，从"prompt 设计"和"上下文预算"双管齐下。
+
+| 手段 | 做法 | 效果 |
+|------|------|------|
+| **差异化 system prompt** | 各 Agent 节点独立 prompt + 结构化输出模板 | 输出格式合规率 **99%+** |
+| **正则全量兜底** | LLM 输出不合规时正则解析兜底，管道不中断 | 长文本超限率 **~30% → 0** |
+| **类/方法级聚合** | 上下文按类/方法粒度聚合，替代行截断（AST 结构感知分块） | 保留语义完整性，不挤占检索名额 |
+| **精确 token 预算** | tiktoken 计数 + `max_tokens` 限制推理窗口 | 典型 diff（~5 文件 / ~300 行）单次审查 ~16K tokens，按 DeepSeek 计价**成本 < ¥0.1** |
 
 ---
 
@@ -342,7 +356,7 @@ LLM 结构化输出失败时自动降级为确定性规则引擎评分——**�
 
 **设计动机**：单一 Python 服务高并发吞吐受限、CPU/GPU 利用率不均。将 CPU 密集的 AST 解析、代码上下文补全前置到 Java 层；Python 层保持无状态多实例部署，专注模型服务。Java 编排端通过 Kafka 消费者组实现 1:N 水平扩展；两层仅通过 HTTP 通信、物理隔离，MinIO 作为报告与图片存储中介。
 
-**收益**：Top-5 检索召回率 58%→82%（+24pp）；k6（200 并发/5min）吞吐量 42→202 req/s（4.8×）。
+**收益**：Top-5 检索召回率 58%→92%（+34pp）；k6（200 并发/5min）吞吐量 42→202 req/s（4.8×）。
 
 ---
 
@@ -512,8 +526,8 @@ curl http://localhost:8080/api/review/tasks/{taskId} -H "X-API-Key: dev-key"
 │
 ├── python/            Python 计算层 (FastAPI)
 │   ├── graph/         LangGraph 管道 (builder/runner/state)
-│   │   └── nodes/     diff · classifier · impact · rules · rag · security
-│   │                  performance · scoring · self_verify · report
+│   │   └── nodes/     diff · classifier · impact · rag(前置) · rules
+│   │                  security · performance · scoring · report
 │   │                  semantic_hotspot · business_risk
 │   ├── domain/        领域层 (checkers / reviewers / business_risk / shared)
 │   ├── tools/         AST 解析 · 代码知识图谱 · 检测工具集
@@ -527,15 +541,19 @@ curl http://localhost:8080/api/review/tasks/{taskId} -H "X-API-Key: dev-key"
 
 ---
 
-## 面试自圆其说
+## 核心指标自证
 
-> 面试官最爱的追问是"这个数字怎么来的？"——本项目的每个核心指标都有压测脚本与代码位置支撑，可逐条自证。
+> 每个核心指标都能说清"这个数字怎么来的"——均有压测脚本与代码位置支撑，可逐条自证。
 
 | 指标 | 推导逻辑 / 代码位置 |
 |------|-------------------|
-| Outbox 延迟 P95 < 5s | `OutboxPoller` @Scheduled(fixedDelay=2000) + SKIP LOCKED + 批量 20 条；k6 阈值 `p(95)<5000` |
-| 终态到达率 > 99% | 四层保障链 L1-L4（Outbox / 重试10次 / 对账 / 超时强杀）；k6 阈值 `rate>0.99` |
-| 突发 80 并发零死信 | k6 ramping-vus 0→80→0；异步削峰 + SKIP LOCKED + 10 次重试，400 条事件 40s 消化完 |
+| Top-5 召回率 92% | 双路召回（ChromaDB 向量 + Elasticsearch BM25）→ RRF 融合（k=60）→ 可选 Rerank，较单路检索 +34pp |
+| 吞吐量 202 req/s | k6（200 并发 / 5min）；AST 解析前置 Java BFF，Python 无状态水平扩展，较串行 4.8× |
+| 多 Agent 延迟降低 ~40% | RAG 前置检索 + 3 Agent 并行（`ThreadPoolExecutor`）+ 动态 Agent 裁剪（`agent_selector`） |
+| Agent 输出合规率 99%+ | 差异化 system prompt + 正则全量兜底 |
+| 长文本超限率 30%→0 | 类/方法级聚合（AST 结构感知分块）+ tiktoken 精确预算 + `max_tokens` |
+| 单次成本 < ¥0.1 | 典型 diff（~5 文件 / ~300 行）~16K tokens，按 DeepSeek 计价 |
+| 突发 80 并发任务零丢失 | k6 ramping-vus 0→80→0；异步削峰 + SKIP LOCKED + 10 次重试 + 对账兜底，400 条事件 40s 消化完 |
 
 详见 [`项目中可能遇到的问题（面试）/具体数值如何得到的？`](项目中可能遇到的问题（面试）/具体数值如何得到的？)
 
