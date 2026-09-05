@@ -37,6 +37,9 @@ public class ReviewCallbackMessage {
     /** 仅 RESULT 事件携带 */
     private CallbackResult result;
 
+    /** 仅 RESULT 事件携带：LLM 真实 token 用量（Python 侧计量） */
+    private Usage usage;
+
     /** 仅 DEAD_LETTER 事件携带 */
     private String errorCode;
 
@@ -54,5 +57,16 @@ public class ReviewCallbackMessage {
         private String riskSummary;
         private boolean needHumanReview;
         private List<String> details;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class Usage {
+        private String model;
+        private Integer promptTokens;
+        private Integer completionTokens;
+        private Integer totalTokens;
     }
 }

@@ -42,6 +42,12 @@ rate-limit:
   include-paths:
     - /api/review/**
 
+# 计费: 单价快照（元/千 token）+ 单调用方累计配额上限
+billing:
+  enabled: ${BILLING_ENABLED:true}
+  unit-price-per-k: ${BILLING_UNIT_PRICE_PER_K:0.0010}
+  max-tokens-per-submitter: ${BILLING_MAX_TOKENS_PER_SUBMITTER:1000000}
+
 resilience4j:
   circuitbreaker:
     configs:

@@ -10,6 +10,7 @@ from aiokafka import AIOKafkaConsumer
 from aiokafka.errors import KafkaError
 
 from config.settings import AppSettings
+from llm.metering import MeteringScope
 from mq.callback_producer import CallbackProducer
 from mq.payload_client import PayloadClient, PayloadNotFoundError
 
@@ -161,85 +162,90 @@ class ReviewKafkaConsumer:
             logger.debug("Duplicate task skipped taskId=%s", task_id)
             return
 
-        # 1. 进度回执：用户端 SSE 从 QUEUED → PROCESSING 由 Java 收到本回调后触发
-        await self._producer.send_callback(
-            "PROCESSING", task_id, session_id=session_id, trace_id=trace_id
-        )
+        # 计量作用域：整个任务处理期间累加真实 token 用量，
+        # RESULT 回调时随 usage 回传 Java 记账（无 LLM 调用时用量为 0）
+        with MeteringScope() as scope:
+            # 1. 进度回执：用户端 SSE 从 QUEUED → PROCESSING 由 Java 收到本回调后触发
+            await self._producer.send_callback(
+                "PROCESSING", task_id, session_id=session_id, trace_id=trace_id
+            )
 
-        try:
-            payload = await self._payload_client.fetch(task_id)
-            request = self._build_request(message, payload)
-            result = await asyncio.to_thread(self._process_message, request)
-            await self._producer.send_callback(
-                "RESULT",
-                task_id,
-                session_id=session_id,
-                trace_id=trace_id,
-                result=self._result_to_dict(result),
-            )
-        except (PayloadNotFoundError, PermanentFailure) as exc:
-            code = (
-                exc.code if isinstance(exc, PermanentFailure) else "PAYLOAD_NOT_FOUND"
-            )
-            logger.warning(
-                "Permanent failure taskId=%s code=%s: %s", task_id, code, exc
-            )
-            await self._producer.send_callback(
-                "DEAD_LETTER",
-                task_id,
-                session_id=session_id,
-                trace_id=trace_id,
-                error_code=code,
-                error_message=str(exc),
-            )
-        except Exception as exc:
-            # 瞬时失败：进程内重试，耗尽后进 DEAD_LETTER（避免无限重投）
-            logger.warning("Transient failure taskId=%s, will retry: %s", task_id, exc)
-            error_code = "TRANSIENT_FAILURE"
-            error_message = str(exc)
-            retries = self._settings.kafka_transient_retries
-            for attempt in range(1, retries + 1):
-                await asyncio.sleep(
-                    self._settings.kafka_transient_backoff_ms * attempt / 1000
+            try:
+                payload = await self._payload_client.fetch(task_id)
+                request = self._build_request(message, payload)
+                result = await asyncio.to_thread(self._process_message, request)
+                await self._producer.send_callback(
+                    "RESULT",
+                    task_id,
+                    session_id=session_id,
+                    trace_id=trace_id,
+                    result=self._result_to_dict(result),
+                    usage=self._usage_snapshot(scope),
                 )
-                try:
-                    payload = await self._payload_client.fetch(task_id)
-                    request = self._build_request(message, payload)
-                    result = await asyncio.to_thread(self._process_message, request)
-                    await self._producer.send_callback(
-                        "RESULT",
-                        task_id,
-                        session_id=session_id,
-                        trace_id=trace_id,
-                        result=self._result_to_dict(result),
+            except (PayloadNotFoundError, PermanentFailure) as exc:
+                code = (
+                    exc.code if isinstance(exc, PermanentFailure) else "PAYLOAD_NOT_FOUND"
+                )
+                logger.warning(
+                    "Permanent failure taskId=%s code=%s: %s", task_id, code, exc
+                )
+                await self._producer.send_callback(
+                    "DEAD_LETTER",
+                    task_id,
+                    session_id=session_id,
+                    trace_id=trace_id,
+                    error_code=code,
+                    error_message=str(exc),
+                )
+            except Exception as exc:
+                # 瞬时失败：进程内重试，耗尽后进 DEAD_LETTER（避免无限重投）
+                logger.warning("Transient failure taskId=%s, will retry: %s", task_id, exc)
+                error_code = "TRANSIENT_FAILURE"
+                error_message = str(exc)
+                retries = self._settings.kafka_transient_retries
+                for attempt in range(1, retries + 1):
+                    await asyncio.sleep(
+                        self._settings.kafka_transient_backoff_ms * attempt / 1000
                     )
-                    return
-                except (PayloadNotFoundError, PermanentFailure) as permanent:
-                    error_code = (
-                        permanent.code
-                        if isinstance(permanent, PermanentFailure)
-                        else "PAYLOAD_NOT_FOUND"
-                    )
-                    error_message = str(permanent)
-                    break
-                except Exception as retry_exc:
-                    logger.warning(
-                        "Transient retry %d/%d failed taskId=%s: %s",
-                        attempt,
-                        retries,
-                        task_id,
-                        retry_exc,
-                    )
-                    error_code = "TRANSIENT_FAILURE"
-                    error_message = str(retry_exc)
-            await self._producer.send_callback(
-                "DEAD_LETTER",
-                task_id,
-                session_id=session_id,
-                trace_id=trace_id,
-                error_code=error_code,
-                error_message=error_message,
-            )
+                    try:
+                        payload = await self._payload_client.fetch(task_id)
+                        request = self._build_request(message, payload)
+                        result = await asyncio.to_thread(self._process_message, request)
+                        await self._producer.send_callback(
+                            "RESULT",
+                            task_id,
+                            session_id=session_id,
+                            trace_id=trace_id,
+                            result=self._result_to_dict(result),
+                            usage=self._usage_snapshot(scope),
+                        )
+                        return
+                    except (PayloadNotFoundError, PermanentFailure) as permanent:
+                        error_code = (
+                            permanent.code
+                            if isinstance(permanent, PermanentFailure)
+                            else "PAYLOAD_NOT_FOUND"
+                        )
+                        error_message = str(permanent)
+                        break
+                    except Exception as retry_exc:
+                        logger.warning(
+                            "Transient retry %d/%d failed taskId=%s: %s",
+                            attempt,
+                            retries,
+                            task_id,
+                            retry_exc,
+                        )
+                        error_code = "TRANSIENT_FAILURE"
+                        error_message = str(retry_exc)
+                await self._producer.send_callback(
+                    "DEAD_LETTER",
+                    task_id,
+                    session_id=session_id,
+                    trace_id=trace_id,
+                    error_code=error_code,
+                    error_message=error_message,
+                )
 
     def _build_request(
         self, message: dict[str, Any], payload: dict[str, Any]
@@ -271,6 +277,14 @@ class ReviewKafkaConsumer:
             "needHumanReview": bool(getattr(result, "needHumanReview", False)),
             "details": list(getattr(result, "details", []) or []),
         }
+
+    @staticmethod
+    def _usage_snapshot(scope: MeteringScope) -> dict[str, Any] | None:
+        """任务级 token 用量快照；无 LLM 调用时返回空结构而非 None，保证字段契约稳定。"""
+        usage = scope.usage
+        if usage is None:
+            return {"model": None, "promptTokens": 0, "completionTokens": 0, "totalTokens": 0}
+        return usage.snapshot()
 
     async def _acquire_dedup(self, task_id: str) -> bool:
         """Redis SETNX 去重：仅首次看到该 taskId 时返回 True。"""
