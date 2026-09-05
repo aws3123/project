@@ -56,19 +56,27 @@ def _detect_analyzer(client: Elasticsearch, index_name: str) -> str:
     return analyzer
 
 
-def ensure_index(settings: AppSettings | None = None) -> None:
-    """Create the incident keywords index if it does not exist."""
+def ensure_index(settings: AppSettings | None = None) -> bool:
+    """Create the incident keywords index if it does not exist.
+
+    Returns True on success. ES 不可达时记录告警并返回 False，不抛异常，
+    保证调用方（如 PDF 摄入）在 ES 未启动时也能完成 Chroma 写入。
+    """
     settings = settings or AppSettings()
-    client = get_es_client(settings)
-    index_name = settings.es_index_name
+    if not settings.es_enabled:
+        logger.info("ES write disabled (es_enabled=False), skipping ensure_index")
+        return False
+    try:
+        client = get_es_client(settings)
+        index_name = settings.es_index_name
 
-    if client.indices.exists(index=index_name):
-        logger.debug("ES index '%s' already exists", index_name)
-        return
+        if client.indices.exists(index=index_name):
+            logger.debug("ES index '%s' already exists", index_name)
+            return True
 
-    analyzer = _detect_analyzer(client, index_name)
+        analyzer = _detect_analyzer(client, index_name)
 
-    body: dict[str, Any] = {
+        body: dict[str, Any] = {
         "settings": {
             "number_of_shards": 1,
             "number_of_replicas": 0,
@@ -109,8 +117,12 @@ def ensure_index(settings: AppSettings | None = None) -> None:
         },
     }
 
-    client.indices.create(index=index_name, body=body)
-    logger.info("Created ES index '%s' with analyzer '%s'", index_name, analyzer)
+        client.indices.create(index=index_name, body=body)
+        logger.info("Created ES index '%s' with analyzer '%s'", index_name, analyzer)
+        return True
+    except Exception as exc:
+        logger.warning("ES ensure_index failed, skipping: %s", exc)
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -163,57 +175,70 @@ def index_documents(rows: list[dict], settings: AppSettings | None = None) -> No
 def index_unified_chunks(
     chunks: list[dict], settings: AppSettings | None = None
 ) -> None:
-    """Bulk-index unified chunks (NL + code + AST metadata) into ES."""
+    """Bulk-index unified chunks (NL + code + AST metadata) into ES.
+
+    ES 不可达时记录告警并返回，不抛异常，不影响 Chroma 已完成的写入。
+    """
     if not chunks:
         return
 
     settings = settings or AppSettings()
-    ensure_index(settings)
-    client = get_es_client(settings)
-    index_name = settings.es_index_name
+    if not settings.es_enabled:
+        logger.info("ES write disabled (es_enabled=False), skipping unified chunks")
+        return
 
-    actions = []
-    for chunk in chunks:
-        doc_id = str(chunk.get("id", ""))
-        if not doc_id:
-            continue
+    try:
+        if not ensure_index(settings):
+            logger.warning("ES unavailable, skipping unified chunk indexing")
+            return
 
-        ast_meta = chunk.get("ast_metadata", {})
-        doc_meta = chunk.get("doc_metadata", {})
+        client = get_es_client(settings)
+        index_name = settings.es_index_name
 
-        doc = {
-            # Legacy fields
-            "title": doc_meta.get("section_title", ""),
-            "snippet": chunk.get("nl_description", ""),
-            "source": doc_meta.get("source_doc", "unknown"),
-            "tags": doc_meta.get("tags", []),
-            "image_urls": doc_meta.get("image_urls", []),
-            "image_texts": doc_meta.get("image_texts", []),
-            # New unified chunk fields
-            "nl_description": chunk.get("nl_description", ""),
-            "code_content": chunk.get("code_content", ""),
-            "entity_name": ast_meta.get("entity_name", ""),
-            "entity_kind": ast_meta.get("entity_kind", "unknown"),
-            "fully_qualified_name": ast_meta.get("fully_qualified_name", ""),
-            "language": ast_meta.get("language", "unknown"),
-            "programming_language": ast_meta.get("language", "unknown"),
-            "signature": ast_meta.get("signature", ""),
-            "source_doc": doc_meta.get("source_doc", ""),
-            "section_title": doc_meta.get("section_title", ""),
-            "risk_type": doc_meta.get("risk_type", "general"),
-            "position_in_doc": doc_meta.get("position_in_doc", 0),
-            "ast_status": ast_meta.get("ast_status", "unknown"),
-            "has_code": bool(chunk.get("code_content")),
-        }
-        actions.append({"_index": index_name, "_id": doc_id, "_source": doc})
+        actions = []
+        for chunk in chunks:
+            doc_id = str(chunk.get("id", ""))
+            if not doc_id:
+                continue
 
-    if actions:
-        success, errors = helpers.bulk(client, actions, raise_on_error=False)
-        if errors:
-            logger.warning(
-                "ES unified indexing had %d errors: %s", len(errors), errors[:3]
-            )
-        logger.info("Indexed %d unified chunks into ES '%s'", success, index_name)
+            ast_meta = chunk.get("ast_metadata", {})
+            doc_meta = chunk.get("doc_metadata", {})
+
+            doc = {
+                # Legacy fields
+                "title": doc_meta.get("section_title", ""),
+                "snippet": chunk.get("nl_description", ""),
+                "source": doc_meta.get("source_doc", "unknown"),
+                "tags": doc_meta.get("tags", []),
+                "image_urls": doc_meta.get("image_urls", []),
+                "image_texts": doc_meta.get("image_texts", []),
+                # New unified chunk fields
+                "nl_description": chunk.get("nl_description", ""),
+                "code_content": chunk.get("code_content", ""),
+                "entity_name": ast_meta.get("entity_name", ""),
+                "entity_kind": ast_meta.get("entity_kind", "unknown"),
+                "fully_qualified_name": ast_meta.get("fully_qualified_name", ""),
+                "language": ast_meta.get("language", "unknown"),
+                "programming_language": ast_meta.get("language", "unknown"),
+                "signature": ast_meta.get("signature", ""),
+                "source_doc": doc_meta.get("source_doc", ""),
+                "section_title": doc_meta.get("section_title", ""),
+                "risk_type": doc_meta.get("risk_type", "general"),
+                "position_in_doc": doc_meta.get("position_in_doc", 0),
+                "ast_status": ast_meta.get("ast_status", "unknown"),
+                "has_code": bool(chunk.get("code_content")),
+            }
+            actions.append({"_index": index_name, "_id": doc_id, "_source": doc})
+
+        if actions:
+            success, errors = helpers.bulk(client, actions, raise_on_error=False)
+            if errors:
+                logger.warning(
+                    "ES unified indexing had %d errors: %s", len(errors), errors[:3]
+                )
+            logger.info("Indexed %d unified chunks into ES '%s'", success, index_name)
+    except Exception as exc:
+        logger.warning("ES indexing skipped, chunk retained in Chroma: %s", exc)
 
 
 # ---------------------------------------------------------------------------
