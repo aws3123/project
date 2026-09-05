@@ -1,12 +1,15 @@
 package com.acme.review.service;
 
+import com.acme.review.entity.OutboxEvent;
 import com.acme.review.entity.UserFeedback;
 import com.acme.review.repository.mapper.FeedbackMapper;
+import com.acme.review.repository.mapper.OutboxEventMapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.time.Instant;
 import java.util.List;
@@ -23,12 +26,14 @@ import static org.mockito.Mockito.when;
 class FeedbackServiceTest {
 
     private FeedbackMapper feedbackMapper;
+    private OutboxEventMapper outboxMapper;
     private FeedbackService service;
 
     @BeforeEach
     void setUp() {
         feedbackMapper = mock(FeedbackMapper.class);
-        service = new FeedbackService(feedbackMapper, new ObjectMapper());
+        outboxMapper = mock(OutboxEventMapper.class);
+        service = new FeedbackService(feedbackMapper, outboxMapper, new ObjectMapper());
     }
 
     @Test
@@ -46,6 +51,45 @@ class FeedbackServiceTest {
         assertThat(saved.getTaskId()).isEqualTo("task-1");
         assertThat(saved.getFeedbackType()).isEqualTo("thumbs_down");
         verify(feedbackMapper).insert(any(UserFeedback.class));
+    }
+
+    @Test
+    void shouldQueueOutboxEventForThumbsDown() {
+        UserFeedback feedback = new UserFeedback();
+        feedback.setId(9L);
+        feedback.setTaskId("task-1");
+        feedback.setSessionId("session-1");
+        feedback.setFeedbackType("thumbs_down");
+        feedback.setCategory("误报");
+        feedback.setTraceId("trace-abc");
+
+        when(feedbackMapper.selectList(any())).thenReturn(List.of());
+        when(feedbackMapper.insert(any(UserFeedback.class))).thenReturn(1);
+
+        service.submit(feedback);
+
+        ArgumentCaptor<OutboxEvent> captor = ArgumentCaptor.forClass(OutboxEvent.class);
+        verify(outboxMapper).insert(captor.capture());
+        OutboxEvent event = captor.getValue();
+        assertThat(event.getEventType()).isEqualTo("FEEDBACK_NEGATIVE");
+        assertThat(event.getAggregateType()).isEqualTo("user_feedback");
+        assertThat(event.getAggregateId()).isEqualTo("task-1");
+        assertThat(event.getStatus()).isEqualTo("PENDING");
+        assertThat(event.getPayload()).contains("task-1").contains("误报").contains("trace-abc").contains("messageId");
+    }
+
+    @Test
+    void shouldNotQueueOutboxEventForThumbsUp() {
+        UserFeedback feedback = new UserFeedback();
+        feedback.setTaskId("task-1");
+        feedback.setSessionId("session-1");
+        feedback.setFeedbackType("thumbs_up");
+
+        when(feedbackMapper.selectList(any())).thenReturn(List.of());
+
+        service.submit(feedback);
+
+        verify(outboxMapper, never()).insert(any(OutboxEvent.class));
     }
 
     @Test
