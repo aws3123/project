@@ -66,7 +66,7 @@ Sentinel：   diff ──▶ AST实体提取 ──▶ 代码知识图谱 ──
 | **知识来源** | 静态规则库（人工维护） | 规则 + 历史事故 RAG 双路召回（随数据演进） |
 | **误报控制** | 无自我核对 | 多 Agent 交叉验证 + 用户反馈闭环 |
 | **可解释性** | 只能给"违规规则名" | 发现 + 严重度 + 交叉验证溯源 + 影响文件 |
-| **审查范围** | 代码规范 / 已知漏洞 | 代码漏洞 + 业务风险（自然语言提问） |
+| **审查范围** | 代码规范 / 已知漏洞 | 代码漏洞 |
 | **执行方式** | 串行批处理 | 同步极速拦截 + 异步多 Agent 并行 |
 | **人机协同** | 一般无 | 高风险自动转人工 Handoff，可追溯 |
 
@@ -76,9 +76,7 @@ Sentinel：   diff ──▶ AST实体提取 ──▶ 代码知识图谱 ──
 
 面向企业研发全链路，构建 **"同步极速拦截 — 异步高可用编排 — 变更语义理解 — 历史事故知识召回 — 多智能体并行分析 — 结果聚合"** 的完整执行闭环。系统将一次代码审查抽象为可观测、可重试、可回溯的任务实例，通过 Java 稳态编排层与 Python 敏态计算层的异构协作，实现对代码变更的**跨文件语义理解**与**深度逻辑推理**。
 
-覆盖两类审查场景：
-- **代码漏洞风险**：SQL 注入、XSS、硬编码密码、N+1 查询等安全/性能反模式
-- **业务风险**：基于自然语言提问（如"售票系统是否有超卖风险？"），结合源码热点扫描 + 历史事故文档 RAG 检索，分析业务逻辑隐患
+审查场景：**代码漏洞风险**——SQL 注入、XSS、硬编码密码、N+1 查询等安全/性能反模式
 
 ---
 
@@ -103,15 +101,9 @@ Sentinel：   diff ──▶ AST实体提取 ──▶ 代码知识图谱 ──
 │                      │  消费者组负载均衡  │           │           │
 │                      └──────────────────┘   ┌───────▼────────┐  │
 │                                             │  MQ Consumer   │  │
-│   ┌──────────────────────────────────┐      │  Completable   │  │
-│   │  SSE 实时推送 (ConcurrentHashMap) │      │  Future 异步编排│  │
-│   └──────────────────────────────────┘      └───────┬────────┘  │
-│                                                     │            │
-│   ┌──────────────────────────────────┐              │            │
-│   │  ThreadPoolExecutor 线程池        │◀─────────────┘            │
-│   │  LinkedBlockingQueue(200) 背压   │  HTTP 调用 Python         │
-│   │  LongAdder 并发指标采集           │                            │
-│   └──────────────────────────────────┘                            │
+│   ┌──────────────────────────────────┐      └───────┬────────┘  │
+│   │  SSE 实时推送 / 任务状态推送       │◀─────────────┘           │
+│   └──────────────────────────────────┘                          │
 │                                                                  │
 │   Outbox 事件表 · 对账兜底 · Tree-Sitter AST · API Key 认证 · 反馈 │
 └──────────────────────────────────────────────────────────────────┘
@@ -138,20 +130,15 @@ Sentinel：   diff ──▶ AST实体提取 ──▶ 代码知识图谱 ──
 │   └──────────────────────────────────────────────────────────┘   │
 │                                                                  │
 │   ┌──────────────────────────────────────────────────────────┐   │
-│   │           RAG 检索引擎 (双路召回 + 动态重排)                │   │
+│   │   RAG 检索引擎 (双路召回 + 动态重排)                │   │
 │   │  向量检索 (ChromaDB) + 关键词检索 (Elasticsearch) → RRF   │   │
-│   └──────────────────────────────────────────────────────────┘   │
-│                                                                  │
-│   ┌──────────────────────────────────────────────────────────┐   │
-│   │           业务风险分析管道 (独立 LangGraph 工作流)           │   │
-│   │  自然语言提问 → 源码热点扫描 → RAG 召回 → LLM 深度分析      │   │
 │   └──────────────────────────────────────────────────────────┘   │
 └──────────────────────────────────────────────────────────────────┘
                             │
                             ▼
 ┌──────────────────────────────────────────────────────────────────┐
 │                    React 前端 (Vite)                              │
-│  提交审查 · 任务看板 · 结果详情 · 业务风险分析 · 反馈收集            │
+│  提交审查 · 任务看板 · 结果详情 · 反馈收集            │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -183,7 +170,7 @@ POST /api/review/async (或 Dispatch 判定 ASYNC)
   ├─ Outbox 本地消息表 → StreamBridge → Kafka topic "ai.review.tasks"
   │     partition-key = taskId (同任务消息有序) · acks=all 不丢失
   ├─ 立即返回 202 + {"taskId","status":"QUEUED"} → 前端轮询 / 监听 SSE
-  └─ Kafka Consumer → CompletableFuture → Python 多 Agent 并行分析
+  └─ Kafka Consumer → Python 多 Agent 并行分析
         → 持久化结果 → SSE → 状态机 PENDING→PROCESSING→SUCCESS/FAILED/HUMAN_REVIEW
 ```
 
@@ -213,7 +200,7 @@ POST /api/review/async (或 Dispatch 判定 ASYNC)
 └─ Stage 3: 启发式分类器   边界情况打分，置信度<0.80 → 降级 ASYNC (保守策略)
 ```
 
-调度引擎直接读取 `ThreadPoolExecutor.getQueue().size()` 与 `LongAdder.sum()` 获取实时并发度，利用消息队列的持久化能力削峰填谷，避免 Python 计算节点过载雪崩。
+调度引擎感知实时并发度，利用消息队列的持久化能力削峰填谷，避免 Python 计算节点过载雪崩。
 
 ---
 
@@ -264,7 +251,7 @@ Phase 6: [scoring]           顺序 — 交叉验证 + LLM 评分 + 确定性兜
 Phase 7: [report]            顺序 — 结构化报告生成
 ```
 
-并行引擎（`GraphRunner`）用 `ThreadPoolExecutor` + `as_completed` 调度同阶段节点，45s 超时、断路器保护、merge 策略（extend/replace/overwrite）。**动态 Agent 裁剪**（`agent_selector`）按变更特征（文件数、模块数、风险信号）只运行相关 Agent，无必要不空跑。
+并行引擎（`GraphRunner`）用 `as_completed` 调度同阶段节点，45s 超时、断路器保护、merge 策略（extend/replace/overwrite）。**动态 Agent 裁剪**（`agent_selector`）按变更特征（文件数、模块数、风险信号）只运行相关 Agent，无必要不空跑。
 
 | Agent | 能力 | 实现 |
 |-------|------|------|
@@ -315,25 +302,7 @@ LLM 结构化输出失败时自动降级为确定性规则引擎评分——**�
 
 ---
 
-## 六、业务风险分析管道
-
-> **钩子**：从"审查代码"到"审查业务"——这是传统代码审查工具的盲区，它们只能审规范，无法回答业务逻辑问题。
-
-独立于代码审查管道，面向自然语言提问（如"售票系统是否有超卖风险？"）：
-
-```
-用户提问 + 源码上下文
-  ├─ 源码热点扫描 (semantic_hotspot_scan)  区分与问题语义相关的代码热点
-  ├─ 业务 RAG 召回 (business_risk_rag)     基于问题向量化检索历史事故文档
-  ├─ LLM 深度分析 (business_risk)          结合源码热点 + 历史事故 → 结构化风险
-  └─ 结果 → SSE 流式推送 → 前端展示
-```
-
-通过 Worker 心跳机制实现 Python 计算节点的动态注册与发现，Java 端维护可用 Worker 列表并做负载均衡。
-
----
-
-## 七、Java 稳态编排 × Python 敏态计算：异构微服务架构
+## 六、Java 稳态编排 × Python 敏态计算：异构微服务架构
 
 > **钩子**：Java 管稳定性，Python 管聪明——各干各最擅长的事。
 
@@ -360,53 +329,7 @@ LLM 结构化输出失败时自动降级为确定性规则引擎评分——**�
 
 ---
 
-## 八、Java 并发实战：`java.util.concurrent` 深度应用
-
-> **钩子**：这不是玩具项目——线程池、异步编排、无锁注册表、高吞吐指标，全是生产级写法。
-
-### ThreadPoolExecutor — 背压控制
-
-```java
-@Bean("reviewExecutor")
-public ThreadPoolExecutor reviewExecutor(OrchestratorProperties props) {
-    return new ThreadPoolExecutor(
-        props.corePoolSize(),          // 核心 4 (常驻)
-        props.maxPoolSize(),           // 最大 16 (弹性)
-        props.keepAliveSeconds(),      // 空闲 60s 回收
-        TimeUnit.SECONDS,
-        new LinkedBlockingQueue<>(props.queueCapacity()),  // 有界队列 200
-        new ThreadPoolExecutor.CallerRunsPolicy()          // 拒绝: 调用者执行
-    );
-}
-```
-
-- `LinkedBlockingQueue(200)` 显式容量内存缓冲，"先排队后扩容"
-- `CallerRunsPolicy` 满载时由提交线程自行执行，天然限流
-- 调度引擎通过 `getQueue().size()` / `getActiveCount()` 实时读取线程池状态
-
-### CompletableFuture — 异步编排与超时控制
-
-```java
-CompletableFuture<ReviewSyncResponse> reviewFuture = CompletableFuture
-    .supplyAsync(() -> pythonClient.computeAsync(request), reviewExecutor)
-    .exceptionally(ex -> { throw new PythonServiceException("AI service unavailable", ex); });
-
-try {
-    response = reviewFuture.get(asyncTimeoutMs + 5000, TimeUnit.MILLISECONDS);
-} catch (TimeoutException e) {
-    reviewFuture.cancel(true);   // 中断底层 HTTP 连接, 释放线程
-    throw new PythonTimeoutException("Async task timeout", e);
-}
-```
-
-### ConcurrentHashMap — 无锁 SSE 注册表 & LongAdder 高吞吐指标
-
-- `ConcurrentHashMap<String, SseEmitter>` 维护 SSE 连接，`put`/`get` 无锁，客户端断开自动跳过
-- `LongAdder` 内部 Cell 数组分片，高并发 CAS 冲突自动分片，吞吐远超 `AtomicLong`
-
----
-
-## 九、数据一致性与查询性能
+## 七、数据一致性与查询性能
 
 任务状态与消息队列在同一 `@Transactional` 边界内，Kafka 发送失败时数据库自动回滚，保证"有状态必有消息"：
 
@@ -426,7 +349,7 @@ CREATE INDEX idx_result_task ON review_result(task_id);
 
 ---
 
-## 十、反馈闭环：让审查质量可量化演进
+## 八、反馈闭环：让审查质量可量化演进
 
 > **钩子**：把审查从"经验驱动"变成"数据驱动"——传统规则工具最薄弱、也是本项目最打动人的区分点之一。
 
@@ -444,7 +367,7 @@ Python 端 (数据闭环): 点踩高频分类 → 驱动 Prompt 调整 · 优化
 
 ---
 
-## 十一、Handoff 机制：人机协同决策
+## 九、Handoff 机制：人机协同决策
 
 当审查结果存在矛盾或高风险时，标记为 `HUMAN_REVIEW`，支持人工介入——**审查结论可追溯、可回溯**：
 
@@ -463,7 +386,7 @@ POST /handoff/{taskId}   → 提交人工决策 (APPROVE / REJECT / MODIFY + 意
 | 层 | 核心技术 |
 |----|---------|
 | **Frontend** | React 19 · Vite 8 · TypeScript · Zustand + Immer · TanStack React Query · Playwright · Vitest |
-| **Java (稳态编排)** | Spring Boot 3.2 · Spring Cloud Stream · Kafka · MyBatis-Plus · Redis (Redisson) · Tree-Sitter (JNI) · Outbox · Micrometer · JUC |
+| **Java (稳态编排)** | Spring Boot 3.2 · Spring Cloud Stream · Kafka · MyBatis-Plus · Redis (Redisson) · Tree-Sitter (JNI) · Outbox · Micrometer |
 | **Python (敏态计算)** | FastAPI · LangGraph · LangChain · ChromaDB · Elasticsearch · CodeBERT · NetworkX · javalang · cross-encoder Rerank |
 | **LLM** | Qwen-Plus (通义千问) · OpenAI 兼容接口 |
 | **Infrastructure** | Kafka · MySQL · Redis · MinIO · ChromaDB · Elasticsearch · Docker Compose |
@@ -510,14 +433,14 @@ curl http://localhost:8080/api/review/tasks/{taskId} -H "X-API-Key: dev-key"
 
 ```
 ├── frontend/          React SPA
-│   ├── src/pages/     提交页 · 任务看板 · 审查详情 · 业务风险分析
+│   ├── src/pages/     提交页 · 任务看板 · 审查详情
 │   ├── src/api/       API 客户端层
 │   ├── src/hooks/     自定义 Hooks (React Query / SSE / 轮询)
 │   ├── src/store/     Zustand 状态管理
 │   └── e2e/           Playwright E2E 测试
 │
 ├── backend/           Java 编排层 (Spring Boot)
-│   ├── controller/    REST API (审查/任务/反馈/分块/业务风险/SSE/Handoff)
+│   ├── controller/    REST API (审查/任务/反馈/分块/SSE/Handoff)
 │   ├── service/       业务编排 · 智能路由 · Outbox · 对账 · 事务管理
 │   ├── ast/           Tree-Sitter AST 解析 · 代码分块
 │   ├── client/        Python 计算节点 HTTP 客户端
@@ -528,8 +451,7 @@ curl http://localhost:8080/api/review/tasks/{taskId} -H "X-API-Key: dev-key"
 │   ├── graph/         LangGraph 管道 (builder/runner/state)
 │   │   └── nodes/     diff · classifier · impact · rag(前置) · rules
 │   │                  security · performance · scoring · report
-│   │                  semantic_hotspot · business_risk
-│   ├── domain/        领域层 (checkers / reviewers / business_risk / shared)
+│   ├── domain/        领域层 (checkers / reviewers / shared)
 │   ├── tools/         AST 解析 · 代码知识图谱 · 检测工具集
 │   ├── services/      RAG 检索 · BFF 客户端 · 文档加载 · 任务/Worker 管理
 │   ├── repositories/  ChromaDB · Elasticsearch · MySQL · 任务/结果持久化
@@ -549,7 +471,7 @@ curl http://localhost:8080/api/review/tasks/{taskId} -H "X-API-Key: dev-key"
 |------|-------------------|
 | Top-5 召回率 92% | 双路召回（ChromaDB 向量 + Elasticsearch BM25）→ RRF 融合（k=60）→ 可选 Rerank，较单路检索 +34pp |
 | 吞吐量 202 req/s | k6（200 并发 / 5min）；AST 解析前置 Java BFF，Python 无状态水平扩展，较串行 4.8× |
-| 多 Agent 延迟降低 ~40% | RAG 前置检索 + 3 Agent 并行（`ThreadPoolExecutor`）+ 动态 Agent 裁剪（`agent_selector`） |
+| 多 Agent 延迟降低 ~40% | RAG 前置检索 + 3 Agent 并行 + 动态 Agent 裁剪（`agent_selector`） |
 | Agent 输出合规率 99%+ | 差异化 system prompt + 正则全量兜底 |
 | 长文本超限率 30%→0 | 类/方法级聚合（AST 结构感知分块）+ tiktoken 精确预算 + `max_tokens` |
 | 单次成本 < ¥0.1 | 典型 diff（~5 文件 / ~300 行）~16K tokens，按 DeepSeek 计价 |
@@ -570,6 +492,6 @@ curl http://localhost:8080/api/review/tasks/{taskId} -H "X-API-Key: dev-key"
 ## 安全与配置补充
 
 - **API Key 认证**：外部 REST 接口统一 `X-API-Key` 校验
-- **内部回调隔离**：Python → Java 内部回调（Worker 心跳、业务风险回调）使用独立 `X-Worker-Token`
+- **内部回调隔离**：Python → Java 内部回调（Worker 心跳、RAG 导入回调）使用独立 `X-Worker-Token`
 - **TraceId 链路追踪**：`TraceIdFilter` 注入唯一 TraceId，贯穿 Java ↔ Python 全链路
 - 关键环境变量：`LLM_API_BASE` / `LLM_MODEL` / `EMBEDDING_MODEL` / `VECTOR_BACKEND` / `ELASTICSEARCH_URL` / `RRF_K` 等，详见 [`python/.env.example`](python/.env.example)
