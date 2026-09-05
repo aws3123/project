@@ -1,5 +1,0 @@
-select vdisk file="C:\Users\37928\AppData\Local\Docker\wsl\disk\docker_data.vhdx"
-attach vdisk readonly
-compact vdisk
-detach vdisk
-exit

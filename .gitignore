@@ -1,17 +1,60 @@
-# Python
+# ===== Python =====
 __pycache__/
 *.pyc
 *.pyo
 *.egg-info/
 .venv/
 venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+coverage/
+htmlcov/
 
-# JVM build output
+# ===== JVM 构建产物 =====
 target/
+*.class
+*.log
 
-# OS
+# ===== Node =====
+node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/.vite/
+*.local
+
+# ===== OS =====
 .DS_Store
 Thumbs.db
 
-# Node
-node_modules/
+# ===== IDE / 编辑器 =====
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ===== 环境变量 / 密钥 =====
+.env
+.env.*
+!.env.example
+
+# ===== 工具 / Agent 目录（不应入库）=====
+.qoder/
+.claude/
+.agents/
+.trae/
+.remember/
+docs/.remember/
+.playwright-mcp/
+docs/.playwright-mcp/
+
+# ===== 测试 / 临时产物 =====
+playwright-report/
+test-results/
+pytest_baseline.txt
+compact_vhdx.txt
+UTF8

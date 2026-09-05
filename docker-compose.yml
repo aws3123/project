@@ -46,7 +46,8 @@ services:
       ES_INDEX_NAME: incident_keywords
       # --- LLM / Embedding ---
       LLM_API_BASE: ${LLM_API_BASE:-https://dashscope.aliyuncs.com/compatible-mode/v1}
-      LLM_API_KEY: ${LLM_API_KEY:-sk-3b25bf58850f4a8eb4936b55ddc7e145}
+      # 密钥从宿主机环境注入，禁止在编排文件中硬编码明文
+      LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_MODEL: qwen-plus
       EMBEDDING_MODEL: microsoft/codebert-base
       # --- RAG 检索 ---
