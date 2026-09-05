@@ -34,8 +34,8 @@ import java.util.function.BiFunction;
 public abstract class AbstractReviewExecutionStrategy implements ReviewExecutionStrategy {
 
     private static final String TRACE_ID_KEY = "traceId";
-    private static final String MINIO_ENDPOINT_PLACEHOLDER = "http://localhost:9000";
-    private static final String MINIO_IMAGE_BUCKET = "incident-images";
+    protected static final String MINIO_ENDPOINT_PLACEHOLDER = "http://localhost:9000";
+    protected static final String MINIO_IMAGE_BUCKET = "incident-images";
 
     protected final ReviewTaskMapper taskRepo;
     protected final ReviewResultMapper resultRepo;

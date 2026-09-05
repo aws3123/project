@@ -3,17 +3,16 @@ from __future__ import annotations
 """Thread-safe in-memory implementation of the task repository protocol."""
 
 from threading import RLock
-from typing import Dict
 
 from repositories.base import TaskRepositoryProtocol
-from schemas.task import ReviewTask
+from schemas.domain.task import ReviewTask
 
 
 class InMemoryTaskRepository(TaskRepositoryProtocol):
     """Stores review tasks without external dependencies."""
 
     def __init__(self) -> None:
-        self._tasks: Dict[str, ReviewTask] = {}
+        self._tasks: dict[str, ReviewTask] = {}
         self._lock = RLock()
 
     def save(self, task: ReviewTask) -> ReviewTask:

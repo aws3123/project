@@ -150,6 +150,55 @@
   flex-wrap: wrap;
 }
 
+.review-progress {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+}
+
+.review-progress h4 {
+  margin: 0 0 var(--space-2);
+}
+
+.progress-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.progress-step {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: 0.875rem;
+}
+
+.progress-step .step-status {
+  color: var(--text-muted, #6b7280);
+  white-space: nowrap;
+}
+
+.progress-step.running .step-name::before {
+  content: '▶ ';
+}
+
+.progress-step.succeeded .step-name::before {
+  content: '✓ ';
+}
+
+.progress-step.failed .step-name {
+  color: #dc2626;
+}
+
+.progress-step.failed .step-name::before {
+  content: '✗ ';
+}
+
 .task-overview {
   display: grid;
   gap: var(--space-3);

@@ -28,7 +28,9 @@ class CallbackProducer:
     def _build_producer(self) -> AIOKafkaProducer:
         kwargs: dict[str, Any] = {
             "bootstrap_servers": self._settings.kafka_bootstrap_servers,
-            "value_serializer": lambda v: json.dumps(v, ensure_ascii=False).encode("utf-8"),
+            "value_serializer": lambda v: json.dumps(v, ensure_ascii=False).encode(
+                "utf-8"
+            ),
             "key_serializer": lambda v: str(v).encode("utf-8"),
             "acks": "all",
             "security_protocol": self._settings.kafka_security_protocol,
@@ -67,6 +69,7 @@ class CallbackProducer:
         result: dict[str, Any] | None = None,
         error_code: str | None = None,
         error_message: str | None = None,
+        usage: dict[str, Any] | None = None,
     ) -> None:
         if self._producer is None:
             raise RuntimeError("CallbackProducer not started")
@@ -79,6 +82,7 @@ class CallbackProducer:
             "result": result,
             "errorCode": error_code,
             "errorMessage": error_message,
+            "usage": usage,
         }
         await self._producer.send_and_wait(
             self._settings.kafka_review_callbacks_topic,

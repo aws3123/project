@@ -10,6 +10,7 @@
   把所有证据（违反、问题）整理成清单，附上相关判例（历史事故），
   最终形成判决书。
 """
+
 from __future__ import annotations
 
 from graph.state import GraphState, NodeContext
@@ -39,19 +40,23 @@ def verify_business_risks(state: GraphState, ctx: NodeContext) -> GraphState:
     # 整理风险项列表
     items = []
     # 不变量违反 → 高严重度（业务规则被破坏是最严重的）
-    for violation in violations.get("violations", []) if isinstance(violations, dict) else []:
+    for violation in (
+        violations.get("violations", []) if isinstance(violations, dict) else []
+    ):
         items.append(
             {
-                "type": "invariant_violation",    # 类型：不变量违反
+                "type": "invariant_violation",  # 类型：不变量违反
                 "severity": "high",
                 "evidence": violation,
             }
         )
     # 方法问题 → 中严重度（热点方法需要关注）
-    for issue in method_issues.get("issues", []) if isinstance(method_issues, dict) else []:
+    for issue in (
+        method_issues.get("issues", []) if isinstance(method_issues, dict) else []
+    ):
         items.append(
             {
-                "type": "hotspot",                 # 类型：热点方法
+                "type": "hotspot",  # 类型：热点方法
                 "severity": "medium",
                 "evidence": issue,
             }
@@ -61,19 +66,27 @@ def verify_business_risks(state: GraphState, ctx: NodeContext) -> GraphState:
     related_incidents = []
     for entry in (rag_context if isinstance(rag_context, list) else []):
         if entry.get("score", 0) > 0:
-            related_incidents.append({
-                "title": entry.get("title", "unknown"),
-                "snippet": entry.get("snippet", ""),
-                "score": entry.get("score", 0),
-                "source": entry.get("source", "unknown"),
-            })
+            related_incidents.append(
+                {
+                    "title": entry.get("title", "unknown"),
+                    "snippet": entry.get("snippet", ""),
+                    "score": entry.get("score", 0),
+                    "source": entry.get("source", "unknown"),
+                }
+            )
 
     # 将验证结果写入共享状态
     state["verified_risks"] = {
-        "items": items,                                                    # 风险项列表
-        "source_report_level": report.get("level", "LOW") if isinstance(report, dict) else "LOW",  # 原始报告等级
-        "need_human_review": report.get("need_human_review", False) if isinstance(report, dict) else False,  # 是否需要人工审查
-        "related_incidents": related_incidents[:5],                        # 关联历史事故（最多 5 个）
+        "items": items,  # 风险项列表
+        "source_report_level": (
+            report.get("level", "LOW") if isinstance(report, dict) else "LOW"
+        ),  # 原始报告等级
+        "need_human_review": (
+            report.get("need_human_review", False)
+            if isinstance(report, dict)
+            else False
+        ),  # 是否需要人工审查
+        "related_incidents": related_incidents[:5],  # 关联历史事故（最多 5 个）
         "status": "READY",
     }
     return state

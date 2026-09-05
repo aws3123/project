@@ -74,7 +74,7 @@ def test_no_hotspots_skips_llm_and_returns_ready():
     fake_llm.chat_structured.assert_not_called()
 
 
-from schemas.semantic_finding import SemanticFindingSchema
+from schemas.domain.semantic_finding import SemanticFindingSchema
 
 
 def _make_mock_llm(responses: list[dict]):

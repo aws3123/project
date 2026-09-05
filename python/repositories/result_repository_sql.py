@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import json
-
 from repositories.base import ResultRepositoryProtocol
 from repositories.db import get_session
+from repositories.mappers import result_to_model, result_to_schema
 from repositories.sqlalchemy_models import Base, ReviewResultModel
-from schemas.result import ReviewResult
+from schemas.api.result import ReviewResult
 
 
 class SQLResultRepository(ResultRepositoryProtocol):
@@ -20,11 +19,7 @@ class SQLResultRepository(ResultRepositoryProtocol):
     def save(self, result: ReviewResult) -> ReviewResult:
         session = self._session_factory()
         try:
-            model = ReviewResultModel(
-                task_id=result.taskId,
-                status=result.status.value,
-                payload=result.model_dump_json(),
-            )
+            model = result_to_model(result)
             session.merge(model)
             session.commit()
             return result
@@ -37,7 +32,6 @@ class SQLResultRepository(ResultRepositoryProtocol):
             model = session.get(ReviewResultModel, task_id)
             if not model:
                 return None
-            payload = json.loads(model.payload)
-            return ReviewResult(**payload)
+            return result_to_schema(model)
         finally:
             session.close()

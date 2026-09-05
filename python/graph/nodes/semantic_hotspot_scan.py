@@ -19,6 +19,7 @@
   Java 端 AST 预筛 = 体检中的"初筛"（指标异常的才需要复查）
   LLM 语义分析 = "专家复查"（针对初筛异常项深入分析）
 """
+
 from __future__ import annotations
 
 import logging
@@ -28,7 +29,7 @@ from typing import Any
 from config.settings import AppSettings
 from graph.state import GraphState, NodeContext
 from llm.client import LLMStructuredOutputError
-from schemas.semantic_finding import SemanticFindingSchema
+from schemas.domain.semantic_finding import SemanticFindingSchema
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +137,7 @@ def _scan_one(llm_client: Any, entry: dict[str, Any]) -> dict[str, Any] | None:
     parsed = llm_client.chat_structured(
         messages=messages,
         output_schema=SemanticFindingSchema,
-        temperature=0.1,       # 低温度：减少随机性，结果更稳定
+        temperature=0.1,  # 低温度：减少随机性，结果更稳定
         max_tokens=512,
     )
     if not parsed.get("has_risk"):
@@ -231,9 +232,9 @@ def scan_semantic_hotspots(state: GraphState, ctx: NodeContext) -> GraphState:
     else:
         status = "llm_failed"
     state["semantic_findings"] = {
-        "items": items,                     # 语义发现列表
-        "scanned_count": len(hotspots),     # 扫描的热点总数
-        "status": status,                   # 分析状态
+        "items": items,  # 语义发现列表
+        "scanned_count": len(hotspots),  # 扫描的热点总数
+        "status": status,  # 分析状态
         "reason": errors[-1] if errors else None,  # 最后一个错误信息（如有）
     }
     return state

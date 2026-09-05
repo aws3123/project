@@ -6,8 +6,8 @@ from unittest.mock import Mock
 
 from config.settings import AppSettings
 from repositories.result_repository import InMemoryResultRepository
-from schemas.enums import TaskStatus
-from schemas.result import Recommendation, ReviewResult, RiskBreakdown
+from schemas.api.result import Recommendation, ReviewResult, RiskBreakdown
+from schemas.domain.enums import TaskStatus
 from services.result_service import ResultService
 
 
@@ -28,7 +28,9 @@ def test_result_service_persist_report_to_minio(monkeypatch):
     mock_minio = Mock()
     mock_minio.bucket_exists.return_value = True
 
-    monkeypatch.setattr("services.result_service.get_minio_client", lambda settings=None: mock_minio)
+    monkeypatch.setattr(
+        "services.result_service.get_minio_client", lambda settings=None: mock_minio
+    )
     monkeypatch.setattr(
         "config.settings.AppSettings",
         lambda: AppSettings(

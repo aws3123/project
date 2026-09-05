@@ -2,47 +2,45 @@
 schemas 包初始化文件
 ======================
 
-作用：
-    把所有常用的数据模型集中暴露到包级别，方便外部直接导入。
+按分层拆分：
+- schemas/api/    对外契约（request / result / backend_contract）
+- schemas/domain/ 领域模型（enums / task / log / llm_output / semantic_finding / business_risk*）
 
-使用方式：
-    不用写：from schemas.request import ReviewRequest
-    可以写：from schemas import ReviewRequest
-
-    不用写：from schemas.enums import TaskStatus
-    可以写：from schemas import TaskStatus
-
-__all__ 的作用：
-    定义 "from schemas import *" 时会导入哪些名字。
-    同时也是一种"公开 API 声明"——只有列在 __all__ 中的才是对外暴露的。
+调用方应直接按模块导入（如 `from schemas.api.request import ReviewRequest`）。
+本文件仅为兼容保留，新代码无需经包级再导出。
 """
 
 # --- 枚举类型 ---
-from .enums import HandoffDecision, RAGStatus, ReviewMode, TaskStatus, Tier
+# --- 请求模型 ---
+from schemas.api.request import HandoffRequest, ReviewRequest
+
+# --- 结果模型 ---
+from schemas.api.result import BusinessRiskResult, ReviewResult, RiskBreakdown
 
 # --- 业务风险分析相关模型 ---
-from .business_risk import (
-    BusinessInvariant,       # 业务不变量定义
-    BusinessRiskItem,        # 业务风险条目
-    BusinessRiskReport,      # 业务风险报告
-    BusinessRiskRequest,     # 业务风险请求
-    BusinessRiskResponse,    # 业务风险响应
-    DataFlowPath,            # 数据流路径
-    InvariantViolation,      # 不变量违反
-    MethodIssue,             # 方法问题
+from schemas.domain.business_risk import (
+    BusinessInvariant,  # 业务不变量定义
+    BusinessRiskItem,  # 业务风险条目
+    BusinessRiskReport,  # 业务风险报告
+    BusinessRiskRequest,  # 业务风险请求
+    BusinessRiskResponse,  # 业务风险响应
+    DataFlowPath,  # 数据流路径
+    InvariantViolation,  # 不变量违反
+    MethodIssue,  # 方法问题
+)
+from schemas.domain.enums import (
+    HandoffDecision,
+    RAGStatus,
+    ReviewMode,
+    TaskStatus,
+    Tier,
 )
 
 # --- 日志模型 ---
-from .log import NodeLog     # 节点执行日志
-
-# --- 请求模型 ---
-from .request import HandoffRequest, ReviewRequest
-
-# --- 结果模型 ---
-from .result import BusinessRiskResult, ReviewResult, RiskBreakdown
+from schemas.domain.log import NodeLog  # 节点执行日志
 
 # --- 任务模型 ---
-from .task import ReviewTask
+from schemas.domain.task import ReviewTask
 
 # 公开 API 声明：只有列在这里的名字才能通过 "from schemas import *" 导入
 __all__ = [
@@ -64,46 +62,6 @@ __all__ = [
     # 日志
     "NodeLog",
     # 业务风险
-    "BusinessInvariant",
-    "DataFlowPath",
-    "InvariantViolation",
-    "MethodIssue",
-    "BusinessRiskItem",
-    "BusinessRiskReport",
-    "BusinessRiskRequest",
-    "BusinessRiskResponse",
-]
-"""Public exports for schema consumers."""
-
-from .enums import HandoffDecision, RAGStatus, ReviewMode, TaskStatus, Tier
-from .business_risk import (
-    BusinessInvariant,
-    BusinessRiskItem,
-    BusinessRiskReport,
-    BusinessRiskRequest,
-    BusinessRiskResponse,
-    DataFlowPath,
-    InvariantViolation,
-    MethodIssue,
-)
-from .log import NodeLog
-from .request import HandoffRequest, ReviewRequest
-from .result import BusinessRiskResult, ReviewResult, RiskBreakdown
-from .task import ReviewTask
-
-__all__ = [
-    "ReviewMode",
-    "TaskStatus",
-    "Tier",
-    "RAGStatus",
-    "HandoffDecision",
-    "ReviewRequest",
-    "HandoffRequest",
-    "ReviewResult",
-    "BusinessRiskResult",
-    "RiskBreakdown",
-    "ReviewTask",
-    "NodeLog",
     "BusinessInvariant",
     "DataFlowPath",
     "InvariantViolation",

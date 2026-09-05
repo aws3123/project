@@ -10,6 +10,7 @@ from openai import OpenAI
 from pydantic import BaseModel
 
 from config.settings import AppSettings
+from llm.metering import metered
 
 logger = logging.getLogger(__name__)
 
@@ -35,14 +36,22 @@ class LLMClient:
             max_retries=1,
         )
 
+    @metered
+    def _create_completion(self, **kwargs: Any) -> Any:
+        """LLM 调用唯一落点：所有公共方法都经此发起请求。
+
+        挂 @metered 切面，自动采集响应中的真实 token 用量（usage），
+        业务方法无需感知计量逻辑。
+        """
+        return self._client.chat.completions.create(model=self._model, **kwargs)
+
     def chat(
         self,
         messages: list[dict[str, str]],
         temperature: float = 0.2,
         max_tokens: int = 2048,
     ) -> str:
-        response = self._client.chat.completions.create(
-            model=self._model,
+        response = self._create_completion(
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,
@@ -60,8 +69,7 @@ class LLMClient:
         last_raw: str | None = None
         for attempt in range(max_retries + 1):
             try:
-                response = self._client.chat.completions.create(
-                    model=self._model,
+                response = self._create_completion(
                     messages=messages,
                     temperature=temperature,
                     max_tokens=max_tokens,
@@ -74,31 +82,49 @@ class LLMClient:
                 return validated.model_dump()
             except json.JSONDecodeError as e:
                 logger.warning(
-                    "LLM JSON parse failed attempt " + str(attempt + 1) + "/" + str(max_retries + 1) + ": " + str(e)
+                    "LLM JSON parse failed attempt "
+                    + str(attempt + 1)
+                    + "/"
+                    + str(max_retries + 1)
+                    + ": "
+                    + str(e)
                 )
                 if attempt < max_retries:
-                    messages.append({
-                        "role": "user",
-                        "content": "Output format error. Please output valid JSON matching the schema.",
-                    })
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": "Output format error. Please output valid JSON matching the schema.",
+                        }
+                    )
                 else:
                     raise LLMStructuredOutputError(
-                        "JSON parse failed after " + str(max_retries + 1) + " attempts", last_raw
+                        "JSON parse failed after " + str(max_retries + 1) + " attempts",
+                        last_raw,
                     ) from e
             except Exception as e:
                 if isinstance(e, LLMStructuredOutputError):
                     raise
                 logger.warning(
-                    "LLM structured output validation failed attempt " + str(attempt + 1) + "/" + str(max_retries + 1) + ": " + str(e)
+                    "LLM structured output validation failed attempt "
+                    + str(attempt + 1)
+                    + "/"
+                    + str(max_retries + 1)
+                    + ": "
+                    + str(e)
                 )
                 if attempt < max_retries:
-                    messages.append({
-                        "role": "user",
-                        "content": "Validation failed. Please fix and retry with correct schema.",
-                    })
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": "Validation failed. Please fix and retry with correct schema.",
+                        }
+                    )
                 else:
                     raise LLMStructuredOutputError(
-                        "Structured output validation failed after " + str(max_retries + 1) + " attempts", last_raw
+                        "Structured output validation failed after "
+                        + str(max_retries + 1)
+                        + " attempts",
+                        last_raw,
                     ) from e
 
         raise LLMStructuredOutputError("Unreachable", last_raw)

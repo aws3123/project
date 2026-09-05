@@ -9,11 +9,19 @@ Python 层是本项目的 **FastAPI 计算微服务**：负责接收 Java 网关
 
 ## 该目录包含什么
 
-- `app/`：FastAPI 入口、依赖装配、HTTP 路由
-- `graph/`：LangGraph runner、节点、并行执行与熔断
-- `services/`：AI service、任务/结果/日志服务、business-risk worker registry
-- `repositories/`：任务、结果、日志、向量检索等存储实现
-- `tools/`：规则检测、incident search、AST/图谱等工具
+- `app/`：装配层（FastAPI 入口、依赖装配、HTTP 路由）
+- `graph/`：纯编排引擎（LangGraph runner、节点薄适配器、并行执行与熔断）
+- `domain/`：领域层
+  - `checkers/`：静态检查器（安全/兼容/配置/测试覆盖）
+  - `reviewers/`：审查专家纯函数（security/performance/scoring/report/dedup/triviality/rag）
+  - `business_risk/`：业务风险 state/result 模型
+  - `shared/`：跨审查器共享逻辑（diff_extractor 等）
+- `services/`：service 层（AI service、任务/结果/日志服务、worker registry）
+- `repositories/`：持久层（任务、结果、日志、向量检索存储 + `mappers.py` ORM↔DTO 收口）
+- `schemas/`：数据模型
+  - `api/`：对外契约（request / result / backend_contract）
+  - `domain/`：领域模型（enums / task / log / llm_output / semantic_finding / business_risk*）
+- `tools/`：SPI（base/registry）与无状态纯工具（ast_parser/diff_analyzer/code_knowledge_graph/incident_search）
 - `tests/`：app / graph / services / repositories / tools / integration 测试
 
 ## 请求流
@@ -223,7 +231,7 @@ business-risk readiness 也会校验 `LLM_API_KEY`。
 优先检查：
 - `LLM_API_KEY` 是否配置
 - Java 心跳地址与 token 是否正确
-- worker 是否成功启动 `services/registry.py` 的 heartbeat loop
+- worker 是否成功启动 `services/worker_registry.py` 的 heartbeat loop
 
 ### 路由或 README 内容不一致
 

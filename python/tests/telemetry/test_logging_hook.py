@@ -1,6 +1,6 @@
 from unittest.mock import Mock
 
-from schemas.log import NodeLog
+from schemas.domain.log import NodeLog
 from telemetry.hooks import LoggingTelemetryHook
 
 

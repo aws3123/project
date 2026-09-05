@@ -9,7 +9,9 @@ from config.settings import AppSettings
 def test_check_vector_reaches_chromadb(monkeypatch):
     captured: dict[str, str] = {}
 
-    monkeypatch.setattr(health_router, "_run_sync_probe", lambda name, probe, settings: probe())
+    monkeypatch.setattr(
+        health_router, "_run_sync_probe", lambda name, probe, settings: probe()
+    )
 
     def _fake_bootstrap(settings=None):
         captured["path"] = settings.chroma_path
@@ -17,16 +19,16 @@ def test_check_vector_reaches_chromadb(monkeypatch):
 
     monkeypatch.setattr("repositories.chroma.bootstrap_chromadb", _fake_bootstrap)
 
-    result = health_router._check_vector(
-        AppSettings(chroma_path="D:/Chroma")
-    )
+    result = health_router._check_vector(AppSettings(chroma_path="D:/Chroma"))
 
     assert result.status == "UP"
     assert captured["path"] == "D:/Chroma"
 
 
 def test_check_vector_skips_when_not_configured(monkeypatch):
-    monkeypatch.setattr(health_router, "_run_sync_probe", lambda name, probe, settings: probe())
+    monkeypatch.setattr(
+        health_router, "_run_sync_probe", lambda name, probe, settings: probe()
+    )
 
     result = health_router._check_vector(AppSettings(chroma_path=""))
 

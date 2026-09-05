@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from repositories.task_repository import InMemoryTaskRepository
-from schemas.enums import HandoffDecision, ReviewMode, TaskStatus
-from schemas.request import ReviewRequest
+from schemas.api.request import ReviewRequest
+from schemas.domain.enums import HandoffDecision, ReviewMode, TaskStatus
 from services.task_service import TaskService
 
 

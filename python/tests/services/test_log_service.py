@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from unittest.mock import Mock
 
 from repositories.log_repository import InMemoryLogRepository
-from schemas.log import NodeLog
+from schemas.domain.log import NodeLog
 from services.log_service import LogService
 
 

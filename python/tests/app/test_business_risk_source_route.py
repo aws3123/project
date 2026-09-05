@@ -3,8 +3,8 @@ from fastapi.testclient import TestClient
 from app.dependencies import get_business_risk_service
 from app.main import app
 from app.routers import business_risk_source as source_router
-from schemas.business_risk_review import BusinessRiskReviewResult
-from schemas.result import BusinessRiskSourceReadinessStatus
+from schemas.api.result import BusinessRiskSourceReadinessStatus
+from schemas.domain.business_risk_review import BusinessRiskReviewResult
 
 client = TestClient(app)
 
@@ -57,7 +57,9 @@ def valid_payload() -> dict:
     }
 
 
-def completed_result(run_id: str, task_id: str, trace_id: str | None) -> BusinessRiskReviewResult:
+def completed_result(
+    run_id: str, task_id: str, trace_id: str | None
+) -> BusinessRiskReviewResult:
     return BusinessRiskReviewResult(
         run_id=run_id,
         task_id=task_id,
@@ -75,9 +77,15 @@ def completed_result(run_id: str, task_id: str, trace_id: str | None) -> Busines
 def up_readiness() -> BusinessRiskSourceReadinessStatus:
     return BusinessRiskSourceReadinessStatus(
         overall="UP",
-        route={"status": "UP", "detail": "business-risk-source readiness route registered"},
+        route={
+            "status": "UP",
+            "detail": "business-risk-source readiness route registered",
+        },
         config={"status": "UP", "detail": "llm_api_key configured"},
-        persistence={"status": "UP", "detail": "stateless worker does not require task persistence"},
+        persistence={
+            "status": "UP",
+            "detail": "stateless worker does not require task persistence",
+        },
         llm={"status": "UP", "detail": "llm_api_key configured"},
     )
 
@@ -87,7 +95,9 @@ def test_source_route_is_registered(monkeypatch) -> None:
         def run(self, request):
             return completed_result(request.run_id, request.task_id, request.trace_id)
 
-    monkeypatch.setattr(source_router, "get_business_risk_source_readiness", up_readiness)
+    monkeypatch.setattr(
+        source_router, "get_business_risk_source_readiness", up_readiness
+    )
     app.dependency_overrides[get_business_risk_service] = lambda: StubService()
     try:
         response = client.post("/ai/business-risk/source", json=valid_payload())
@@ -106,15 +116,23 @@ def test_source_route_rejects_diff_field() -> None:
     assert response.json()["detail"] == "diff field is not allowed"
 
 
-def test_source_route_returns_503_when_business_risk_readiness_is_down(monkeypatch) -> None:
+def test_source_route_returns_503_when_business_risk_readiness_is_down(
+    monkeypatch,
+) -> None:
     monkeypatch.setattr(
         source_router,
         "get_business_risk_source_readiness",
         lambda: BusinessRiskSourceReadinessStatus(
             overall="DOWN",
-            route={"status": "UP", "detail": "business-risk-source readiness route registered"},
+            route={
+                "status": "UP",
+                "detail": "business-risk-source readiness route registered",
+            },
             config={"status": "DOWN", "detail": "llm_api_key is required"},
-            persistence={"status": "UP", "detail": "stateless worker does not require task persistence"},
+            persistence={
+                "status": "UP",
+                "detail": "stateless worker does not require task persistence",
+            },
             llm={"status": "DOWN", "detail": "llm_api_key is required"},
         ),
     )
@@ -126,7 +144,10 @@ def test_source_route_returns_503_when_business_risk_readiness_is_down(monkeypat
     response = client.post("/ai/business-risk/source", json=payload)
 
     assert response.status_code == 503
-    assert response.json()["detail"] == "business-risk source is not ready: llm_api_key is required"
+    assert (
+        response.json()["detail"]
+        == "business-risk source is not ready: llm_api_key is required"
+    )
 
 
 def test_source_route_rejects_over_200_files() -> None:
@@ -158,7 +179,9 @@ def test_source_route_accepts_legacy_source_bundle_alias(monkeypatch) -> None:
         def run(self, request):
             return completed_result(request.run_id, request.task_id, request.trace_id)
 
-    monkeypatch.setattr(source_router, "get_business_risk_source_readiness", up_readiness)
+    monkeypatch.setattr(
+        source_router, "get_business_risk_source_readiness", up_readiness
+    )
     app.dependency_overrides[get_business_risk_service] = lambda: StubService()
     try:
         payload = valid_payload()
@@ -173,9 +196,13 @@ def test_source_route_accepts_legacy_source_bundle_alias(monkeypatch) -> None:
 def test_source_route_uses_request_trace_id_in_response(monkeypatch) -> None:
     class StubService:
         def run(self, request):
-            return completed_result(request.run_id, request.task_id, request.trace_id or "missing")
+            return completed_result(
+                request.run_id, request.task_id, request.trace_id or "missing"
+            )
 
-    monkeypatch.setattr(source_router, "get_business_risk_source_readiness", up_readiness)
+    monkeypatch.setattr(
+        source_router, "get_business_risk_source_readiness", up_readiness
+    )
     app.dependency_overrides[get_business_risk_service] = lambda: StubService()
     try:
         payload = valid_payload()
@@ -192,9 +219,13 @@ def test_source_route_uses_request_trace_id_in_response(monkeypatch) -> None:
 def test_source_route_falls_back_to_header_trace_id(monkeypatch) -> None:
     class StubService:
         def run(self, request):
-            return completed_result(request.run_id, request.task_id, request.trace_id or "missing")
+            return completed_result(
+                request.run_id, request.task_id, request.trace_id or "missing"
+            )
 
-    monkeypatch.setattr(source_router, "get_business_risk_source_readiness", up_readiness)
+    monkeypatch.setattr(
+        source_router, "get_business_risk_source_readiness", up_readiness
+    )
     app.dependency_overrides[get_business_risk_service] = lambda: StubService()
     try:
         payload = valid_payload()
@@ -217,15 +248,25 @@ def test_source_route_returns_failed_payload_when_service_raises(monkeypatch) ->
         def run(self, request):
             raise RuntimeError("network down password=super-secret-token")
 
-    monkeypatch.setattr(source_router, "get_business_risk_source_readiness", up_readiness)
+    monkeypatch.setattr(
+        source_router, "get_business_risk_source_readiness", up_readiness
+    )
     app.dependency_overrides[get_business_risk_service] = lambda: FailingService()
     try:
         payload = valid_payload()
         response = client.post("/ai/business-risk/source", json=payload)
         assert response.status_code == 200
         assert response.json()["status"] == "failed"
-        assert response.json()["proposed_memory_updates"]["code"] == "BUSINESS_RISK_SOURCE_FAILED"
-        assert "super-secret-token" not in response.json()["proposed_memory_updates"]["message"]
-        assert response.json()["proposed_memory_updates"]["message"].startswith("network down")
+        assert (
+            response.json()["proposed_memory_updates"]["code"]
+            == "BUSINESS_RISK_SOURCE_FAILED"
+        )
+        assert (
+            "super-secret-token"
+            not in response.json()["proposed_memory_updates"]["message"]
+        )
+        assert response.json()["proposed_memory_updates"]["message"].startswith(
+            "network down"
+        )
     finally:
         app.dependency_overrides.clear()

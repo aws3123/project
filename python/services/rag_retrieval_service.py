@@ -99,11 +99,11 @@ class RagRetrievalService:
             from llm.client import LLMClient
 
             llm = LLMClient(self.settings)
-            prompt = (
-                f"将以下问题改写为3个不同角度的检索查询（用于事故知识库搜索），每行一个：\n{nl_query}"
-            )
+            prompt = f"将以下问题改写为3个不同角度的检索查询（用于事故知识库搜索），每行一个：\n{nl_query}"
             response = llm.chat(prompt, max_tokens=200)
-            variants = [line.strip() for line in response.split("\n") if line.strip()][:3]
+            variants = [line.strip() for line in response.split("\n") if line.strip()][
+                :3
+            ]
             return [nl_query] + variants
         except Exception as e:
             logger.debug("Query rewrite failed, using original: %s", e)
@@ -114,9 +114,7 @@ class RagRetrievalService:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _build_enhanced_query(
-        nl_query: str, code_metadata: list[dict] | None
-    ) -> str:
+    def _build_enhanced_query(nl_query: str, code_metadata: list[dict] | None) -> str:
         """Append code entity names/signatures to NL query."""
         if not code_metadata:
             return nl_query
@@ -169,14 +167,15 @@ class RagRetrievalService:
         results: list[dict], code_metadata: list[dict]
     ) -> list[dict]:
         """Boost same-language results by 20% (non-hard filter)."""
-        target_langs = {
-            e.get("language") for e in code_metadata if e.get("language")
-        }
+        target_langs = {e.get("language") for e in code_metadata if e.get("language")}
         if not target_langs:
             return results
 
         for item in results:
-            if item.get("language") in target_langs or item.get("programming_language") in target_langs:
+            if (
+                item.get("language") in target_langs
+                or item.get("programming_language") in target_langs
+            ):
                 item["score"] = item.get("score", 0) * 1.2
 
         results.sort(key=lambda x: x.get("score", 0), reverse=True)
@@ -186,9 +185,7 @@ class RagRetrievalService:
     # Cross-Encoder rerank
     # ------------------------------------------------------------------
 
-    def _rerank(
-        self, results: list[dict], query: str, top_k: int
-    ) -> list[dict]:
+    def _rerank(self, results: list[dict], query: str, top_k: int) -> list[dict]:
         """Cross-Encoder reranking on top_k*3 candidates."""
         candidates = results[: top_k * 3]
 
@@ -198,7 +195,10 @@ class RagRetrievalService:
         try:
             reranker = self._get_reranker()
             pairs = [
-                (query, item.get("nl_description", "") + " " + item.get("code_content", ""))
+                (
+                    query,
+                    item.get("nl_description", "") + " " + item.get("code_content", ""),
+                )
                 for item in candidates
             ]
             scores = reranker.predict(pairs)

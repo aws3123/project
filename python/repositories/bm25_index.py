@@ -51,11 +51,11 @@ class BM25Index:
     # Persistence — no longer needed (ES handles it natively)
     # ------------------------------------------------------------------
 
-    def save(self, path: str) -> None:  # noqa: ARG002
+    def save(self, path: str) -> None:
         """No-op — Elasticsearch persists data automatically."""
         logger.debug("BM25Index.save() is a no-op with ES backend")
 
     @staticmethod
-    def load(path: str) -> BM25Index | None:  # noqa: ARG004
+    def load(path: str) -> BM25Index | None:
         """Return None — ES does not require manual loading."""
         return None

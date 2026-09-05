@@ -24,12 +24,12 @@ class AstChunk:
     file_path: str
     start_line: int
     end_line: int
-    chunk_type: str       # class / method / block / fallback
-    name: str              # entity name (e.g., "UserService" or "findByUsername")
+    chunk_type: str  # class / method / block / fallback
+    name: str  # entity name (e.g., "UserService" or "findByUsername")
     fully_qualified_name: str
-    signature: str         # e.g., "public User findByUsername(String username)"
+    signature: str  # e.g., "public User findByUsername(String username)"
     parent_class: str | None  # Parent class name if this is a method chunk
-    ast_status: str        # parsed / fallback / boundary_unclear
+    ast_status: str  # parsed / fallback / boundary_unclear
 
 
 class BffAstClient:
@@ -64,9 +64,13 @@ class BffAstClient:
                     return True
                 logger.warning("BFF health check: status=%s", status)
                 raise BffUnavailableError(f"BFF status is {status}")
-            raise BffUnavailableError(f"BFF health check returned HTTP {resp.status_code}")
+            raise BffUnavailableError(
+                f"BFF health check returned HTTP {resp.status_code}"
+            )
         except httpx.ConnectError as e:
-            raise BffUnavailableError(f"Cannot connect to BFF at {self.base_url}: {e}") from e
+            raise BffUnavailableError(
+                f"Cannot connect to BFF at {self.base_url}: {e}"
+            ) from e
         except httpx.TimeoutException as e:
             raise BffUnavailableError(f"BFF health check timed out: {e}") from e
 

@@ -20,5 +20,4 @@ class ToolContext:
 class Tool(Protocol):
     name: str
 
-    def run(self, payload: dict, context: ToolContext) -> ToolResult:
-        ...
+    def run(self, payload: dict, context: ToolContext) -> ToolResult: ...

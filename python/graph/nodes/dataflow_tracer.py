@@ -9,6 +9,7 @@
   就像追踪快递的运输路线——
   从发货（入口方法）到收货（最终调用），记录每一个中转站。
 """
+
 from __future__ import annotations
 
 from graph.state import GraphState, NodeContext
@@ -27,17 +28,23 @@ def trace_data_flow(state: GraphState, ctx: NodeContext) -> GraphState:
     返回:
         更新后的 state，新增了 data_flow_paths 字段
     """
-    source_package = state.get("source_package", {}) if isinstance(state.get("source_package", {}), dict) else {}
+    source_package = (
+        state.get("source_package", {})
+        if isinstance(state.get("source_package", {}), dict)
+        else {}
+    )
     files = source_package.get("files", []) if isinstance(source_package, dict) else []
 
-    traced_paths = []   # 有调用链的方法列表
-    entry_files = []    # 所有扫描过的文件路径（入口文件）
+    traced_paths = []  # 有调用链的方法列表
+    entry_files = []  # 所有扫描过的文件路径（入口文件）
     for source_file in files:
         if not isinstance(source_file, dict):
             continue
         path = source_file.get("path", "")
         entry_files.append(path)
-        methods = source_file.get("methods") or source_file.get("method_skeletons") or []
+        methods = (
+            source_file.get("methods") or source_file.get("method_skeletons") or []
+        )
         for method in methods:
             if not isinstance(method, dict):
                 continue
@@ -46,16 +53,16 @@ def trace_data_flow(state: GraphState, ctx: NodeContext) -> GraphState:
             if key_calls:
                 traced_paths.append(
                     {
-                        "path": path,                                      # 所在文件
-                        "signature": method.get("signature", "unknown"),   # 方法签名
-                        "calls": key_calls,                                 # 该方法的关键调用列表
+                        "path": path,  # 所在文件
+                        "signature": method.get("signature", "unknown"),  # 方法签名
+                        "calls": key_calls,  # 该方法的关键调用列表
                     }
                 )
 
     # 将数据流路径写入共享状态
     state["data_flow_paths"] = {
-        "paths": traced_paths,      # 有调用链的方法列表
-        "entry_files": entry_files, # 所有入口文件
+        "paths": traced_paths,  # 有调用链的方法列表
+        "entry_files": entry_files,  # 所有入口文件
         "status": "READY",
     }
     return state

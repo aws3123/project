@@ -70,7 +70,9 @@ def upsert_incident_rows(rows: list[dict], settings: AppSettings | None = None) 
     )
 
 
-def upsert_unified_chunks(chunks: list[dict], settings: AppSettings | None = None) -> None:
+def upsert_unified_chunks(
+    chunks: list[dict], settings: AppSettings | None = None
+) -> None:
     """Write unified chunks (NL + code + AST metadata) to ChromaDB.
 
     Each chunk dict must contain:
@@ -146,9 +148,7 @@ def _parse_image_json(raw: str | list) -> list:
         return []
 
 
-def _chroma_hit_to_result(
-    document: str, metadata: dict, distance: float
-) -> dict:
+def _chroma_hit_to_result(document: str, metadata: dict, distance: float) -> dict:
     """Build a unified result dict from a single ChromaDB query hit."""
     image_urls = _parse_image_json(metadata.get("image_urls", "[]"))
     image_texts = _parse_image_json(metadata.get("image_texts", "[]"))
@@ -174,8 +174,9 @@ def _chroma_hit_to_result(
     }
 
 
-
-def search_incidents_chromadb(query: str, top_k: int, settings: AppSettings | None = None) -> list[dict]:
+def search_incidents_chromadb(
+    query: str, top_k: int, settings: AppSettings | None = None
+) -> list[dict]:
     settings = settings or AppSettings()
     collection = get_incident_collection(settings)
     query_embedding = _fetch_query_embedding(query, settings)
@@ -190,7 +191,9 @@ def search_incidents_chromadb(query: str, top_k: int, settings: AppSettings | No
     distances = response.get("distances", [[]])[0]
 
     rows: list[dict] = []
-    for document, metadata, distance in zip(documents, metadatas, distances, strict=False):
+    for document, metadata, distance in zip(
+        documents, metadatas, distances, strict=False
+    ):
         rows.append(_chroma_hit_to_result(document, metadata, distance))
     return rows
 
@@ -217,6 +220,8 @@ def search_by_embedding(
     distances = response.get("distances", [[]])[0]
 
     rows: list[dict] = []
-    for document, metadata, distance in zip(documents, metadatas, distances, strict=False):
+    for document, metadata, distance in zip(
+        documents, metadatas, distances, strict=False
+    ):
         rows.append(_chroma_hit_to_result(document, metadata, distance))
     return rows

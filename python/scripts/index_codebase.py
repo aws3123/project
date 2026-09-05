@@ -25,10 +25,10 @@
 from __future__ import annotations
 
 import ast  # Python 的 AST 模块：把 Python 源码解析成树状结构
-import re  # 正则表达式库：用于模式匹配
-import sys
 import json
 import logging
+import re  # 正则表达式库：用于模式匹配
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -41,7 +41,9 @@ from config.settings import AppSettings
 from repositories.chroma import get_chroma_client
 from repositories.db import _fetch_query_embedding
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 # ── 代码根目录配置 ──
@@ -63,6 +65,7 @@ CODE_ROOTS = [
 # ============================================================
 # 代码块提取器（按语言分）
 # ============================================================
+
 
 def _extract_python_blocks(filepath: Path) -> list[dict]:
     """从 Python 文件中提取类和函数（使用 AST 精确解析）。
@@ -102,29 +105,33 @@ def _extract_python_blocks(filepath: Path) -> list[dict]:
             end = node.end_lineno or start
             # 从源码中提取这个函数的完整代码（从起始行到结束行）
             content = "\n".join(source_lines[start - 1 : end])
-            blocks.append({
-                "name": node.name,        # 函数名
-                "kind": "function",       # 类型：函数
-                "file": str(rel_path),    # 相对文件路径
-                "start_line": start,      # 起始行号
-                "end_line": end,          # 结束行号
-                "content": content,       # 代码文本
-                "language": "python",     # 语言
-            })
+            blocks.append(
+                {
+                    "name": node.name,  # 函数名
+                    "kind": "function",  # 类型：函数
+                    "file": str(rel_path),  # 相对文件路径
+                    "start_line": start,  # 起始行号
+                    "end_line": end,  # 结束行号
+                    "content": content,  # 代码文本
+                    "language": "python",  # 语言
+                }
+            )
         elif isinstance(node, ast.ClassDef):
             # 类定义
             start = node.lineno or 1
             end = node.end_lineno or start
             content = "\n".join(source_lines[start - 1 : end])
-            blocks.append({
-                "name": node.name,
-                "kind": "class",          # 类型：类
-                "file": str(rel_path),
-                "start_line": start,
-                "end_line": end,
-                "content": content,
-                "language": "python",
-            })
+            blocks.append(
+                {
+                    "name": node.name,
+                    "kind": "class",  # 类型：类
+                    "file": str(rel_path),
+                    "start_line": start,
+                    "end_line": end,
+                    "content": content,
+                    "language": "python",
+                }
+            )
 
     return blocks
 
@@ -150,7 +157,9 @@ def _extract_java_blocks(filepath: Path) -> list[dict]:
 
     # 编译正则表达式（预编译提高效率）
     # 匹配类/接口/枚举声明，如 "public class UserService {"
-    class_pat = re.compile(r"(?:public\s+)?(?:abstract\s+)?(?:class|interface|enum)\s+(\w+)")
+    class_pat = re.compile(
+        r"(?:public\s+)?(?:abstract\s+)?(?:class|interface|enum)\s+(\w+)"
+    )
     # 匹配方法声明，如 "public void doSomething(String arg) {"
     method_pat = re.compile(
         r"(?:public|private|protected|static|final|abstract|synchronized|default|\s)*\s+"
@@ -164,15 +173,17 @@ def _extract_java_blocks(filepath: Path) -> list[dict]:
         if cm and "{" in line:
             block_end = _find_block_end(lines, i)
             content = "\n".join(lines[i : block_end + 1])
-            blocks.append({
-                "name": cm.group(1),      # 类名
-                "kind": "class",
-                "file": str(rel_path),
-                "start_line": i + 1,      # 行号从 1 开始
-                "end_line": block_end + 1,
-                "content": content,
-                "language": "java",
-            })
+            blocks.append(
+                {
+                    "name": cm.group(1),  # 类名
+                    "kind": "class",
+                    "file": str(rel_path),
+                    "start_line": i + 1,  # 行号从 1 开始
+                    "end_line": block_end + 1,
+                    "content": content,
+                    "language": "java",
+                }
+            )
             continue  # 类声明行不再检查方法
 
         # 再尝试匹配方法声明
@@ -180,15 +191,17 @@ def _extract_java_blocks(filepath: Path) -> list[dict]:
         if mm and "{" in line:
             block_end = _find_block_end(lines, i)
             content = "\n".join(lines[i : block_end + 1])
-            blocks.append({
-                "name": mm.group(2),      # 方法名（第2个捕获组）
-                "kind": "method",
-                "file": str(rel_path),
-                "start_line": i + 1,
-                "end_line": block_end + 1,
-                "content": content,
-                "language": "java",
-            })
+            blocks.append(
+                {
+                    "name": mm.group(2),  # 方法名（第2个捕获组）
+                    "kind": "method",
+                    "file": str(rel_path),
+                    "start_line": i + 1,
+                    "end_line": block_end + 1,
+                    "content": content,
+                    "language": "java",
+                }
+            )
 
     return blocks
 
@@ -227,15 +240,17 @@ def _extract_ts_blocks(filepath: Path) -> list[dict]:
         if cm and "{" in line:
             block_end = _find_block_end(lines, i)
             content = "\n".join(lines[i : block_end + 1])
-            blocks.append({
-                "name": cm.group(1),
-                "kind": "class",
-                "file": str(rel_path),
-                "start_line": i + 1,
-                "end_line": block_end + 1,
-                "content": content,
-                "language": "typescript",
-            })
+            blocks.append(
+                {
+                    "name": cm.group(1),
+                    "kind": "class",
+                    "file": str(rel_path),
+                    "start_line": i + 1,
+                    "end_line": block_end + 1,
+                    "content": content,
+                    "language": "typescript",
+                }
+            )
             continue
 
         # 再检查 function 声明
@@ -244,15 +259,17 @@ def _extract_ts_blocks(filepath: Path) -> list[dict]:
             name = fm.group(1) or fm.group(2)  # 取匹配到的函数名
             block_end = _find_block_end(lines, i)
             content = "\n".join(lines[i : block_end + 1]) if block_end > i else line
-            blocks.append({
-                "name": name,
-                "kind": "function",
-                "file": str(rel_path),
-                "start_line": i + 1,
-                "end_line": block_end + 1,
-                "content": content,
-                "language": "typescript",
-            })
+            blocks.append(
+                {
+                    "name": name,
+                    "kind": "function",
+                    "file": str(rel_path),
+                    "start_line": i + 1,
+                    "end_line": block_end + 1,
+                    "content": content,
+                    "language": "typescript",
+                }
+            )
             continue
 
         # 最后检查箭头函数
@@ -260,15 +277,17 @@ def _extract_ts_blocks(filepath: Path) -> list[dict]:
         if am and "=>" in line:
             block_end = _find_block_end(lines, i)
             content = "\n".join(lines[i : block_end + 1]) if block_end > i else line
-            blocks.append({
-                "name": am.group(1),
-                "kind": "function",
-                "file": str(rel_path),
-                "start_line": i + 1,
-                "end_line": block_end + 1,
-                "content": content,
-                "language": "typescript",
-            })
+            blocks.append(
+                {
+                    "name": am.group(1),
+                    "kind": "function",
+                    "file": str(rel_path),
+                    "start_line": i + 1,
+                    "end_line": block_end + 1,
+                    "content": content,
+                    "language": "typescript",
+                }
+            )
 
     return blocks
 
@@ -303,6 +322,7 @@ def _find_block_end(lines: list[str], start: int, max_lookahead: int = 200) -> i
 # 主流程
 # ============================================================
 
+
 def collect_code_blocks() -> list[dict]:
     """扫描所有代码根目录，提取代码块。
 
@@ -319,7 +339,7 @@ def collect_code_blocks() -> list[dict]:
 
         # 根据语言选择对应的提取器和文件扩展名
         if lang == "python":
-            files = list(code_root.rglob("*.py"))       # rglob 递归搜索
+            files = list(code_root.rglob("*.py"))  # rglob 递归搜索
             extractor = _extract_python_blocks
         elif lang == "java":
             files = list(code_root.rglob("*.java"))
@@ -389,7 +409,9 @@ def index_codebase(settings: AppSettings | None = None) -> None:
         doc_text = block["content"]
         # 生成唯一 ID：文件路径:类型:名称:行号
         # 例如 "backend/src/main/java/com/acme/UserService.java:class:UserService:L10"
-        block_id = f"{block['file']}:{block['kind']}:{block['name']}:L{block['start_line']}"
+        block_id = (
+            f"{block['file']}:{block['kind']}:{block['name']}:L{block['start_line']}"
+        )
 
         try:
             # 调用嵌入模型把代码文本转成向量
@@ -401,14 +423,16 @@ def index_codebase(settings: AppSettings | None = None) -> None:
         ids.append(block_id)
         documents.append(doc_text)
         embeddings.append(embedding)
-        metadatas.append({
-            "name": block["name"],
-            "kind": block["kind"],
-            "file": block["file"],
-            "start_line": block["start_line"],
-            "end_line": block["end_line"],
-            "language": block["language"],
-        })
+        metadatas.append(
+            {
+                "name": block["name"],
+                "kind": block["kind"],
+                "file": block["file"],
+                "start_line": block["start_line"],
+                "end_line": block["end_line"],
+                "language": block["language"],
+            }
+        )
 
     if not ids:
         logger.warning("No blocks produced embeddings.")
@@ -438,8 +462,8 @@ def index_codebase(settings: AppSettings | None = None) -> None:
     )
 
     # 打印统计信息
-    by_lang: dict[str, int] = {}    # 按语言统计
-    by_kind: dict[str, int] = {}    # 按类型统计（class/function/method）
+    by_lang: dict[str, int] = {}  # 按语言统计
+    by_kind: dict[str, int] = {}  # 按类型统计（class/function/method）
     for m in metadatas:
         by_lang[m["language"]] = by_lang.get(m["language"], 0) + 1
         by_kind[m["kind"]] = by_kind.get(m["kind"], 0) + 1

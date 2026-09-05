@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from schemas.log import NodeLog
-from schemas.result import ReviewResult
-from schemas.task import ReviewTask
+from schemas.api.result import ReviewResult
+from schemas.domain.log import NodeLog
+from schemas.domain.task import ReviewTask
 
 
 class TaskRepositoryProtocol(Protocol):

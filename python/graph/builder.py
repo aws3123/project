@@ -17,19 +17,24 @@
 
 最终产出的 GraphRunner 就是真正执行审查的"流水线机器"。
 """
+
 from __future__ import annotations  # 延迟类型注解，避免循环导入
 
 from collections.abc import Callable  # Callable = 可调用对象的类型提示（函数、方法等）
-from dataclasses import dataclass     # 自动生成 __init__ 等样板代码
+from dataclasses import dataclass  # 自动生成 __init__ 等样板代码
 from typing import TYPE_CHECKING, Any
 
-from graph.circuit_breaker import CircuitBreaker      # 熔断器：某个 Agent 连续失败时自动跳过
-from graph.state import GraphState, NodeContext        # 流水线共享状态 & 节点上下文
-from graph.runner import GraphRunner, RunnerConfig     # 实际执行流水线的运行器
-from services.checkpoint_service import CheckpointService  # 断点续传服务（任务中断后可恢复）
-from services.log_service import LogService            # 日志服务（记录每个节点的输入输出）
-from services.task_service import TaskService          # 任务状态管理服务
-from telemetry.hooks import TelemetryHook              # 遥测钩子（监控指标采集）
+from graph.circuit_breaker import (
+    CircuitBreaker,  # 熔断器：某个 Agent 连续失败时自动跳过
+)
+from graph.runner import GraphRunner, RunnerConfig  # 实际执行流水线的运行器
+from graph.state import GraphState, NodeContext  # 流水线共享状态 & 节点上下文
+from services.checkpoint_service import (
+    CheckpointService,  # 断点续传服务（任务中断后可恢复）
+)
+from services.log_service import LogService  # 日志服务（记录每个节点的输入输出）
+from services.task_service import TaskService  # 任务状态管理服务
+from telemetry.hooks import TelemetryHook  # 遥测钩子（监控指标采集）
 
 if TYPE_CHECKING:
     from tools.registry import ToolRegistry  # 工具注册表（仅在类型检查时导入）
@@ -47,13 +52,16 @@ class BuilderConfig:
 
     类比：就像开餐厅前准备的"设备清单"——厨房工具、服务员、收银机全在这里。
     """
-    registry: ToolRegistry                  # 工具注册表：节点通过它调用 diff_analyzer 等工具
-    log_service: LogService                 # 日志服务：记录每个节点的执行日志
-    telemetry: TelemetryHook                # 遥测钩子：采集执行耗时等监控指标
-    task_service: TaskService | None        # 任务服务：更新任务状态（可选）
-    llm_client: Any | None = None           # LLM 客户端：调用大模型（可选，没有则走纯规则路径）
-    circuit_breaker: CircuitBreaker | None = None       # 熔断器（可选，默认不启用）
-    agent_selector: Callable[[GraphState], list[tuple[str, NodeFn]]] | None = None  # Agent 选择器（动态决定跑哪些 Agent）
+
+    registry: ToolRegistry  # 工具注册表：节点通过它调用 diff_analyzer 等工具
+    log_service: LogService  # 日志服务：记录每个节点的执行日志
+    telemetry: TelemetryHook  # 遥测钩子：采集执行耗时等监控指标
+    task_service: TaskService | None  # 任务服务：更新任务状态（可选）
+    llm_client: Any | None = None  # LLM 客户端：调用大模型（可选，没有则走纯规则路径）
+    circuit_breaker: CircuitBreaker | None = None  # 熔断器（可选，默认不启用）
+    agent_selector: Callable[[GraphState], list[tuple[str, NodeFn]]] | None = (
+        None  # Agent 选择器（动态决定跑哪些 Agent）
+    )
     checkpoint_service: CheckpointService | None = None  # 断点续传服务（可选）
 
 
@@ -88,7 +96,14 @@ class GraphBuilder:
     ) -> None:
         # 将所有依赖打包存入 _config，后续 build() 时一次性取出
         self._config = BuilderConfig(
-            registry, log_service, telemetry, task_service, llm_client, circuit_breaker, agent_selector, checkpoint_service,
+            registry,
+            log_service,
+            telemetry,
+            task_service,
+            llm_client,
+            circuit_breaker,
+            agent_selector,
+            checkpoint_service,
         )
         # _phases 是有序的"阶段列表"，每个阶段是一个节点列表
         # 单节点列表 = 顺序执行，多节点列表 = 并行执行
@@ -125,7 +140,9 @@ class GraphBuilder:
         就像一条没有任何工位的流水线，没有意义。
         """
         if not self._phases:
-            raise ValueError("GraphBuilder requires at least one phase to build a runner")
+            raise ValueError(
+                "GraphBuilder requires at least one phase to build a runner"
+            )
         # 将 BuilderConfig 转换为 RunnerConfig（运行器需要的配置格式）
         config = RunnerConfig(
             registry=self._config.registry,
@@ -133,7 +150,8 @@ class GraphBuilder:
             telemetry=self._config.telemetry,
             task_service=self._config.task_service,
             llm_client=self._config.llm_client,
-            circuit_breaker=self._config.circuit_breaker or CircuitBreaker(),  # 没提供则用默认熔断器
+            circuit_breaker=self._config.circuit_breaker
+            or CircuitBreaker(),  # 没提供则用默认熔断器
             agent_selector=self._config.agent_selector,
             checkpoint_service=self._config.checkpoint_service,
         )
