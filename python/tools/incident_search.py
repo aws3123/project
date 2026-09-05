@@ -48,6 +48,13 @@ class IncidentSearchTool(Tool):
 
     # 工具的唯一标识符
     name = "incident_search"
+    description = (
+        "从历史事故库（ChromaDB）检索与当前变更相关的过往事故，用于佐证风险。"
+        "入参 classification(含 layers 标签列表)；返回相似历史事故(findings)。"
+    )
+    parameters = {
+        "classification": "dict，含 layers(list[str]) 变更涉及的技术层标签（如 database/cache/mq）",
+    }
 
     def run(self, payload: dict, context: ToolContext) -> ToolResult:
         """执行事故搜索。

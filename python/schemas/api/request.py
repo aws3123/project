@@ -92,6 +92,8 @@ class ReviewRequest(BaseModel):
     entities: list[dict[str, Any]] | None = None
     # 实体之间的关系（比如"方法 A 调用了方法 B"）
     relations: list[dict[str, Any]] | None = None
+    # ReAct 开关：为 True 时，关键 LLM 节点进入自主调工具取证模式（默认关）
+    react: bool = False
 
     # Pydantic 模型配置
     model_config = {
@@ -154,6 +156,7 @@ class ReviewRequest(BaseModel):
     user_feedback_signals: dict[str, Any] = Field(default_factory=dict)
     entities: list[dict[str, Any]] | None = None
     relations: list[dict[str, Any]] | None = None
+    react: bool = False
 
     model_config = {
         "populate_by_name": True,

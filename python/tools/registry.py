@@ -20,10 +20,24 @@ class ToolRegistry:
     def register(self, tool: Tool) -> None:
         self._registry[tool.name] = tool
 
+    def has(self, name: str) -> bool:
+        return name in self._registry
+
     def run(self, name: str, payload: dict, context: ToolContext) -> ToolResult:
         if name not in self._registry:
             raise KeyError(f"Tool '{name}' not registered")
         return self._registry[name].run(payload, context)
+
+    def describe(self) -> list[dict]:
+        """返回每个已注册工具的名称与元数据（供 ReAct 等自主决策使用）。"""
+        return [
+            {
+                "name": t.name,
+                "description": getattr(t, "description", "") or "",
+                "parameters": getattr(t, "parameters", None),
+            }
+            for t in self._registry.values()
+        ]
 
 
 def build_default_registry() -> ToolRegistry:
