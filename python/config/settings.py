@@ -187,6 +187,30 @@ class AppSettings(BaseSettings):
     rag_max_tokens: int = 2000
 
     # -------------------------------------------------------------------------
+    # PDF 切分 / 图块 / 多模态视觉（VL）配置
+    # -------------------------------------------------------------------------
+    # 类图多模态模型。qwen-vl-max 支持图片输入，用于理解类图/架构图结构
+    vlm_model: str = "qwen-vl-max"
+    # 整页渲染分辨率（DPI）。图内文字密集时可调高（200-300），成本随之上升
+    pdf_render_dpi: int = 200
+    # 内嵌位图面积阈值（像素平方），小于此值的视为装饰性小图，忽略
+    pdf_figure_min_area: int = 6000
+    # 超大 PDF 拦截：仅处理前 N 页的图块，防止资源失控
+    pdf_figure_max_pages: int = 60
+    # VL 总开关：置 False 时永不触发多模态视觉，纯 OCR 降级
+    image_vl_fallback_enabled: bool = True
+    # 单次 VL 视觉请求超时（秒）
+    image_vlm_timeout: float = 90.0
+    # ES 写入门：置 False 时跳过 Elasticsearch，仅写入 ChromaDB
+    es_enabled: bool = True
+
+    # -------------------------------------------------------------------------
+    # 前端反馈记录批量入库配置
+    # -------------------------------------------------------------------------
+    # 反馈导出文件目录（后端 GET /api/feedback/export-file 生成的 JSONL 所在目录）
+    feedback_export_dir: str = "D:/FeedbackExport"
+
+    # -------------------------------------------------------------------------
     # BFF（Backend For Frontend）AST 解析配置
     # -------------------------------------------------------------------------
     # BFF 是 Java 后端服务的地址。Python 需要调用 Java 端来解析代码的 AST
@@ -231,9 +255,10 @@ class AppSettings(BaseSettings):
     # 遥测（Telemetry）配置
     # -------------------------------------------------------------------------
     # 遥测就是收集系统运行的指标数据（耗时、成功率等）。
-    # "logging" → 把遥测数据写到日志里
-    # "noop"    → 不收集（noop = no operation，空操作）
-    telemetry_backend: Literal["logging", "noop"] = "logging"
+    # "logging"    → 把遥测数据写到日志里
+    # "prometheus" → 同时写日志 + 输出 Prometheus 指标（/metrics 端点采集）
+    # "noop"       → 不收集（noop = no operation，空操作）
+    telemetry_backend: Literal["logging", "prometheus", "noop"] = "logging"
 
     # -------------------------------------------------------------------------
     # 语义热点扫描配置
