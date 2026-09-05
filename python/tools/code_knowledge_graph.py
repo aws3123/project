@@ -23,6 +23,15 @@ VISIBILITY_WEIGHT = {
 
 class CodeKnowledgeGraphTool(Tool):
     name = "code_knowledge_graph"
+    description = (
+        "构建/查询代码知识图谱，计算变更的影响范围。入参 entities(实体列表)、"
+        "relations(实体关系列表)、changed_files(变更文件路径列表)；返回依赖图与受影响的文件/节点。"
+    )
+    parameters = {
+        "entities": "list[dict]，代码实体（含 fully_qualified_name / file_path / kind）",
+        "relations": "list[dict]，实体关系（source / target / relation_type）",
+        "changed_files": "list[str]，本次变更的文件路径",
+    }
 
     def run(self, payload: dict, context: ToolContext | None = None) -> ToolResult:
         entities = payload.get("entities", [])

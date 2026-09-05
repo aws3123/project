@@ -43,6 +43,7 @@ class BackendSyncRequest(BaseModel):
     taskId: UUID | None = None
     entities: list[dict] | None = None
     relations: list[dict] | None = None
+    react: bool = False
 
     def to_review_request(self, trace_id: str) -> ReviewRequest:
         kwargs: dict = dict(
@@ -62,6 +63,7 @@ class BackendSyncRequest(BaseModel):
             traceId=trace_id,
             entities=self.entities,
             relations=self.relations,
+            react=self.react,
         )
         if self.taskId is not None:
             kwargs["taskId"] = self.taskId

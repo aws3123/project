@@ -177,6 +177,14 @@ class ASTParserTool(Tool):
 
     # 工具的唯一标识符
     name = "ast_parser"
+    description = (
+        "解析代码片段或文件列表的抽象语法树，提取类/方法/字段等实体及调用关系。"
+        "入参 files(含 path/diff/full_content) 或 code+language；返回实体与关系。"
+    )
+    parameters = {
+        "files": "list[dict]，每个含 path、diff、full_content",
+        "code": "str，可选单段源码；language: python/java/sql",
+    }
 
     def run(self, payload: dict, context: ToolContext | None = None) -> ToolResult:
         """执行 AST 解析。

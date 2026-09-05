@@ -56,16 +56,49 @@ def analyze_performance(state: GraphState, ctx: NodeContext) -> GraphState:
         )
         return state
 
-    # ── 第三步：LLM 审计（可选增强）────────────────────────────────
-    messages = build_audit_messages(diff_snippet, method_names)
+    # ── 第三步：LLM 审计（可选增强；react=True 时进入自主取证模式）────
+    react_mode = bool((state.get("request") or {}).get("react"))
     llm_status = "success"
     llm_findings: list[dict] = []
-    try:
-        result = ctx.llm_client.chat(messages=messages, max_tokens=1024)
-        llm_findings = parse_llm_response(result)
-    except Exception:
-        llm_findings = []  # LLM 失败时降级：保留确定性扫描结果
-        llm_status = "llm_failed"
+
+    if react_mode:
+        from services.react_agent import ReActAgent
+
+        system_prompt = (
+            "你是性能审计专家。审阅变更代码，判断是否存在 N+1 查询、循环内 IO、"
+            "大事务、无分页、死锁/竞态等性能问题。可调用工具补充取证。"
+            "最终必须输出合法 JSON："
+            '{"findings":[{"severity":"HIGH/MEDIUM/LOW/INFO","title":"...","detail":"...",'
+            '"file":"...","line":0,"evidence":"...","suggestion":"...","confidence":0.x}]}'
+        )
+        user_content = (
+            f"代码片段：\n{diff_snippet}\n\n"
+            f"变更分类：{state.get('classification')}\n"
+            f"影响范围：{state.get('impact_radius')}"
+        )
+        agent = ReActAgent(
+            ctx.llm_client,
+            ctx.registry,
+            ctx.task_id,
+            allowed_tools=["code_knowledge_graph", "incident_search", "ast_parser"],
+            node_name="performance",
+        )
+        try:
+            result, tool_trace = agent.run(system_prompt, user_content, max_tokens=1024)
+            llm_findings = parse_llm_response(result)
+            if tool_trace:
+                state.setdefault("tool_logs", []).extend(tool_trace)
+        except Exception:
+            llm_findings = []  # 回退：保留确定性扫描结果
+            llm_status = "react_failed"
+    else:
+        messages = build_audit_messages(diff_snippet, method_names)
+        try:
+            result = ctx.llm_client.chat(messages=messages, max_tokens=1024)
+            llm_findings = parse_llm_response(result)
+        except Exception:
+            llm_findings = []  # LLM 失败时降级：保留确定性扫描结果
+            llm_status = "llm_failed"
 
     # ── 第四步：合并去重 ────────────────────────────────────────────
     merged, llm_new_count = merge_findings(

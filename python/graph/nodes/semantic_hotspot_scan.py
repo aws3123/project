@@ -126,21 +126,50 @@ def _severity_downgrade(severity: str) -> str:
     return {"high": "medium", "medium": "low"}.get(severity, severity)
 
 
-def _scan_one(llm_client: Any, entry: dict[str, Any]) -> dict[str, Any] | None:
+def _scan_one(
+    llm_client: Any,
+    entry: dict[str, Any],
+    react: bool = False,
+    registry: Any = None,
+    task_id: str = "",
+    tool_traces: list[dict] | None = None,
+) -> dict[str, Any] | None:
     """对单个热点执行 LLM 语义分析。
 
     调用 LLM 判断热点是否存在业务风险，返回标准化的发现字典。
     如果 LLM 判断 has_risk=false，返回 None（表示无风险）。
+    react=True 时改用 ReAct 循环，允许模型自主调用代码图谱工具取证。
     """
     messages = _build_messages(entry)
-    # 调用 LLM 结构化输出
-    parsed = llm_client.chat_structured(
-        messages=messages,
-        output_schema=SemanticFindingSchema,
-        temperature=0.1,  # 低温度：减少随机性，结果更稳定
-        max_tokens=512,
-    )
-    if not parsed.get("has_risk"):
+    if react and registry is not None:
+        from services.react_agent import ReActAgent
+
+        agent = ReActAgent(
+            llm_client,
+            registry,
+            task_id,
+            allowed_tools=["code_knowledge_graph"],
+            node_name="semantic_hotspot_scan",
+            max_steps=4,
+        )
+        # messages[0]=system，messages[1]=user；ReActAgent 会在 system 后拼工具清单
+        parsed, trace = agent.run(
+            messages[0]["content"],
+            messages[1]["content"],
+            output_schema=SemanticFindingSchema,
+            temperature=0.1,
+            max_tokens=512,
+        )
+        if tool_traces is not None and trace:
+            tool_traces.extend(trace)
+    else:
+        parsed = llm_client.chat_structured(
+            messages=messages,
+            output_schema=SemanticFindingSchema,
+            temperature=0.1,  # 低温度：减少随机性，结果更稳定
+            max_tokens=512,
+        )
+    if not parsed or not parsed.get("has_risk"):
         return None  # LLM 判断无业务风险
     hotspot = entry["hotspot"]
     severity = parsed.get("severity") or "low"
@@ -210,12 +239,23 @@ def scan_semantic_hotspots(state: GraphState, ctx: NodeContext) -> GraphState:
         return state
 
     # 线程池并行分析所有热点
+    react_mode = bool((state.get("request") or {}).get("react"))
     items: list[dict[str, Any]] = []
     errors: list[str] = []
+    tool_traces: list[dict] = []
     max_workers = min(SETTINGS.semantic_hotspot_concurrency, len(hotspots))
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         future_to_entry = {
-            pool.submit(_scan_one, ctx.llm_client, entry): entry for entry in hotspots
+            pool.submit(
+                _scan_one,
+                ctx.llm_client,
+                entry,
+                react_mode,
+                ctx.registry,
+                ctx.task_id,
+                tool_traces,
+            ): entry
+            for entry in hotspots
         }
         for future in as_completed(future_to_entry):
             try:
@@ -225,6 +265,9 @@ def scan_semantic_hotspots(state: GraphState, ctx: NodeContext) -> GraphState:
             except (LLMStructuredOutputError, Exception) as exc:
                 logger.warning("semantic_hotspot_scan failed for one hotspot: %s", exc)
                 errors.append(str(exc)[:200])
+
+    if tool_traces:
+        state.setdefault("tool_logs", []).extend(tool_traces)
 
     # 判断状态：有结果或没有错误 → READY，全部失败 → llm_failed
     if items or not errors:
