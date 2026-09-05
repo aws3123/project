@@ -15,6 +15,11 @@ spring:
           contentType: application/json
           producer:
             partition-key-expression: payload.taskId
+        feedbackEvent-out-0:
+          destination: ${MQ_FEEDBACK_TOPIC:${FEEDBACK_TOPIC:ai.feedback.events}}
+          contentType: application/json
+          producer:
+            partition-key-expression: payload.taskId
         reviewCallbackIn-in-0:
           destination: ${MQ_CALLBACK_TOPIC:${REVIEW_CALLBACK_TOPIC:ai.review.callbacks}}
           group: ${MQ_CALLBACK_GROUP:java-orchestrator-callback}
@@ -23,7 +28,19 @@ spring:
             back-off-initial-interval: 2000
             back-off-max-interval: 10000
             back-off-multiplier: 2.0
+        feedbackEventIn-in-0:
+          destination: ${MQ_FEEDBACK_TOPIC:${FEEDBACK_TOPIC:ai.feedback.events}}
+          group: ${MQ_FEEDBACK_GROUP:java-feedback-analyzer}
+          consumer:
+            max-attempts: 3
+            back-off-initial-interval: 2000
+            back-off-max-interval: 10000
+            back-off-multiplier: 2.0
       kafka:
+        binder:
+          metrics:
+            # 暴露 Kafka 消费者 Lag / 消息速率等指标到 Micrometer（Prometheus 可采集）
+            enabled: true
         bindings:
           reviewCallbackIn-in-0:
             consumer:
@@ -32,8 +49,15 @@ spring:
               dlqProducerProperties:
                 configuration:
                   key.serializer: org.apache.kafka.common.serialization.StringSerializer
+          feedbackEventIn-in-0:
+            consumer:
+              enableDlq: true
+              dlqName: ${MQ_FEEDBACK_TOPIC:ai.feedback.events}-dlq
+              dlqProducerProperties:
+                configuration:
+                  key.serializer: org.apache.kafka.common.serialization.StringSerializer
     function:
-      definition: reviewCallbackIn
+      definition: reviewCallbackIn;feedbackEventIn
 
 rate-limit:
   enabled: ${RATE_LIMIT_ENABLED:true}
@@ -143,7 +167,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       show-details: always
@@ -154,7 +178,13 @@ management:
           include: livenessState
         readiness:
           include: readinessState,python,redisPing,mq
+  metrics:
+    tags:
+      application: ${spring.application.name}
 
 logging:
   pattern:
     level: "%5p [%X{traceId:-}]"
+
+feedback:
+  export-dir: ${FEEDBACK_EXPORT_DIR:D:/FeedbackExport}

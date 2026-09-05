@@ -234,4 +234,94 @@ export const handlers = [
       { status: 201 },
     )
   }),
+
+  http.get('/api/feedback/stats', ({ request }) => {
+    const url = new URL(request.url)
+    const source = url.searchParams.get('source')
+
+    if (source === 'business_risk') {
+      return HttpResponse.json({
+        total: 4,
+        thumbs_up: 1,
+        thumbs_down: 3,
+        ratio: '0.25',
+        daily_breakdown: [
+          { date: '2026-09-04', thumbs_up: 1, thumbs_down: 2 },
+          { date: '2026-09-05', thumbs_up: 0, thumbs_down: 1 },
+        ],
+      })
+    }
+
+    return HttpResponse.json({
+      total: 8,
+      thumbs_up: 6,
+      thumbs_down: 2,
+      ratio: '0.75',
+      daily_breakdown: [
+        { date: '2026-09-04', thumbs_up: 3, thumbs_down: 1 },
+        { date: '2026-09-05', thumbs_up: 3, thumbs_down: 1 },
+      ],
+    })
+  }),
+
+  http.get('/api/feedback/export', ({ request }) => {
+    const url = new URL(request.url)
+    const source = url.searchParams.get('source')
+    const page = Number(url.searchParams.get('page') ?? '1')
+    const filterSource = source ?? undefined
+
+    const allRecords = [
+      {
+        id: 1,
+        taskId: 'task-down-1',
+        sessionId: 'session-1',
+        feedbackType: 'thumbs_down',
+        category: '误报',
+        comment: '这条不是风险，标错了',
+        metadata: null,
+        userAgent: null,
+        source: 'review',
+        traceId: 'trace-111',
+        createdAt: '2026-09-04T10:00:00Z',
+      },
+      {
+        id: 2,
+        taskId: 'task-up-1',
+        sessionId: 'session-2',
+        feedbackType: 'thumbs_up',
+        category: '结果准确',
+        comment: null,
+        metadata: null,
+        userAgent: null,
+        source: 'review',
+        traceId: 'trace-222',
+        createdAt: '2026-09-05T09:00:00Z',
+      },
+      {
+        id: 3,
+        taskId: 'task-biz-down',
+        sessionId: 'session-3',
+        feedbackType: 'thumbs_down',
+        category: '遗漏风险',
+        comment: '漏了一个空指针',
+        metadata: null,
+        userAgent: null,
+        source: 'business_risk',
+        traceId: 'trace-333',
+        createdAt: '2026-09-05T11:00:00Z',
+      },
+    ].filter((r) => !filterSource || r.source === filterSource)
+
+    const size = Number(url.searchParams.get('size') ?? '10')
+    const start = (page - 1) * size
+    const records = allRecords.slice(start, start + size)
+
+    return HttpResponse.json({
+      records,
+      total: allRecords.length,
+      size,
+      current: page,
+      pages: Math.max(1, Math.ceil(allRecords.length / size)),
+    })
+  }),
 ]

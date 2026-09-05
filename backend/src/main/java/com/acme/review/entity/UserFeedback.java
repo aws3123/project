@@ -42,6 +42,9 @@ public class UserFeedback {
     @TableField("source")
     private String source;
 
+    @TableField("trace_id")
+    private String traceId;
+
     @TableField(value = "created_at", fill = FieldFill.INSERT)
     private Instant createdAt;
 }

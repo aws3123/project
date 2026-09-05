@@ -120,11 +120,16 @@ CREATE TABLE IF NOT EXISTS user_feedback (
     metadata JSON DEFAULT NULL COMMENT '检索文档、相关度分数、系统回答等',
     user_agent VARCHAR(256) DEFAULT NULL,
     source VARCHAR(32) DEFAULT 'review' COMMENT 'review|business_risk',
+    trace_id VARCHAR(64) DEFAULT NULL COMMENT '链路追踪 ID, 关联 MDC 日志',
     created_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     INDEX idx_feedback_task (task_id),
     INDEX idx_feedback_session (session_id),
-    INDEX idx_feedback_type_created (feedback_type, created_at)
+    INDEX idx_feedback_type_created (feedback_type, created_at),
+    INDEX idx_feedback_trace (trace_id)
 );
+
+-- 存量环境升级: user_feedback 增加 trace_id 列
+-- ALTER TABLE user_feedback ADD COLUMN trace_id VARCHAR(64) DEFAULT NULL COMMENT '链路追踪 ID, 关联 MDC 日志', ADD INDEX idx_feedback_trace (trace_id);
 
 -- ==========================================
 -- Token 用量记录表: LLM 调用真实计量与计费

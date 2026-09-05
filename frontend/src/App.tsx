@@ -20,6 +20,9 @@ function App() {
           <NavLink className={({ isActive }) => `nav-link${isActive ? ' is-active' : ''}`} to="/business-risk/source">
             业务风险
           </NavLink>
+          <NavLink className={({ isActive }) => `nav-link${isActive ? ' is-active' : ''}`} to="/feedback">
+            反馈统计
+          </NavLink>
         </nav>
       </header>
       <main className="app-main">

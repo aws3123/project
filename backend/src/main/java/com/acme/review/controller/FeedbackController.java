@@ -55,7 +55,8 @@ public class FeedbackController {
     @PostMapping("/submit")
     public ResponseEntity<Map<String, Object>> submitFeedback(
             @Valid @RequestBody SubmitRequest request,
-            @RequestHeader(value = HttpHeaders.USER_AGENT, required = false) String userAgent) {
+            @RequestHeader(value = HttpHeaders.USER_AGENT, required = false) String userAgent,
+            @RequestHeader(value = "X-Trace-Id", required = false) String traceId) {
 
         UserFeedback feedback = new UserFeedback();
         feedback.setTaskId(request.getTaskId());
@@ -66,6 +67,7 @@ public class FeedbackController {
         feedback.setMetadata(request.getMetadata());
         feedback.setUserAgent(userAgent);
         feedback.setSource(request.getSource() != null ? request.getSource() : "review");
+        feedback.setTraceId(traceId);
 
         UserFeedback saved = feedbackService.submit(feedback);
 
@@ -91,5 +93,10 @@ public class FeedbackController {
             @RequestParam(defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "50") @Min(1) @Max(1000) int size) {
         return ResponseEntity.ok(feedbackService.export(from, to, source, page, size));
+    }
+
+    @GetMapping("/export-file")
+    public ResponseEntity<Map<String, Object>> exportFile() {
+        return ResponseEntity.ok(feedbackService.exportAllToFile());
     }
 }

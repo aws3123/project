@@ -3,6 +3,7 @@ package com.acme.review.mq;
 import com.acme.review.dto.BusinessRiskPythonSourceRequest;
 import com.acme.review.dto.BusinessRiskPythonSourceResponse;
 import com.acme.review.dto.BusinessRiskWorkerRegistrySnapshot;
+import com.acme.review.dto.FeedbackEventMessage;
 import com.acme.review.dto.ReviewTaskMessage;
 import com.acme.review.entity.OutboxEvent;
 import com.acme.review.entity.ReviewResult;
@@ -47,6 +48,8 @@ public class OutboxPoller {
     private static final String ASYNC_OUTPUT_BINDING = "reviewTask-out-0";
     private static final String TRACE_ID_KEY = "traceId";
     private static final String BUSINESS_RISK_DISPATCH_EVENT = "BUSINESS_RISK_DISPATCH";
+    private static final String FEEDBACK_NEGATIVE_EVENT = "FEEDBACK_NEGATIVE";
+    private static final String FEEDBACK_EVENT_OUTPUT_BINDING = "feedbackEvent-out-0";
     private static final String MESSAGE_ID_KEY = "messageId";
     private static final int BATCH_SIZE = 20;
     private static final int MAX_POLL_RETRY = 10;
@@ -89,6 +92,8 @@ public class OutboxPoller {
             try {
                 if (BUSINESS_RISK_DISPATCH_EVENT.equals(event.getEventType())) {
                     sendBusinessRiskDispatch(event);
+                } else if (FEEDBACK_NEGATIVE_EVENT.equals(event.getEventType())) {
+                    sendFeedbackNegativeEvent(event);
                 } else {
                     sendReviewTaskEvent(event);
                 }
@@ -181,6 +186,26 @@ public class OutboxPoller {
                 .build();
 
         boolean sent = streamBridge.send(ASYNC_OUTPUT_BINDING, msg);
+        if (sent) {
+            event.setStatus("SENT");
+            event.setSentAt(Instant.now());
+            return;
+        }
+
+        event.setStatus("FAILED");
+        event.setRetryCount((event.getRetryCount() == null ? 0 : event.getRetryCount()) + 1);
+    }
+
+    private void sendFeedbackNegativeEvent(OutboxEvent event) throws Exception {
+        FeedbackEventMessage message = objectMapper.readValue(event.getPayload(), FeedbackEventMessage.class);
+
+        Message<FeedbackEventMessage> msg = MessageBuilder
+                .withPayload(message)
+                .setHeader(TRACE_ID_KEY, message.getTraceId())
+                .setHeader(MESSAGE_ID_KEY, event.getEventId())
+                .build();
+
+        boolean sent = streamBridge.send(FEEDBACK_EVENT_OUTPUT_BINDING, msg);
         if (sent) {
             event.setStatus("SENT");
             event.setSentAt(Instant.now());
