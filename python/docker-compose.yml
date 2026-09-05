@@ -1,3 +1,7 @@
+# ===== Python 计算层独立部署（自带基础设施）=====
+# 用途：仅启动 Python 服务及其依赖的基础设施，供本地验证 / 单独扩容 Python 层。
+# 注意：与根目录 docker-compose.yml（主编排）二选一运行；本文件自带 MySQL/Redis/MinIO，
+#       端口若与宿主机上已运行的基础设施（3307/6379/9000）冲突，请先停止对方。
 version: "3.9"
 
 services:
@@ -9,23 +13,52 @@ services:
       APP_ENV: dev
       APP_HOST: 0.0.0.0
       APP_PORT: 8000
-      MYSQL_URL: mysql://user:pass@mysql:3306/review
+      # --- 数据源 ---
+      MYSQL_URL: mysql+pymysql://user:pass@mysql:3306/review
       REDIS_URL: redis://redis:6379/0
-      TELEMETRY_BACKEND: logging
+      PERSISTENCE_BACKEND: inmemory
+      # --- MinIO ---
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: minio
       MINIO_SECRET_KEY: minio123
       MINIO_IMAGE_BUCKET: incident-images
-      VECTOR_DB_URL: postgresql://vector:vector@vector-db:5432/vector
-      LLM_API_BASE: https://api.openai.com/v1
-      LLM_API_KEY: REPLACE_ME
+      # --- ChromaDB（文件型向量库）---
+      VECTOR_BACKEND: chromadb
+      CHROMA_PATH: /data/chroma
+      CHROMA_COLLECTION: incident_vectors
+      # --- Elasticsearch ---
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      ES_INDEX_NAME: incident_keywords
+      # --- LLM / Embedding ---
+      LLM_API_BASE: https://dashscope.aliyuncs.com/compatible-mode/v1
+      # 生产环境通过环境变量注入，勿提交明文
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: qwen-plus
+      EMBEDDING_MODEL: microsoft/codebert-base
+      # --- RAG 检索 ---
+      RRF_K: 60
+      RAG_MAX_TOKENS: 2000
+      TOP_K: 5
+      MIN_RETRIEVAL_SCORE: 0.15
+      ENABLE_RERANK: "true"
+      # --- Kafka 异步链路 (Java 生产者 → Python 消费者 → 回调回 Java) ---
+      KAFKA_ENABLED: "true"
+      KAFKA_BOOTSTRAP_SERVERS: my-kafka:9092
+      KAFKA_GROUP_ID: python-review-worker
+      KAFKA_REVIEW_TASKS_TOPIC: ai.review.tasks
+      KAFKA_REVIEW_CALLBACKS_TOPIC: ai.review.callbacks
+      # --- Telemetry ---
+      TELEMETRY_BACKEND: prometheus
     ports:
       - "8000:8000"
     depends_on:
-      - mysql
-      - redis
-      - minio
-      - vector-db
+      elasticsearch:
+        condition: service_healthy
+    extra_hosts:
+      # Kafka 复用宿主机已运行实例（与主编排的 host-gateway 方式一致）
+      - "my-kafka:host-gateway"
+    volumes:
+      - chroma-data:/data/chroma
 
   mysql:
     image: mysql:8.4
@@ -53,11 +86,19 @@ services:
       - "9000:9000"
       - "9001:9001"
 
-  vector-db:
-    image: pgvector/pgvector:pg16
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
     environment:
-      POSTGRES_USER: vector
-      POSTGRES_PASSWORD: vector
-      POSTGRES_DB: vector
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
     ports:
-      - "5432:5432"
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  chroma-data:
