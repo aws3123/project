@@ -33,12 +33,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from config.settings import AppSettings
+from llm.client import LLMClient
 from repositories.chroma import upsert_unified_chunks
 from repositories.db import _fetch_query_embedding
 from repositories.es_client import index_unified_chunks
 from services.bff_ast_client import AstChunk, BffAstClient, BffUnavailableError
 from services.code_extractor import extract_sections
 from services.document_loader import LoadedDocument, load_documents_from_dir
+from services.image_service import ImageService
+from services.image_understanding import understand_image
 
 logger = logging.getLogger(__name__)
 
@@ -349,6 +352,105 @@ def ingest_document(
     return all_unified, stats
 
 
+def _build_diagram_chunks(
+    figures: list,
+    source_doc: str,
+    settings: AppSettings,
+    llm_client: LLMClient,
+) -> tuple[list[dict], dict]:
+    """把 PDF 图块（类图/架构图/截图）转成 unified chunk。
+
+    每个图块经过「OCR 主 + VL 辅」理解，伪文本化为一个自然语言描述的 chunk，
+    与现有 NL/代码 chunk 同构，一并入库。图片上传到 MinIO（失败不中断）。
+
+    返回 (chunks, stats)；stats 含 count / vlm_used / vlm_failed。
+    """
+    chunks: list[dict] = []
+    stats = {"count": 0, "vlm_used": 0, "vlm_failed": 0}
+
+    if not figures:
+        return chunks, stats
+
+    try:
+        image_service = ImageService(settings)
+    except Exception:
+        image_service = None
+
+    for seq, fig in enumerate(figures):
+        try:
+            result = understand_image(fig, settings, llm_client)
+        except Exception as exc:
+            logger.warning("Image understanding failed for %s: %s", fig.image_path, exc)
+            continue
+
+        # ── 语义描述：VL summary 优先，OCR 文本兜底 ──
+        summary = (
+            result.structured.get("summary", "") if result.structured else ""
+        )
+        nl = summary or result.ocr_text or "图像，无可用描述"
+
+        # ── 伪代码化：类关系行，便于 ES 按类名命中 ──
+        relations = (
+            result.structured.get("relations", []) if result.structured else []
+        )
+        code_lines = [
+            f"{r.get('source', '')} --{r.get('kind', 'rel')}--> {r.get('target', '')}"
+            for r in relations
+            if r.get("source") or r.get("target")
+        ]
+        code_content = "\n".join(code_lines)
+
+        # ── 上传到 MinIO（失败不中断）──
+        image_urls: list[str] = []
+        if image_service is not None:
+            try:
+                url = image_service.upload_image(fig.image_path, source_doc)
+                image_urls = [url]
+            except Exception as exc:
+                logger.warning(
+                    "Image upload failed for %s (will index without URL): %s",
+                    fig.image_path,
+                    exc,
+                )
+
+        entity_kind = "class_diagram" if result.is_class_diagram else "figure"
+
+        chunk = {
+            "id": f"{source_doc}:diagram:{fig.page_index}:{seq}",
+            "nl_description": nl,
+            "code_content": code_content,
+            "embedding": None,  # 稍后由 generate_embeddings 生成
+            "ast_metadata": {
+                "entity_name": "",
+                "entity_kind": entity_kind,
+                "fully_qualified_name": "",
+                "language": "diagram",
+                "signature": "",
+                "parent_class": None,
+                "line_start": 0,
+                "line_end": 0,
+                "ast_status": result.status,
+            },
+            "doc_metadata": {
+                "source_doc": source_doc,
+                "section_title": "",
+                "position_in_doc": fig.page_index,
+                "risk_type": _classify_risk_type(nl),
+                "image_urls": image_urls,
+                "image_texts": [result.ocr_text] if result.ocr_text else [],
+            },
+        }
+        chunks.append(chunk)
+
+        stats["count"] += 1
+        if result.vlm_used:
+            stats["vlm_used"] += 1
+        if result.status in ("vlm_failed", "vlm_unavailable"):
+            stats["vlm_failed"] += 1
+
+    return chunks, stats
+
+
 def generate_embeddings(chunks: list[dict], settings: AppSettings) -> None:
     """为所有代码块生成嵌入向量（原地修改 chunks 列表中的字典）。
 
@@ -406,11 +508,24 @@ def run_ingest(docs_dir: str, settings: AppSettings | None = None) -> None:
         "total_code_blocks": 0,
     }
     total_class_chunks = 0
+    total_diagram_chunks = 0
+    total_vlm_used = 0
+    total_vlm_failed = 0
+
+    # LLM 客户端（供图块 VL 理解复用）
+    llm_client = LLMClient(settings)
 
     for doc in documents:
         logger.info("Processing: %s (format=%s)", doc.source_file, doc.format)
         chunks, stats = ingest_document(doc, bff_client, settings)
+
+        # PDF 图块：OCR 主 + VL 辅，伪文本化为图块 chunk（非 PDF 为空列表，零开销）
+        diagram_chunks, d_stats = _build_diagram_chunks(
+            getattr(doc, "figures", []), doc.source_file, settings, llm_client
+        )
+
         all_chunks.extend(chunks)
+        all_chunks.extend(diagram_chunks)
 
         # 累加统计
         for k in total_stats:
@@ -421,15 +536,19 @@ def run_ingest(docs_dir: str, settings: AppSettings | None = None) -> None:
             1 for c in chunks if c.get("ast_metadata", {}).get("entity_kind") == "class"
         )
         total_class_chunks += class_chunks
+        total_diagram_chunks += d_stats["count"]
+        total_vlm_used += d_stats["vlm_used"]
+        total_vlm_failed += d_stats["vlm_failed"]
 
         logger.info(
-            "  %s: %d chunks (%d class-level, %d code blocks, %d parsed, %d fallback)",
+            "  %s: %d chunks (%d class-level, %d code blocks, %d parsed, %d fallback, %d diagram)",
             doc.source_file,
             len(chunks),
             class_chunks,
             stats["total_code_blocks"],
             stats["ast_parsed"],
             stats["ast_fallback"],
+            d_stats["count"],
         )
 
     if not all_chunks:
@@ -461,6 +580,9 @@ def run_ingest(docs_dir: str, settings: AppSettings | None = None) -> None:
     print(f"  Documents processed:   {len(documents)}")
     print(f"  Total chunks:          {len(all_chunks)}")
     print(f"  Class-level chunks:    {total_class_chunks}")
+    print(f"  Diagram chunks:        {total_diagram_chunks}")
+    print(f"  Diagram VL used:       {total_vlm_used}")
+    print(f"  Diagram VL failed:     {total_vlm_failed}")
     print(f"  Code blocks processed: {total_ast}")
     print(f"  AST parsed:            {total_stats['ast_parsed']}")
     print(f"  AST fallback:          {total_stats['ast_fallback']}")

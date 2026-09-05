@@ -17,6 +17,7 @@ class LoadedDocument:
     source_file: str
     format: str  # md / html / pdf / docx / txt
     pages: list[str] = field(default_factory=list)  # PDF pages (optional)
+    figures: list = field(default_factory=list)  # PDF 图块候选（仅 PDF 有）
 
 
 def _detect_format(file_path: Path) -> str:
@@ -48,8 +49,8 @@ def _load_html(file_path: Path) -> str:
         return file_path.read_text(encoding="utf-8", errors="replace")
 
 
-def _load_pdf(file_path: Path) -> list[str]:
-    """Load PDF, return list of page texts."""
+def _load_pdf_legacy(file_path: Path) -> list[str]:
+    """Load PDF, return list of page texts. (旧逻辑：仅文本层)"""
     try:
         from langchain_community.document_loaders import PyPDFLoader
 
@@ -66,6 +67,22 @@ def _load_pdf(file_path: Path) -> list[str]:
         except Exception as e:
             logger.error("PDF load failed for %s: %s", file_path.name, e)
             return [file_path.read_text(encoding="utf-8", errors="replace")]
+
+
+def _load_pdf(file_path: Path) -> tuple[list[str], list]:
+    """Load PDF, return (page_texts, figures).
+
+    优先用 PyMuPDF（渲染页面 + 抽取图块候选，支持类图/架构图）；
+    PyMuPDF 不可用时回退到旧文本提取，figures 为空。
+    """
+    try:
+        from services.pdf_processor import PdfProcessor
+
+        processor = PdfProcessor()
+        return processor.load_and_render(str(file_path))
+    except ImportError:
+        logger.warning("PyMuPDF not available, falling back to text-only PDF load")
+        return _load_pdf_legacy(file_path), []
 
 
 def _load_docx(file_path: Path) -> str:
@@ -112,13 +129,17 @@ def load_document(
             return LoadedDocument(text=text, source_file=path.name, format=fmt)
 
         elif fmt == "pdf":
-            pages = _load_pdf(path)
+            pages, figures = _load_pdf(path)
             if not pages:
                 logger.warning("PDF yielded no pages: %s", path.name)
                 return None
             text = "\n\n".join(pages)
             return LoadedDocument(
-                text=text, source_file=path.name, format=fmt, pages=pages
+                text=text,
+                source_file=path.name,
+                format=fmt,
+                pages=pages,
+                figures=figures,
             )
 
         elif fmt == "docx":

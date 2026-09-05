@@ -1,0 +1,27 @@
+# Prometheus 抓取配置 —— AI Code Review Sentinel
+# 抓取目标：Java 后端(Actuator/Prometheus)、Python AI 服务(/metrics)、Prometheus 自身
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Prometheus 自身健康状态
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Java 后端：Micrometer 指标（JVM、HTTP、Kafka、自定义业务指标）
+  - job_name: java-backend
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["java-backend:8080"]
+        labels:
+          service: java-backend
+
+  # Python AI 服务：prometheus_client 指标（进程级 + review_node_* 业务指标）
+  - job_name: python-ai
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["python-ai:8000"]
+        labels:
+          service: python-ai
