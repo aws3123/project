@@ -96,13 +96,15 @@ Sentinel：   diff ──▶ AST实体提取 ──▶ 代码知识图谱 ──
 │   │  特征提取     │   └──────────────────┘                       │
 │   │  分类器打分   │                                              │
 │   │              │   ┌──────────────────┐   ┌────────────────┐  │
-│   │  过载→异步    │──▶│  异步高可用链路    │──▶│  Kafka Cluster │  │
-│   └──────────────┘   │  Kafka 持久化     │   └───────┬────────┘  │
-│                      │  消费者组负载均衡  │           │           │
-│                      └──────────────────┘   ┌───────▼────────┐  │
+│   │  过载→异步    │──▶│  异步高可用链路    │──▶│ Kafka 双 Topic  │  │
+│   └──────────────┘   │  Kafka 持久化     │   │ ① tasks 任务下发   │  │
+│                      │  消费者组负载均衡  │       │ ② callbacks 回调 │  │
+│                      └──────────────────┘   └───────┬────────┘  │
+│                                                     │           │
+│                                             ┌───────▼────────┐  │
 │                                             │  MQ Consumer   │  │
 │   ┌──────────────────────────────────┐      └───────┬────────┘  │
-│   │  SSE 实时推送 / 任务状态推送       │◀─────────────┘           │
+│   │  SSE 实时推送 / 任务状态推送       │◀─────────────────────┘   │
 │   └──────────────────────────────────┘                          │
 │                                                                  │
 │   Outbox 事件表 · 对账兜底 · Tree-Sitter AST · API Key 认证 · 反馈 │
@@ -167,11 +169,16 @@ POST /api/review/sync (或 Dispatch 判定 SYNC)
 ```
 POST /api/review/async (或 Dispatch 判定 ASYNC)
   ├─ 持久化 ReviewTask (status=PENDING) → MySQL
-  ├─ Outbox 本地消息表 → StreamBridge → Kafka topic "ai.review.tasks"
-  │     partition-key = taskId (同任务消息有序) · acks=all 不丢失
+  ├─ Outbox 本地消息表 → StreamBridge → Kafka 双 Topic
+  │    ① "ai.review.tasks"      Java → Python 任务下发（任务分发）
+  │    ② "ai.review.callbacks"  Python → Java 状态回调（事件上报）
+  │    partition-key = taskId（双 Topic 均按 taskId 分区，同任务消息有序）
+  │    acks=all 不丢失
   ├─ 立即返回 202 + {"taskId","status":"QUEUED"} → 前端轮询 / 监听 SSE
-  └─ Kafka Consumer → Python 多 Agent 并行分析
-        → 持久化结果 → SSE → 状态机 PENDING→PROCESSING→SUCCESS/FAILED/HUMAN_REVIEW
+  └─ 任务下发: Consumer 订阅 "ai.review.tasks" → Python 多 Agent 并行分析
+      状态回调: Python 写 "ai.review.callbacks"（含 eventType 字段）
+        → Java 消费回调 → 持久化结果 → SSE
+        → 状态机 PENDING→PROCESSING→SUCCESS/FAILED/HUMAN_REVIEW
 ```
 
 **可靠性四层保障**（传统工具几乎不涉及的"审查任务本身的可靠性"问题）：
