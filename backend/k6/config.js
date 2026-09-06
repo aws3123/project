@@ -136,6 +136,19 @@ export function makeReviewPayload(diffSize) {
   });
 }
 
+/**
+ * 生成异步审核请求体（mode=ASYNC，taskId 由后端生成）
+ */
+export function makeAsyncPayload(diffSize) {
+  return JSON.stringify({
+    projectId: 'perf-test',
+    projectName: 'Performance Test Project',
+    prUrl: `https://github.com/perf-org/perf-repo/pull/${Math.floor(Math.random() * 1000)}`,
+    diffContent: generateDiff(diffSize),
+    mode: 'ASYNC',
+  });
+}
+
 export function makeDispatchPayload(diffSize) {
   return JSON.stringify({
     projectId: 'perf-test',
