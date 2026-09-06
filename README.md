@@ -19,13 +19,13 @@
 | 指标 | 数值 | 基线对比 |
 |------|------|---------|
 | **Top-5 召回率** | **92%** | 单路检索 +34pp |
-| **吞吐量** | **202 req/s** | 单实例基线 4.8× |
+| **吞吐量** | **143 req/s**（42→83→143） | 单实例基线 3.4× |
 | **多 Agent 延迟** | **降低约 40%** | 串行编排 |
 | **Agent 输出合规率** | **99%+** | 差异化 prompt + 正则兜底 |
 | **长文本超限率** | **~30% → 0** | 类/方法级聚合 + tiktoken 预算 |
 | **单次审查成本** | **< ¥0.1** | 典型 diff ~5 文件 / ~300 行 (~16K tokens) |
-| **突发波峰 500 并发** | **任务零丢失** | k6 稳态+突发全量对账 |
-| **知识库规模** | **80+ 事故文档 · 1.5w+ 向量** | 持续积累 |
+| **突发 3000 VU 尖峰** | **任务零丢失** | 受理层全量落库 + 全链路对账 |
+| **知识库规模** | **80+ 文档 · 5 仓库 · 1.5w+ 向量** | 持续积累 |
 
 > 每个数字都有对应的压测脚本（k6）与代码位置支撑，可逐条自证，见文末「核心指标自证」。
 
@@ -183,7 +183,9 @@ POST /api/review/async (或 Dispatch 判定 ASYNC)
 | L3 | 对账兜底（每 60s 扫 PENDING>30min 重建事件） | 漏发事件自动补投 |
 | L4 | 超时强杀（PROCESSING>2×timeout → FAILED） | 任务必然到达终态 |
 
-经 k6 压测（200 req/s 稳态到达率持续 30min）系统稳定运行无异常；突发波峰（500 并发，叠加于稳态之上）下**任务零丢失**——全量对账：202 受理数 = 终态数，零死信、零缺口。
+经 k6 压测（稳态 140 req/s 持续 30min）系统稳定运行无异常，累计约 25 万任务零死信；3000 VU 单次尖峰注入 3000 任务下**受理层全量落库零丢失**，Kafka 峰值积压约 3000 条、20～25s 内以 ~140 条/s 排空——全量对账：202 受理数 = 终态数，零死信、零缺口。
+
+**SSE 断线重连补偿**：任务状态通过 SSE 长连接实时推送，事件 ID 为任务维度单调递增的 Redis Stream RecordId（如 `taskId-42`），支持客户端去重。断线重连携带 `Last-Event-ID`，服务端基于 Redis 事件快照从断点之后增量追平（重放 + 实时尾随），终态事件缓存不可用（已过期）时从 DB 合成终态兜底——经 k6（300 个 SSE 长连接随机 10% 断线）验证：重连成功 100%、Lost=0 / Duplicate=0 / OutOfOrder=0，无事件丢失。
 
 ---
 
@@ -210,7 +212,7 @@ POST /api/review/async (或 Dispatch 判定 ASYNC)
 
 ### AST 解析器
 
-**Java BFF 层**（`TreeSitterNativeParser.java`）：Tree-Sitter 原生 JNI，支持 Java / Python / SQL，负责 RAG 导入阶段的代码分块与实体提取（CPU 密集任务前置到 Java 层，释放 Python 计算资源）。
+**Java BFF 层**（`TreeSitterNativeParser.java`）：Tree-Sitter 原生 JNI，支持 Java / Python / SQL，负责 RAG 导入阶段的代码分块与实体提取。CPU 密集的 AST 解析（经 profiling 约占 Python 实例 CPU 时间的 ~65%）前置到 Java 层，Python 由 CPU-bound 转向 IO-bound，解除 GIL 争用瓶颈，为 Python 无状态水平扩展奠定基础——这是吞吐 42→83→143 req/s 的关键一环。
 
 **Python 计算层**（`tools/ast_parser.py`）：javalang / ast 标准库 + regex fallback：
 
@@ -251,7 +253,7 @@ Phase 6: [scoring]           顺序 — 交叉验证 + LLM 评分 + 确定性兜
 Phase 7: [report]            顺序 — 结构化报告生成
 ```
 
-并行引擎（`GraphRunner`）用 `as_completed` 调度同阶段节点，45s 超时、断路器保护、merge 策略（extend/replace/overwrite）。**动态 Agent 裁剪**（`agent_selector`）按变更特征（文件数、模块数、风险信号）只运行相关 Agent，无必要不空跑。
+并行引擎（`GraphRunner`）用 `as_completed` 调度同阶段节点，45s 超时、断路器保护、merge 策略（extend/replace/overwrite）。**动态 Agent 裁剪**（`agent_selector`）按变更特征（文件数、模块数、风险信号）只运行相关 Agent，无必要不空跑。**记忆管理**依赖 Redis 记忆/状态存储：跨节点共享上下文、失败重试时状态可恢复，配合断路器保障并行编排的高可用。
 
 | Agent | 能力 | 实现 |
 |-------|------|------|
@@ -325,7 +327,7 @@ LLM 结构化输出失败时自动降级为确定性规则引擎评分——**�
 
 **设计动机**：单一 Python 服务高并发吞吐受限、CPU/GPU 利用率不均。将 CPU 密集的 AST 解析、代码上下文补全前置到 Java 层；Python 层保持无状态多实例部署，专注模型服务。Java 编排端通过 Kafka 消费者组实现 1:N 水平扩展；两层仅通过 HTTP 通信、物理隔离，MinIO 作为报告与图片存储中介。
 
-**收益**：Top-5 检索召回率 58%→92%（+34pp）；k6（1000 并发/5min）吞吐量 42→202 req/s（4.8×）。
+**收益**：Top-5 检索召回率 58%→92%（+34pp）；k6（1000 VU / 5min）端到端审查吞吐 42→83→143 req/s（3.4×），平均延迟 24s→12s→7s。
 
 ---
 
@@ -388,7 +390,7 @@ POST /handoff/{taskId}   → 提交人工决策 (APPROVE / REJECT / MODIFY + 意
 | **Frontend** | React 19 · Vite 8 · TypeScript · Zustand + Immer · TanStack React Query · Playwright · Vitest |
 | **Java (稳态编排)** | Spring Boot 3.2 · Spring Cloud Stream · Kafka · MyBatis-Plus · Redis (Redisson) · Tree-Sitter (JNI) · Outbox · Micrometer |
 | **Python (敏态计算)** | FastAPI · LangGraph · LangChain · ChromaDB · Elasticsearch · CodeBERT · NetworkX · javalang · cross-encoder Rerank |
-| **LLM** | Qwen-Plus (通义千问) · OpenAI 兼容接口 |
+| **LLM** | DeepSeek · OpenAI 兼容接口 |
 | **Infrastructure** | Kafka · MySQL · Redis · MinIO · ChromaDB · Elasticsearch · Docker Compose |
 
 ---
@@ -470,20 +472,20 @@ curl http://localhost:8080/api/review/tasks/{taskId} -H "X-API-Key: dev-key"
 | 指标 | 推导逻辑 / 代码位置 |
 |------|-------------------|
 | Top-5 召回率 92% | 双路召回（ChromaDB 向量 + Elasticsearch BM25）→ RRF 融合（k=60）→ 可选 Rerank，较单路检索 +34pp |
-| 吞吐量 202 req/s | k6（1000 VU / 5min）两轮对比：baseline=Python 单实例直连（含 AST 解析，GIL 争用）42 req/s → optimized=AST 前置 Java BFF + Python 无状态多实例 202 req/s，4.8×；Little's Law 自洽校验（1000÷吞吐≈平均延迟：24s→5s） |
+| 吞吐量 143 req/s | k6（1000 VU / 5min）三阶段对比：baseline=Python 单实例直连（含 CPU 密集 AST 解析，占 CPU ~65%，GIL 争用）42 req/s → AST 前置 Java BFF、Python 单实例 83 req/s → Python 无状态双实例 143 req/s，整体 3.4×；Little's Law 自洽校验（1000÷吞吐≈平均延迟：1000/42≈24s / 1000/83≈12s / 1000/143≈7s） |
 | 多 Agent 延迟降低 ~40% | RAG 前置检索 + 3 Agent 并行 + 动态 Agent 裁剪（`agent_selector`） |
 | Agent 输出合规率 99%+ | 差异化 system prompt + 正则全量兜底 |
 | 长文本超限率 30%→0 | 类/方法级聚合（AST 结构感知分块）+ tiktoken 精确预算 + `max_tokens` |
 | 单次成本 < ¥0.1 | 典型 diff（~5 文件 / ~300 行）~16K tokens，按 DeepSeek 计价 |
-| 突发 500 并发任务零丢失 | k6：200 req/s × 30min 稳态 + 500 并发突发叠加（ramping-vus）；每个任务在提交迭代内轮询至终态，全量对账断言零死信/零缺口；异步削峰 + Outbox SKIP LOCKED + 10 次重试 + 对账兜底 |
-
-详见 [`项目中可能遇到的问题（面试）/具体数值如何得到的？`](项目中可能遇到的问题（面试）/具体数值如何得到的？)
+| 突发 3000 VU 尖峰任务零丢失 | k6：3000 VU 单次尖峰注入 3000 任务，受理层全量落库（202 受理数 = 终态数）；Kafka 峰值积压约 3000 条、20~25s 内以 ~140 条/s 排空；异步削峰 + Outbox SKIP LOCKED + 10 次重试 + 对账兜底 |
+| 稳态 140 req/s 零死信 | k6：140 req/s × 30min（约 25.2 万任务）持续运行，DLQ 新增 = 0，Kafka Producer≈Consumer、Lag 低位稳定 |
+| SSE 300 连接断线重连零丢失 | k6：300 个 SSE 长连接随机 10% 断线重连，经 Last-Event-ID + Redis 事件快照增量追平，Lost=0 / Duplicate=0 / OutOfOrder=0；Redis 缓存不可用时降级为本地 seq 实时转发，业务结果以 DB 为真相源 |
 
 ---
 
 ## 相关文档
 
-- [k6 压测脚本（指标复现命令与门禁）](k6/README.md)
+- [k6 压测脚本（指标复现命令与门禁）](backend/k6/README.md)
 - [Python 计算层说明](python/README.md)
 - [RAG 构建中遇到的真实问题与解决方案](RAG构建中遇到的真实问题和解决方案.md)
 - [Kafka 异步链路 MQ 化改造验收清单](Kafka异步链路MQ化改造验收清单.md)
