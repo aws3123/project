@@ -149,6 +149,21 @@ export function makeAsyncPayload(diffSize) {
   });
 }
 
+/**
+ * 生成流式同步审核请求体（mode=SYNC，taskId 由客户端预置，
+ * 用于 SSE 测试中客户端预先知道任务 ID 以便断线后用其重连）
+ */
+export function makeSyncStreamPayload(taskId, diffSize) {
+  return JSON.stringify({
+    taskId: taskId,
+    projectId: 'perf-test',
+    projectName: 'Performance Test Project',
+    prUrl: `https://github.com/perf-org/perf-repo/pull/${Math.floor(Math.random() * 1000)}`,
+    diffContent: generateDiff(diffSize),
+    mode: 'SYNC',
+  });
+}
+
 export function makeDispatchPayload(diffSize) {
   return JSON.stringify({
     projectId: 'perf-test',
