@@ -166,6 +166,8 @@ POST /api/review/sync (或 Dispatch 判定 SYNC)
 
 ### 异步链路 — Kafka 事件驱动深度审查
 
+![异步审查流程图](docs/images/async_review_flow.png)
+
 ```
 POST /api/review/async (或 Dispatch 判定 ASYNC)
   ├─ 持久化 ReviewTask (status=PENDING) → MySQL
