@@ -159,12 +159,12 @@ class AppSettings(BaseSettings):
     # -------------------------------------------------------------------------
     # LLM 大语言模型配置
     # -------------------------------------------------------------------------
-    # LLM API 地址。这里用的是阿里云 DashScope 的 OpenAI 兼容接口。
-    # "兼容接口"意味着虽然用的是通义千问模型，但调用方式和 OpenAI 一样，
+    # LLM API 地址。这里使用远程 OpenAI 兼容接口。
+    # "兼容接口"意味着虽然后端模型可以替换，但调用方式和 OpenAI 一样，
     # 所以可以复用 OpenAI 的客户端代码。
-    llm_api_base: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    llm_api_base: str = "http://172.23.255.8:31608/v1"
     # API 密钥，用于身份认证。生产环境中应该从环境变量读取，不能硬编码
-    llm_api_key: str = ""
+    llm_api_key: str = "dev-key"
     # 使用的大语言模型名称。qwen-plus 是通义千问的增强版
     llm_model: str = "qwen-plus"
     # 嵌入模型名称。嵌入模型负责把文本转成向量，用于语义搜索

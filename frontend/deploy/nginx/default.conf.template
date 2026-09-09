@@ -2,8 +2,8 @@
 # Supports SPA routing and reverse proxy to Java BFF
 
 server {
-    listen       ${NGINX_LISTEN_PORT:-80};
-    server_name  ${NGINX_SERVER_NAME:-_};
+    listen       ${NGINX_LISTEN_PORT};
+    server_name  _;
 
     root   /usr/share/nginx/html;
     index  index.html;
@@ -21,7 +21,7 @@ server {
 
     # API reverse proxy → Java BFF
     location /api/ {
-        proxy_pass         ${JAVA_BACKEND_URL:-http://java-backend:8080};
+        proxy_pass         ${JAVA_BACKEND_URL};
         proxy_http_version 1.1;
 
         proxy_set_header Host              $host;

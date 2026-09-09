@@ -406,16 +406,63 @@ POST /handoff/{taskId}   → 提交人工决策 (APPROVE / REJECT / MODIFY + 意
 
 ## 快速开始
 
-```bash
-# 一键启动
-docker compose up -d   # Elasticsearch · Python AI · Java Backend · Frontend
+### 前置要求
 
-# 本地开发
-docker-compose up -d            # 基础设施: MySQL · Kafka · Redis · MinIO
-cd backend && mvn spring-boot:run                    # Java 编排层 (8080)
-cd python && uv sync && uv run uvicorn app.main:app  # Python 计算层 (8000)
-cd frontend && pnpm install && pnpm dev              # 前端 (5173)
+- Docker Desktop 已启动，建议给 Docker 分配至少 10GB 内存。
+- 本地端口 `3000`、`3001`、`8000`、`8080`、`9000`、`9001`、`9090`、`9092`、`9200`、`3307`、`6379` 未被占用。
+- Python 镜像已配置为 CPU-only PyTorch；普通开发机可以构建，不需要 CUDA/GPU。
+- 默认 LLM 地址为 `http://172.23.255.8:31608/v1`，这是 OpenAI 兼容接口。若该地址不可达，应用仍能启动，但 Python 总健康检查会显示 LLM 降级。
+
+### Docker 完整启动
+
+```bash
+# 1. 启动本地基础设施：MySQL · Redis · MinIO · Kafka
+docker compose -f docker-compose.infra.yml up -d
+
+# 2. 构建并启动应用服务：Elasticsearch · Python AI · Java Backend · Frontend · Prometheus · Grafana
+docker compose up -d --build
+
+# 3. 查看容器状态
+docker ps
+
+# 4. 健康检查
+curl http://localhost:3000/health
+curl http://localhost:8080/actuator/health
+curl http://localhost:8080/actuator/health/readiness
+curl http://localhost:8000/ai/health/business-risk-source
+curl http://localhost:9200/_cluster/health
 ```
+
+启动成功后访问：
+
+| 服务 | 地址 | 说明 |
+|------|------|------|
+| 前端 | <http://localhost:3000/> | React 应用入口 |
+| Java Backend | <http://localhost:8080/> | 审查 API / 编排层 |
+| Python AI | <http://localhost:8000/> | AI 计算层 |
+| Grafana | <http://localhost:3001/> | 监控面板 |
+| Prometheus | <http://localhost:9090/> | 指标采集 |
+| MinIO Console | <http://localhost:9001/> | 对象存储控制台，默认 `admin/admin123` |
+
+> 如果 `http://localhost:8000/ai/health` 返回 `503`，先看响应体。只要 `mysql`、`redis`、`minio`、`vector` 为 `UP`，而 `llm` 为 `DOWN` 且提示 timeout，说明本地服务已拉起，是远程 LLM 接口不可达或响应过慢。
+
+### 本地开发
+
+```bash
+# 基础设施
+docker compose -f docker-compose.infra.yml up -d
+
+# Java 编排层 (8080)
+cd backend && mvn spring-boot:run
+
+# Python 计算层 (8000)
+cd python && uv sync && uv run uvicorn app.main:app
+
+# 前端开发服务器 (5173)
+cd frontend && pnpm install && pnpm dev
+```
+
+本地开发时，如果服务运行在宿主机上，MySQL 使用 `localhost:3307`；如果服务运行在 Docker 容器内，应用编排已通过 `docker-compose.yml` 注入容器可访问的 MySQL、Redis、MinIO、Kafka 地址。
 
 ### 接口示例
 
@@ -469,7 +516,8 @@ curl http://localhost:8080/api/review/tasks/{taskId} -H "X-API-Key: dev-key"
 │   ├── routers/       FastAPI 路由
 │   └── schemas/       Pydantic 数据模型
 │
-└── docker-compose.yml 应用服务编排
+├── docker-compose.yml       应用服务编排
+└── docker-compose.infra.yml 本地基础设施编排
 ```
 
 ---

@@ -1,0 +1,12 @@
+node_modules
+dist
+playwright-report
+test-results
+.vite
+.cache
+.env
+.env.*
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*

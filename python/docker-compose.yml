@@ -30,7 +30,7 @@ services:
       ELASTICSEARCH_URL: http://elasticsearch:9200
       ES_INDEX_NAME: incident_keywords
       # --- LLM / Embedding ---
-      LLM_API_BASE: https://dashscope.aliyuncs.com/compatible-mode/v1
+      LLM_API_BASE: http://172.23.255.8:31608/v1
       # 生产环境通过环境变量注入，勿提交明文
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_MODEL: qwen-plus

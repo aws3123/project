@@ -121,6 +121,15 @@ review:
     small-file-count: ${REVIEW_DISPATCH_SMALL_FILE_COUNT:2}
     large-file-count: ${REVIEW_DISPATCH_LARGE_FILE_COUNT:6}
     classifier-confidence-threshold: ${REVIEW_DISPATCH_CONFIDENCE_THRESHOLD:0.80}
+  sync:
+    event-cache:
+      enabled: ${REVIEW_SYNC_EVENT_CACHE_ENABLED:true}
+      redis-key-prefix: ${REVIEW_SYNC_EVENT_CACHE_REDIS_KEY_PREFIX:review:sse:}
+      max-events-per-task: ${REVIEW_SYNC_EVENT_CACHE_MAX_EVENTS_PER_TASK:500}
+      active-ttl-seconds: ${REVIEW_SYNC_EVENT_CACHE_ACTIVE_TTL_SECONDS:240}
+      terminal-ttl-seconds: ${REVIEW_SYNC_EVENT_CACHE_TERMINAL_TTL_SECONDS:900}
+      tail-block-ms: ${REVIEW_SYNC_EVENT_CACHE_TAIL_BLOCK_MS:15000}
+      tail-threads: ${REVIEW_SYNC_EVENT_CACHE_TAIL_THREADS:64}
 
 business-risk:
   source:
@@ -151,17 +160,6 @@ business-risk:
     max-events-per-task: ${BUSINESS_RISK_SSE_MAX_EVENTS_PER_TASK:500}
     persistence-backend: ${BUSINESS_RISK_SSE_PERSISTENCE_BACKEND:memory}
     redis-key-prefix: ${BUSINESS_RISK_SSE_REDIS_KEY_PREFIX:bizrisk:sse:}
-
-review:
-  sync:
-    event-cache:
-      enabled: ${REVIEW_SYNC_EVENT_CACHE_ENABLED:true}
-      redis-key-prefix: ${REVIEW_SYNC_EVENT_CACHE_REDIS_KEY_PREFIX:review:sse:}
-      max-events-per-task: ${REVIEW_SYNC_EVENT_CACHE_MAX_EVENTS_PER_TASK:500}
-      active-ttl-seconds: ${REVIEW_SYNC_EVENT_CACHE_ACTIVE_TTL_SECONDS:240}
-      terminal-ttl-seconds: ${REVIEW_SYNC_EVENT_CACHE_TERMINAL_TTL_SECONDS:900}
-      tail-block-ms: ${REVIEW_SYNC_EVENT_CACHE_TAIL_BLOCK_MS:15000}
-      tail-threads: ${REVIEW_SYNC_EVENT_CACHE_TAIL_THREADS:64}
 
 management:
   endpoints:
