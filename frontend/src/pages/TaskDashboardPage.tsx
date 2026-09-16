@@ -5,7 +5,7 @@ import { fetchTaskList, type TaskListItem } from '../api/task'
 
 const PAGE_SIZE = 5
 
-type TypeFilter = 'all' | 'code_review' | 'business_risk'
+type TypeFilter = 'all' | 'code_review'
 
 function toStoreTask(item: TaskListItem) {
   return {
@@ -21,16 +21,12 @@ function toStoreTask(item: TaskListItem) {
 }
 
 function getTaskLink(task: { taskId: string; mode?: string }) {
-  if (task.mode === 'business_risk_source') {
-    return `/business-risk/${task.taskId}`
-  }
   return `/code-review/${task.taskId}`
 }
 
 const typeFilterTabs: { key: TypeFilter; label: string }[] = [
   { key: 'all', label: '全部' },
   { key: 'code_review', label: '代码审查' },
-  { key: 'business_risk', label: '业务风险' },
 ]
 
 export function TaskDashboardPage() {
@@ -81,7 +77,6 @@ export function TaskDashboardPage() {
   // Client-side type filtering
   const filteredItems = items.filter((item) => {
     if (typeFilter === 'all') return true
-    if (typeFilter === 'business_risk') return item.mode === 'business_risk_source'
     // code_review: everything that is not business_risk_source
     return item.mode !== 'business_risk_source'
   })

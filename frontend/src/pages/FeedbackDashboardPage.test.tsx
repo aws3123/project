@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
 import { server } from '../tests/setup'
@@ -46,26 +46,6 @@ describe('FeedbackDashboardPage', () => {
     expect(screen.getByRole('link', { name: 'task-up-1' })).toBeInTheDocument()
     expect(screen.getByText('误报')).toBeInTheDocument()
     expect(screen.getByText('trace-111')).toBeInTheDocument()
-  })
-
-  it('filters by business_risk source', async () => {
-    renderPage()
-
-    await waitFor(() => {
-      expect(screen.getByTestId('feedback-stat-total')).toHaveTextContent('8')
-    })
-
-    fireEvent.click(screen.getByRole('button', { name: '业务风险' }))
-
-    await waitFor(() => {
-      expect(screen.getByTestId('feedback-stat-total')).toHaveTextContent('4')
-    })
-    expect(screen.getByTestId('feedback-stat-down')).toHaveTextContent('3')
-
-    await waitFor(() => {
-      expect(screen.getByRole('link', { name: 'task-biz-down' })).toBeInTheDocument()
-    })
-    expect(screen.queryByRole('link', { name: 'task-down-1' })).not.toBeInTheDocument()
   })
 
   it('shows empty state when no feedback data', async () => {

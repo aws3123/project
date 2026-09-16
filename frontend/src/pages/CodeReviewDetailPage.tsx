@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { fetchLogs } from '../api/logs'
 import { fetchTask, submitHandoff, toReviewResultFromDetail, toReviewTaskFromDetail } from '../api/task'
 import { FeedbackWidget } from '../components/FeedbackWidget'
@@ -18,7 +18,6 @@ import { getOrCreateTraceId } from '../utils/trace'
 
 export function CodeReviewDetailPage() {
   const { taskId } = useParams<{ taskId: string }>()
-  const navigate = useNavigate()
   const traceId = getOrCreateTraceId()
 
   const task = useTaskStore((state) => (taskId ? selectTask(taskId)(state) : undefined))
@@ -35,13 +34,6 @@ export function CodeReviewDetailPage() {
   const [handoffError, setHandoffError] = useState<string | null>(null)
   const [fetchError, setFetchError] = useState<string | null>(null)
 
-  // Redirect if this is actually a business risk task
-  useEffect(() => {
-    if (task?.mode === 'business_risk_source') {
-      navigate(`/business-risk/${taskId}`, { replace: true })
-    }
-  }, [task?.mode, taskId, navigate])
-
   // Always poll for code review tasks (no SSE)
   const effectiveTraceId = task?.traceId || traceId
   useTaskPolling(taskId ?? null, effectiveTraceId, true)
@@ -52,10 +44,6 @@ export function CodeReviewDetailPage() {
     fetchTask(taskId, traceId)
       .then((detail) => {
         const mappedTask = toReviewTaskFromDetail(detail, taskId, task)
-        if (mappedTask.mode === 'business_risk_source') {
-          navigate(`/business-risk/${taskId}`, { replace: true })
-          return
-        }
         upsertTasks([mappedTask])
         const mappedResult = toReviewResultFromDetail(detail, taskId)
         if (mappedResult) {

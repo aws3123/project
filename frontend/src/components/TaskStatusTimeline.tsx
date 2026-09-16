@@ -53,7 +53,7 @@ export function TaskStatusTimeline({ status, sseStateText, failedMessage }: Task
         })}
       </ol>
       {sseStateText && (
-        <p className="page-desc" data-testid="business-risk-sse-state">
+        <p className="page-desc" data-testid="sse-state">
           {sseStateText}
         </p>
       )}
