@@ -25,7 +25,7 @@ pnpm --dir frontend e2e:smoke:chrome  # Playwright E2E (system Chrome)
 
 Run a single test file:
 ```bash
-pnpm --dir frontend vitest run src/pages/TaskDetailPage.test.tsx
+pnpm --dir frontend vitest run src/pages/TaskDashboardPage.test.tsx
 ```
 
 ### Python (`python/`)
@@ -39,7 +39,8 @@ cd python && uv run pytest                        # all tests
 cd python && uv run ruff check .                  # lint
 cd python && uv run black .                       # format
 cd python && uv run mypy .                        # type-check (no watch/daemon)
-cd python && uv run python mq/consumer.py --interval 1.0  # start async task consumer
+# Kafka async consumer / callback producer start with the app when KAFKA_ENABLED=true
+# (no standalone consumer process anymore)
 ```
 
 Health: `GET http://localhost:8000/ai/health`
@@ -53,14 +54,14 @@ Run a specific test file/subset:
 ```bash
 cd python && uv run pytest tests/app/test_health_route.py -q
 cd python && uv run pytest tests/graph -q
-cd python && uv run pytest tests/mq/test_bus.py tests/mq/test_producer.py tests/mq/test_consumer.py -q
+cd python && uv run pytest tests/repositories -q
 ```
 
 Env switches (set inline or in `.env`):
-- `MQ_BACKEND=inmemory|kafka|rabbitmq` — message queue backend (default: inmemory)
-- `PERSISTENCE_BACKEND=sql|inmemory` — database backend (default: sql, uses MySQL)
-- `VECTOR_BACKEND=pgvector|chromadb|stub` — vector DB for incident RAG (default: chromadb)
-- `TELEMETRY_BACKEND=logging|noop` — telemetry dispatch
+- `KAFKA_ENABLED=true|false` — Kafka async link (consumer + callback producer), default false; topics `ai.review.tasks` / `ai.review.callbacks`, see `kafka_*` settings in `config/settings.py`
+- `PERSISTENCE_BACKEND=sql|inmemory` — task/result persistence backend (default: inmemory; use `sql` with MySQL in production)
+- `TELEMETRY_BACKEND=logging|prometheus|noop` — telemetry output (default: logging)
+- `VECTOR_BACKEND=pgvector|chromadb|stub` — legacy variable (referenced only by README/tests; RAG is wired to ChromaDB + Elasticsearch dual-path in code)
 
 ### Backend (`backend/`)
 
@@ -81,7 +82,7 @@ Health: `GET http://localhost:8080/actuator/health`
 
 ### Request flow
 
-Two sync entry points and one auto-routing dispatch endpoint:
+Three review entry points (sync / async / auto-routing dispatch):
 
 ```
 Browser (React SPA)
@@ -92,6 +93,10 @@ Browser (React SPA)
       → PythonComputeClient.computeSync() — blocking HTTP → Python POST /ai/review/sync
       → on success: task→SUCCESS, upsert ReviewResult, push SSE, return ReviewSyncResponse
       → on failure: task→FAILED, save error result, rethrow
+
+  POST /api/review/async  (explicit async — returns 202 + taskId immediately)
+    → AsyncStrategy: persist ReviewTask (PENDING) + Outbox event in one transaction
+    → publish to Kafka ai.review.tasks → see async path below
 
   POST /api/review/dispatch  (auto-routing via DispatchStrategy)
     → 1. Webhook dedup (Redisson distributed lock on projectId+prUrl)
@@ -104,9 +109,11 @@ Browser (React SPA)
     → if SYNC: delegate to SyncStrategy.executeSync() (same path as /sync above)
     → if ASYNC: publish to MQ, return immediately
 
-Async path (from /dispatch when routed ASYNC):
-  backend publishes to MQ → Python consumer polls → POST /ai/review/async
-    → Python calls back Java POST /api/internal/review/callback when done
+Async path (from /dispatch when routed ASYNC, or explicit POST /api/review/async):
+  backend persists Outbox event in the same transaction → Kafka ai.review.tasks (partition-key=taskId)
+    → Python review_consumer (aiokafka) consumes and runs the pipeline
+    → callback_producer publishes ai.review.callbacks → Java ReviewCallbackConsumer persists result + pushes SSE
+    (state machine: PENDING → PROCESSING → SUCCESS / FAILED / HUMAN_REVIEW)
 ```
 
 The frontend dev server proxies `/api` to `localhost:8080`, so all API calls go through the Java gateway.
@@ -115,10 +122,14 @@ The frontend dev server proxies `/api` to `localhost:8080`, so all API calls go 
 
 | Package | Role |
 |---------|------|
-| `controller/` | REST endpoints: `ReviewController` (sync/async/dispatch), `TaskController` (task CRUD), `HandoffController` (human review decisions), `InternalCallbackController` (callback from Python) |
+| `controller/` | 11 REST controllers: `ReviewController` (sync/async/dispatch), `TaskController` (task CRUD), `FeedbackController`, `HandoffController` (human review decisions), `ChunkController` (BFF AST chunking for Python), `NotificationController`, `BusinessRiskController` / `BusinessRiskSseController` (business risk + SSE), and internals: `InternalReviewPayloadController` (large-payload fetch by Python), `InternalBusinessRiskCallbackController` (Python callback), `InternalBusinessRiskWorkerHeartbeatController` (worker heartbeat) |
 | `service/` | `ReviewDispatchFeatureExtractor` (extract diff stats + intent signals), `HeuristicLightweightRouteClassifier` (score-based routing for borderline cases), `ConcurrentMetricsService`, `SseRegistry`, `WebhookDedupService` |
 | `service/strategy/` | Strategy pattern — `ReviewStrategyFactory` (bean lookup), `DispatchStrategy` (auto-routing: dedup → load check → features → direct rules → classifier → execute), `SyncStrategy` (task persist → blocking Python HTTP → result persist → SSE), `AsyncStrategy` (MQ publish), `AbstractReviewExecutionStrategy` (template method: Python call lifecycle + error handling) |
-| `client/` | `PythonComputeClient` — WebClient-based HTTP calls to Python AI service (`computeSync` with configurable timeout, default 5s) |
+| `client/` | `PythonComputeClient` — WebClient calls to Python (connect timeout 3s; sync total budget `orchestrator.sync-timeout-ms`, default 120s, enforced by `SyncStrategy`; SSE stream idle timeout 60s) · `BusinessRiskPythonClient` · `PythonServiceRegistry` (multi-instance Python registry) |
+| `mq/` | `OutboxPoller` (delivers Outbox events, SKIP LOCKED + 10 retries), `ReviewCallbackConsumer` (consumes `ai.review.callbacks`), `FeedbackEventConsumer` |
+| `ast/` | Tree-Sitter JNI parsing + code chunking (`TreeSitterNativeParser`, `AstChunker`) — CPU-heavy AST work offloaded from Python |
+| `job/` | `ReconciliationJob` — 60s reconciliation sweep (rebuilds events for stale PENDING tasks) |
+| `aop/` | `BillingAspect` — token metering / billing |
 | `config/` | Spring Security (API-key auth via `ApiKeyAuthenticationFilter`), MyBatis-Plus, WebClient, trace-id propagation |
 | `entity/` + `repository/` | MyBatis-Plus entities (`ReviewTask`, `ReviewResult`) with type-safe enums via a custom `ReviewTaskStatusTypeHandler` |
 | `dto/` | Request/response DTOs: `ReviewSyncRequest/Response`, `ReviewDispatchRequest/Response`, `ReviewDispatchDecision`, `ReviewDispatchFeatures` (record), `DispatchRoute` enum (SYNC/ASYNC), `ReviewMode` enum |
@@ -132,32 +143,40 @@ The frontend dev server proxies `/api` to `localhost:8080`, so all API calls go 
 
 ### Python AI layer (`python/`)
 
-**LangGraph pipeline** (defined in `app/dependencies.py` → `_build_graph_runner`):
+**Two pipelines** (assembled in `app/dependencies.py` via `GraphBuilder`; nodes live in `graph/nodes/` and receive `(GraphState, NodeContext)` → return `GraphState`):
+
+Code review pipeline (`_build_graph_runner`):
 
 ```
-diff → classifier → rules → rag → scoring → report
+diff → classifier → impact → rag (pre-retrieval) → [rules ∥ security ∥ performance] → scoring → report
 ```
 
-Each node is a function in `graph/nodes/` that receives `(GraphState, NodeContext)` and returns `GraphState`. The `GraphRunner` executes nodes sequentially, logs each via `LogService`, and telemetry hooks record success/failure.
+Business risk pipeline (`_build_business_risk_runner`):
 
-**Dependency injection** (`app/dependencies.py`): all singletons use module-level globals + `threading.RLock`. Repositories and MQ backends are swappable via `PERSISTENCE_BACKEND` / `MQ_BACKEND` env vars.
+```
+extract_business_invariants → trace_data_flow → [check_invariants ∥ deep_read_methods ∥ semantic_hotspot_scan] → assess_business_risk → business_risk_rag → verify_business_risks
+```
+
+`GraphRunner` runs single-node phases sequentially and multi-node phases in parallel (`as_completed` + per-agent timeout + `CircuitBreaker`), with `agent_selector` dynamically pruning agents, `CheckpointService` for resume, `LogService` logging, and telemetry hooks recording success/failure.
+
+**Dependency injection** (`app/dependencies.py`): all singletons use module-level globals + `threading.RLock`. Repositories are swappable via `PERSISTENCE_BACKEND`; both pipeline runners (code review / business risk) are assembled here.
 
 **Repository pattern** (`repositories/`): abstract protocol classes (e.g., `TaskRepository`) with dual implementations — in-memory (`InMemoryTaskRepository`) and SQL via SQLAlchemy/aiosqlite (`SQLTaskRepository`). The `dependencies.py` module picks the right one at startup.
 
-**MQ abstraction** (`mq/`): `ProducerProtocol` with three adapters — `InMemoryProducer`, `KafkaProducerAdapter`, `RabbitMQProducerAdapter`. The consumer (`mq/consumer.py`) polls the queue and invokes `AIService.run()`.
+**MQ** (`mq/`): Kafka-native via aiokafka — `review_consumer.py` consumes `ai.review.tasks` and runs the review pipeline (Redis SETNX dedup + in-process transient retries); `callback_producer.py` publishes state callbacks to `ai.review.callbacks`; `payload_client.py` fetches large payloads from Java. All start with the FastAPI lifespan when `KAFKA_ENABLED=true`.
 
-**Tool system** (`tools/`): typed `ToolRegistry` with default tools: `diff_analyzer`, `sql_risk_checker`, `api_breaking_checker`, `incident_search`, `test_coverage_checker`, `config_change_checker`. Tools are injected into `GraphBuilder` and accessible to nodes via `NodeContext.registry`.
+**Tool system** (`tools/`): typed `ToolRegistry` with 8 default tools: `diff_analyzer`, `sql_risk_checker`, `api_breaking_checker`, `incident_search`, `test_coverage_checker`, `config_change_checker`, plus `ASTParserTool` and `CodeKnowledgeGraphTool` (AST parsing + code knowledge graph, NetworkX weighted BFS impact radius). Tools are injected into `GraphBuilder` and accessible to nodes via `NodeContext.registry`.
 
 ### Frontend (`frontend/src/`)
 
 | Path | Role |
 |------|------|
-| `router/index.tsx` | React Router v7 — `/` (SubmitPage), `/tasks` (TaskDashboardPage), `/tasks/:taskId` (TaskDetailPage), `/results/:taskId` (ResultDetailPage) |
+| `router/index.tsx` | React Router v7 — `/` (SubmitPage), `/tasks` (TaskDashboardPage), `/code-review/:taskId` (CodeReviewDetailPage), `/business-risk/:taskId` (BusinessRiskDetailPage), `/business-risk/source` (BusinessRiskSourcePage), `/feedback` (FeedbackDashboardPage) |
 | `api/client.ts` | Generic `http<T>()` wrapper: adds API-key header, trace-id, timeout via AbortController |
-| `api/review.ts`, `task.ts`, `logs.ts` | Typed API functions built on `http<T>()` |
+| `api/review.ts`, `task.ts`, `logs.ts`, `stream.ts`, `feedback.ts`, `businessRisk.ts` | Typed API functions built on `http<T>()` (`stream.ts` wraps SSE) |
 | `store/` | Zustand stores with immer middleware: `taskStore`, `resultStore`, `logStore`, `status` |
-| `hooks/` | `useTaskPolling` (polls GET /api/review/tasks on interval), `useReviewSubmission` |
-| `components/` | Reusable: `ReviewSubmitForm`, `TaskStatusBadge`, `ReviewResultCard`, `LogsPanel`, `ReportDownloadButton` |
+| `hooks/` | `useTaskPolling` (polls GET /api/review/tasks on interval), `useReviewSubmission`, `useBusinessRiskSse` (SSE + Last-Event-ID reconnect), `useInterval` |
+| `components/` | Reusable: `ReviewSubmitForm`, `TaskStatusBadge`, `TaskStatusTimeline`, `TaskSummarySidebar`, `ReviewResultCard`, `ReviewProgressPanel`, `LogsPanel`, `ReportDownloadButton`, `FeedbackWidget` |
 | `pages/` | Route-level page components with co-located `*.test.tsx` files |
 
 State management: Zustand + immer for local state (tasks, results, logs); TanStack React Query for server-state and cache invalidation.
@@ -171,7 +190,7 @@ State management: Zustand + immer for local state (tasks, results, logs); TanSta
 
 ## Key design decisions
 
-- **Swappable backends**: MQ supports inmemory (dev/test), Kafka, and RabbitMQ. Persistence supports inmemory and SQL. Controlled via env vars, not code changes.
+- **Swappable backends**: Persistence supports inmemory and SQL (`PERSISTENCE_BACKEND`, default inmemory). The async link is Kafka-native: Java Spring Cloud Stream publishes, Python aiokafka consumes/produces callbacks, toggled by `KAFKA_ENABLED`. Controlled via env vars, not code changes.
 - **Trace propagation**: `X-Trace-Id` header flows from frontend → Java → Python and back, set at each layer if missing.
-- **Health probes**: Both Java and Python expose health endpoints with real dependency checks (not just ping). Python returns `503` if any required dependency is down; skipped backends (e.g., Kafka when `MQ_BACKEND=inmemory`) don't affect health.
-- **Async task lifecycle**: Tasks transition `PENDING → IN_PROGRESS → SUCCEEDED | NEED_REVIEW | FAILED`. `NEED_REVIEW` tasks require a human handoff decision (APPROVED/REJECTED) via the handoff endpoint.
+- **Health probes**: Both Java and Python expose health endpoints with real dependency checks (not just ping). Python returns `503` if any required dependency is down; skipped backends (e.g., Kafka when `KAFKA_ENABLED=false`) don't affect health.
+- **Async task lifecycle**: Tasks transition `PENDING → PROCESSING → SUCCESS | FAILED | HUMAN_REVIEW`. `HUMAN_REVIEW` tasks require a human handoff decision (APPROVE/REJECT/MODIFY) via the handoff endpoint.
