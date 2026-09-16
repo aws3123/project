@@ -33,9 +33,6 @@ function mapMode(mode?: string): ReviewTask['mode'] {
   if (normalized === 'sync' || normalized === 'async') {
     return normalized
   }
-  if (normalized === 'business_risk_source') {
-    return 'business_risk_source'
-  }
   return undefined
 }
 

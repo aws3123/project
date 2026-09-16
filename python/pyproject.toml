@@ -77,3 +77,4 @@ explicit = true
 
 [tool.pytest.ini_options]
 addopts = "--import-mode=importlib"
+asyncio_mode = "auto"

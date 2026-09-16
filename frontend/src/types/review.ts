@@ -21,7 +21,7 @@ export interface ReviewTask {
   projectName?: string
   prLink?: string
   diffContent?: string
-  mode?: SubmissionMode | 'business_risk_source'
+  mode?: SubmissionMode
   status: ReviewTaskStatus
   createdAt: string
   updatedAt?: string

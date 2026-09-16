@@ -4,15 +4,15 @@
     - metered 装饰器：横切拦截 LLM 调用边界，自动采集响应中的真实 usage，
       与业务逻辑（审查节点）完全解耦，任何节点调 LLM 都被自动计量。
     - ContextVar 累加器：按"任务"隔离用量（每个任务独立 TokenUsage 实例）。
-    - 线程语义：asyncio.to_thread 会复制当前 context 到工作线程，
-      ContextVar 持有的是共享可变对象引用，线程内累加主线程可见，
-      天然支持异步任务的跨线程聚合。
+    - 异步语义：全链路异步化后，同一事件循环内的协程共享 ContextVar，
+      同 task 的各 await 天然共享累加器，无需跨线程复制 context。
 """
 
 from __future__ import annotations
 
 import contextvars
 import functools
+import inspect
 from typing import Any, Callable, TypeVar
 
 F = TypeVar("F", bound=Callable[..., Any])
@@ -111,11 +111,12 @@ def metered(fn: F) -> F:
 
     适用对象：返回 OpenAI-compatible completion 响应的内部方法
     （见 LLMClient._create_completion）。业务方法无需任何改动即被计量。
+
+    支持同步与异步两种实现：被装饰函数若为协程（async def），
+    则返回 async wrapper 并在 await 后读取 usage。
     """
 
-    @functools.wraps(fn)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
-        result = fn(*args, **kwargs)
+    def _record_result(result: Any) -> None:
         usage = getattr(result, "usage", None)
         if usage is not None:
             record_usage(
@@ -124,6 +125,21 @@ def metered(fn: F) -> F:
                 getattr(usage, "total_tokens", None),
                 getattr(result, "model", None),
             )
+
+    if inspect.iscoroutinefunction(fn):
+
+        @functools.wraps(fn)
+        async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+            result = await fn(*args, **kwargs)
+            _record_result(result)
+            return result
+
+        return async_wrapper  # type: ignore[return-value]
+
+    @functools.wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        result = fn(*args, **kwargs)
+        _record_result(result)
         return result
 
     return wrapper  # type: ignore[return-value]

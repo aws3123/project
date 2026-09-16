@@ -1,0 +1,156 @@
+# ── AI Code Review Sentinel · CI/CD ──────────────────────────────────────────
+# 触发条件：push 到 main（仅当涉及 backend/python/frontend 或编排/工作流文件时）
+#          或手动 workflow_dispatch。
+#
+# 运行环境：SELF-HOSTED (self-hosted runner 部署在服务器本地)
+#   · 服务器为纯内网 (172.23.x.x)，GitHub 托管 runner 无法访问，故用自托管 runner
+#   · 自托管 runner 安装于服务器，可访问内网 MySQL/Redis/Kafka 并调用本地 docker
+#
+# 流程：build-push（构建三端镜像 → 推送 GHCR 私有仓）
+#       → deploy（本机登录 GHCR → 拉取新镜像 → docker compose 滚动部署）
+#
+# 所需 Secrets：
+#   GHCR_TOKEN : GitHub PAT，需同时具备 read:packages 与 write:packages。
+#                （用于 push 推送以及服务器本机 docker login 拉取私有镜像；
+#                 若未配置则回退使用自动提供的 GITHUB_TOKEN，仅在本工作流运行期间有效）
+# 可选 Variables：
+#   VITE_API_BASE_URL : 构建前端时注入的 BFF 地址，缺省为空（同源经 nginx 转发）
+name: CI/CD Sentinel
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - 'python/**'
+      - 'frontend/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/ci-cd.yml'
+  workflow_dispatch:
+
+# 同一 ref 只允许一个部署进行，后到的排队等待，避免并发覆盖
+concurrency:
+  group: sentinel-cd-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_OWNER: ghcr.io/${{ github.repository }}   # 形如 ghcr.io/aws3123/project
+  VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL || '' }}
+
+jobs:
+  # ──────────────────────────────────────────── 阶段一：构建并推送镜像 ──
+  build-push:
+    name: 构建并推送镜像 (backend / python / frontend)
+    runs-on: [self-hosted, linux, x64]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 登录 GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: 准备 docker buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ---------- java-backend ----------
+      - name: 元数据 java-backend
+        id: meta-backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_OWNER }}/java-backend
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+
+      - name: 构建并推送 java-backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ---------- python-ai ----------
+      - name: 元数据 python-ai
+        id: meta-python
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_OWNER }}/python-ai
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+
+      - name: 构建并推送 python-ai
+        uses: docker/build-push-action@v6
+        with:
+          context: ./python
+          file: ./python/Dockerfile
+          push: true
+          tags: ${{ steps.meta-python.outputs.tags }}
+          labels: ${{ steps.meta-python.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ---------- frontend ----------
+      - name: 元数据 frontend
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_OWNER }}/frontend
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+
+      - name: 构建并推送 frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+          build-args: |
+            VITE_API_BASE_URL=${{ env.VITE_API_BASE_URL }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ──────────────────────────────────────────── 阶段二：部署到服务器 ──
+  deploy:
+    name: 拉取新镜像并滚动部署
+    needs: build-push
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 本机登录 GHCR
+        run: |
+          echo "${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}" \
+            | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+
+      - name: 拉取最新镜像
+        run: |
+          docker compose -f docker-compose.yml pull java-backend python-ai frontend
+
+      - name: 滚动重启应用服务
+        run: |
+          docker compose -f docker-compose.yml up -d --no-deps --force-recreate java-backend python-ai frontend
+
+      - name: 健康巡检
+        run: |
+          sleep 15
+          echo "--- 容器状态 ---"
+          docker compose -f docker-compose.yml ps java-backend python-ai frontend
+          echo "--- 健康端点 ---"
+          curl -fsS -o /dev/null http://localhost:8080/actuator/health && echo "backend OK" || echo "backend 未就绪"
+          curl -fsS -o /dev/null http://localhost:8000/health && echo "python OK" || echo "python 未就绪"
+          curl -fsS -o /dev/null http://localhost:3000/ && echo "frontend OK" || echo "frontend 未就绪"

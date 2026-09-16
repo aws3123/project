@@ -51,7 +51,7 @@ public class OutboxPoller {
     private static final String FEEDBACK_NEGATIVE_EVENT = "FEEDBACK_NEGATIVE";
     private static final String FEEDBACK_EVENT_OUTPUT_BINDING = "feedbackEvent-out-0";
     private static final String MESSAGE_ID_KEY = "messageId";
-    private static final int BATCH_SIZE = 20;
+    private static final int BATCH_SIZE = 500;
     private static final int MAX_POLL_RETRY = 10;
 
     private final OutboxEventMapper outboxMapper;
@@ -65,7 +65,7 @@ public class OutboxPoller {
     private final TaskAuditLogMapper auditLogMapper;
     private final SseRegistry sseRegistry;
 
-    @Scheduled(fixedDelay = 2000)
+    @Scheduled(fixedDelay = 100)
     public void poll() {
         List<OutboxEvent> events = fetchPendingEvents();
         if (events.isEmpty()) {

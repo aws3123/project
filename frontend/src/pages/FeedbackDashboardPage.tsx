@@ -6,7 +6,7 @@ import type { FeedbackExportItem, FeedbackStatsResponse } from '../types/feedbac
 const PAGE_SIZE = 10
 
 type RangeKey = '7d' | '30d'
-type SourceFilter = 'all' | 'review' | 'business_risk'
+type SourceFilter = 'all' | 'review'
 
 const rangeOptions: { key: RangeKey; label: string; days: number }[] = [
   { key: '7d', label: '近 7 天', days: 7 },
@@ -16,7 +16,6 @@ const rangeOptions: { key: RangeKey; label: string; days: number }[] = [
 const sourceOptions: { key: SourceFilter; label: string }[] = [
   { key: 'all', label: '全部来源' },
   { key: 'review', label: '代码审查' },
-  { key: 'business_risk', label: '业务风险' },
 ]
 
 function resolveRange(days: number) {
@@ -26,9 +25,6 @@ function resolveRange(days: number) {
 }
 
 function getTaskLink(item: FeedbackExportItem) {
-  if (item.source === 'business_risk') {
-    return `/business-risk/${item.taskId}`
-  }
   return `/code-review/${item.taskId}`
 }
 
@@ -213,7 +209,6 @@ export function FeedbackDashboardPage() {
                 <tr>
                   <th>任务 ID</th>
                   <th>类型</th>
-                  <th>来源</th>
                   <th>分类</th>
                   <th>意见</th>
                   <th>traceId</th>
@@ -229,7 +224,6 @@ export function FeedbackDashboardPage() {
                       </Link>
                     </td>
                     <td>{item.feedbackType === 'thumbs_up' ? '👍' : '👎'}</td>
-                    <td>{item.source === 'business_risk' ? '业务风险' : '代码审查'}</td>
                     <td>{item.category ?? '—'}</td>
                     <td className="feedback-comment-cell" title={item.comment ?? ''}>
                       {item.comment ? (item.comment.length > 40 ? `${item.comment.slice(0, 40)}…` : item.comment) : '—'}

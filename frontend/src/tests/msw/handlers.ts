@@ -28,24 +28,9 @@ export interface CapturedFeedbackRequest {
   feedbackType: string
 }
 
-export interface CapturedBusinessRiskSourceRequest {
-  metadata: {
-    schemaVersion: string
-    projectId: string
-    repo: string
-    branch: string
-    requestId?: string
-    traceId?: string
-    entryHint?: string
-  }
-  files: Array<{ name: string; size: number }>
-  traceId?: string | null
-}
-
 let lastAsyncReviewRequest: CapturedAsyncReviewRequest | null = null
 let lastDispatchReviewRequest: CapturedDispatchReviewRequest | null = null
 let lastLogRequest: CapturedLogRequest | null = null
-let lastBusinessRiskSourceRequest: CapturedBusinessRiskSourceRequest | null = null
 let lastFeedbackRequest: CapturedFeedbackRequest | null = null
 
 export function getLastAsyncReviewRequest() {
@@ -60,10 +45,6 @@ export function getLastLogRequest() {
   return lastLogRequest
 }
 
-export function getLastBusinessRiskSourceRequest() {
-  return lastBusinessRiskSourceRequest
-}
-
 export function getLastFeedbackRequest() {
   return lastFeedbackRequest
 }
@@ -72,7 +53,6 @@ export function resetCapturedRequests() {
   lastAsyncReviewRequest = null
   lastDispatchReviewRequest = null
   lastLogRequest = null
-  lastBusinessRiskSourceRequest = null
   lastFeedbackRequest = null
 }
 
@@ -130,38 +110,6 @@ export const handlers = [
       confidence: 1,
       usedLightweightClassifier: false,
     })
-  }),
-
-  http.post('/api/business-risk/source', async ({ request }) => {
-    const formData = await request.formData()
-    const metadataEntry = formData.get('metadata')
-    const metadataText = typeof metadataEntry === 'string'
-      ? metadataEntry
-      : metadataEntry
-        ? await metadataEntry.text()
-        : '{}'
-    const metadata = JSON.parse(metadataText) as CapturedBusinessRiskSourceRequest['metadata']
-    const files = formData.getAll('files').map((entry) => {
-      const file = entry as File
-      return { name: file.name, size: file.size }
-    })
-
-    lastBusinessRiskSourceRequest = {
-      metadata,
-      files,
-      traceId: request.headers.get('X-Trace-Id'),
-    }
-
-    return HttpResponse.json(
-      {
-        taskId: 'biz-risk-1',
-        status: 'PENDING',
-        sessionId: 'session-biz-risk-1',
-        traceId: 'trace-biz-risk-1',
-        streamUrl: '/api/business-risk/stream',
-      },
-      { status: 202 },
-    )
   }),
 
   http.get('/api/review/tasks/:taskId', async ({ params }) => {
@@ -235,23 +183,7 @@ export const handlers = [
     )
   }),
 
-  http.get('/api/feedback/stats', ({ request }) => {
-    const url = new URL(request.url)
-    const source = url.searchParams.get('source')
-
-    if (source === 'business_risk') {
-      return HttpResponse.json({
-        total: 4,
-        thumbs_up: 1,
-        thumbs_down: 3,
-        ratio: '0.25',
-        daily_breakdown: [
-          { date: '2026-09-04', thumbs_up: 1, thumbs_down: 2 },
-          { date: '2026-09-05', thumbs_up: 0, thumbs_down: 1 },
-        ],
-      })
-    }
-
+  http.get('/api/feedback/stats', () => {
     return HttpResponse.json({
       total: 8,
       thumbs_up: 6,
@@ -297,20 +229,7 @@ export const handlers = [
         traceId: 'trace-222',
         createdAt: '2026-09-05T09:00:00Z',
       },
-      {
-        id: 3,
-        taskId: 'task-biz-down',
-        sessionId: 'session-3',
-        feedbackType: 'thumbs_down',
-        category: '遗漏风险',
-        comment: '漏了一个空指针',
-        metadata: null,
-        userAgent: null,
-        source: 'business_risk',
-        traceId: 'trace-333',
-        createdAt: '2026-09-05T11:00:00Z',
-      },
-    ].filter((r) => !filterSource || r.source === filterSource)
+      ].filter((r) => !filterSource || r.source === filterSource)
 
     const size = Number(url.searchParams.get('size') ?? '10')
     const start = (page - 1) * size

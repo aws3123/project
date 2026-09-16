@@ -14,7 +14,7 @@ export interface FeedbackSubmitRequest {
   category?: FeedbackCategory | string
   comment?: string
   metadata?: string
-  source?: 'review' | 'business_risk'
+  source?: 'review'
 }
 
 export interface FeedbackSubmitResponse {

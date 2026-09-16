@@ -31,16 +31,12 @@ def test_sync_review_returns_expected_fields() -> None:
     logs_resp = client.get(f"/ai/review/logs/{body['taskId']}")
     assert logs_resp.status_code == 200
     logs = logs_resp.json()
+    # payload 仅 1 行新增、无核心风险关键词 → agent_selector 只选中 rules，共 7 个节点日志
     assert len(logs) == 7
-    assert [item["node"] for item in logs] == [
-        "diff",
-        "classifier",
-        "impact",
-        "rules",
-        "rag",
-        "scoring",
-        "report",
-    ]
+    log_nodes = [item["node"] for item in logs]
+    assert log_nodes[0:4] == ["diff", "classifier", "impact", "rag"]
+    assert log_nodes[4] == "rules"
+    assert log_nodes[5:7] == ["scoring", "report"]
 
 
 def test_sync_review_accepts_backend_payload_and_returns_summary_fields() -> None:

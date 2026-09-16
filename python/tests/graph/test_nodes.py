@@ -29,6 +29,47 @@ def make_state(**overrides) -> GraphState:
     return base
 
 
+# rag 节点内部直接实例化 RagRetrievalService 做真实检索（向量/BM25/RRF），
+# 单元测试中 patch 掉该服务，返回确定性结果，避免依赖 ES/embedding 基础设施。
+def _patch_rag_retrieval(monkeypatch, results=None, raise_exc: bool = False):
+    import graph.nodes.rag as rag_mod
+
+    if raise_exc:
+        _DEFAULT = results
+
+        class _FakeRetrieval:
+            def __init__(self, settings):
+                pass
+
+            async def retrieve(self, *args, **kwargs):
+                raise RuntimeError(
+                    "db down api_key=super-secret-token"  # 含敏感串，测试脱敏
+                )
+
+        monkeypatch.setattr(rag_mod, "RagRetrievalService", _FakeRetrieval)
+        return
+
+    _DEFAULT = results or [
+        {
+            "title": "cache-db",
+            "snippet": "双写不一致事故",
+            "source": "kb",
+            "score": 0.9,
+        }
+    ]
+
+    class _FakeRetrieval:
+        def __init__(self, settings):
+            pass
+
+        async def retrieve(self, *args, **kwargs):
+            if results is not None:
+                return [], "NORMAL", "no results"
+            return _DEFAULT, "NORMAL", None
+
+    monkeypatch.setattr(rag_mod, "RagRetrievalService", _FakeRetrieval)
+
+
 def make_context(mock_registry=None, llm_client=None) -> NodeContext:
     registry = mock_registry or Mock()
     if mock_registry is None:
@@ -41,7 +82,7 @@ def make_llm_client(
 ) -> MagicMock:
     llm = MagicMock()
 
-    def _chat_structured(messages=None, output_schema=None, **kwargs):
+    async def _chat_structured(messages=None, output_schema=None, **kwargs):
         if output_schema is RAGAnalysisOutput:
             return {
                 "risk_association": rag_analysis,
@@ -63,15 +104,18 @@ def make_llm_client(
             }
         return {}
 
+    async def _chat(messages=None, **kwargs):
+        return '{"findings": []}'
+
     llm.chat_structured = _chat_structured
-    llm.chat.return_value = '{"findings": []}'
+    llm.chat = _chat
     return llm
 
 
 # ---- diff ----
 
 
-def test_diff_node_stores_analysis():
+async def test_diff_node_stores_analysis():
     state = make_state()
     registry = Mock()
     registry.run.return_value = ToolResult(
@@ -79,57 +123,54 @@ def test_diff_node_stores_analysis():
         payload={"files": state["request"]["files"], "summary": {"total_files": 1}},
     )
     ctx = make_context(registry)
-    diff.analyze_diff(state, ctx)
+    await diff.analyze_diff(state, ctx)
     assert "diff_analysis" in state
 
 
 # ---- classifier ----
 
 
-def test_classifier_layers_generated():
+async def test_classifier_layers_generated():
     state = make_state()
     registry = Mock()
     registry.run.return_value = ToolResult(name="coverage", payload={"coverage": 0.5})
     ctx = make_context(registry)
-    classifier.classify_changes(state, ctx)
+    await classifier.classify_changes(state, ctx)
     assert state["classification"]["layers"] == ["controller"]
 
 
 # ---- rules ----
 
 
-def test_rules_node_accumulates_findings():
+async def test_rules_node_accumulates_findings():
     state = make_state(diff_analysis={"files": []}, request={})
     registry = Mock()
     registry.run.return_value = ToolResult(
         name="checker", payload={"findings": [{"severity": "HIGH"}]}
     )
     ctx = make_context(registry)
-    rules.run_rule_checks(state, ctx)
+    await rules.run_rule_checks(state, ctx)
     assert state["rule_findings"][0]["tool"]
 
 
 # ---- rag ----
 
 
-def test_rag_node_sets_context():
+async def test_rag_node_sets_context(monkeypatch):
     state = make_state(
         classification={"layers": ["controller"]},
         request={"metadata": {}},
         diff_analysis={"summary": {"paths": []}},
     )
-    registry = Mock()
-    registry.run.return_value = ToolResult(
-        name="rag", payload={"findings": [{"source": "kb"}], "status": "NORMAL"}
-    )
+    _patch_rag_retrieval(monkeypatch)
     llm = make_llm_client(rag_analysis="存在SQL注入风险")
-    ctx = make_context(registry, llm_client=llm)
-    rag.run_rag(state, ctx)
+    ctx = make_context(llm_client=llm)
+    await rag.run_rag(state, ctx)
     assert state["rag_context"]
     assert "rag_analysis" in state
 
 
-def test_rag_node_with_graph_recall():
+async def test_rag_node_with_graph_recall(monkeypatch):
     state = make_state(
         classification={"layers": ["controller"]},
         request={"metadata": {}},
@@ -154,32 +195,22 @@ def test_rag_node_with_graph_recall():
             "affected_files": [],
         },
     )
-    registry = Mock()
-    registry.run.return_value = ToolResult(
-        name="rag", payload={"findings": [{"source": "kb"}], "status": "NORMAL"}
-    )
-    ctx = make_context(registry, llm_client=None)
-    rag.run_rag(state, ctx)
+    _patch_rag_retrieval(monkeypatch)
+    ctx = make_context(llm_client=None)
+    await rag.run_rag(state, ctx)
     assert state["rag_context"]
 
 
-def test_rag_node_marks_degraded_when_incident_search_degrades():
+async def test_rag_node_marks_degraded_when_incident_search_degrades(monkeypatch):
     state = make_state(
         classification={"layers": ["controller"]},
         request={"metadata": {}},
         diff_analysis={"summary": {"paths": []}},
     )
-    registry = Mock()
-    registry.run.return_value = ToolResult(
-        name="rag",
-        payload={
-            "findings": [],
-            "status": "DEGRADED",
-            "reason": "db down api_key=super-secret-token",
-        },
-    )
-    ctx = make_context(registry, llm_client=None)
-    rag.run_rag(state, ctx)
+    # 检索抛异常 → 节点应标记 DEGRADED 且不外泄内部错误串
+    _patch_rag_retrieval(monkeypatch, raise_exc=True)
+    ctx = make_context(llm_client=None)
+    await rag.run_rag(state, ctx)
     assert state["tool_logs"][-1]["status"] == "DEGRADED"
     assert state["rag_status"] == "DEGRADED"
     assert "super-secret-token" not in state["tool_logs"][-1]["reason"]
@@ -188,7 +219,7 @@ def test_rag_node_marks_degraded_when_incident_search_degrades():
 # ---- security ----
 
 
-def test_security_agent_deterministic_finds_hardcoded_password():
+async def test_security_agent_deterministic_finds_hardcoded_password():
     state = make_state(
         diff_analysis={
             "files": [
@@ -200,12 +231,12 @@ def test_security_agent_deterministic_finds_hardcoded_password():
         }
     )
     ctx = make_context(llm_client=None)
-    security.audit_security(state, ctx)
+    await security.audit_security(state, ctx)
     assert len(state["security_findings"]) >= 1
     assert any("硬编码密码" in f["title"] for f in state["security_findings"])
 
 
-def test_security_agent_with_llm():
+async def test_security_agent_with_llm():
     state = make_state(
         diff_analysis={
             "files": [
@@ -217,16 +248,20 @@ def test_security_agent_with_llm():
         }
     )
     llm = MagicMock()
-    llm.chat.return_value = '{"findings": [{"severity":"HIGH","category":"security","title":"硬编码凭证","detail":"检测到硬编码","file":"app/auth.py","line":1,"suggestion":"移入环境变量","confidence":0.9}]}'
+
+    async def _chat(messages=None, **kwargs):
+        return '{"findings": [{"severity":"HIGH","category":"security","title":"硬编码凭证","detail":"检测到硬编码","file":"app/auth.py","line":1,"suggestion":"移入环境变量","confidence":0.9}]}'
+
+    llm.chat = _chat
     ctx = make_context(llm_client=llm)
-    security.audit_security(state, ctx)
+    await security.audit_security(state, ctx)
     assert len(state["security_findings"]) >= 1
 
 
 # ---- performance ----
 
 
-def test_performance_agent_deterministic_finds_n1_query():
+async def test_performance_agent_deterministic_finds_n1_query():
     state = make_state(
         diff_analysis={
             "files": [
@@ -238,7 +273,7 @@ def test_performance_agent_deterministic_finds_n1_query():
         }
     )
     ctx = make_context(llm_client=None)
-    performance.analyze_performance(state, ctx)
+    await performance.analyze_performance(state, ctx)
     assert len(state["performance_findings"]) >= 1
     assert any(
         "N+1" in f.get("title", "") or "循环" in f.get("title", "")
@@ -246,7 +281,7 @@ def test_performance_agent_deterministic_finds_n1_query():
     )
 
 
-def test_performance_agent_with_llm():
+async def test_performance_agent_with_llm():
     state = make_state(
         diff_analysis={
             "files": [
@@ -258,16 +293,20 @@ def test_performance_agent_with_llm():
         }
     )
     llm = MagicMock()
-    llm.chat.return_value = '{"findings": [{"severity":"MEDIUM","category":"performance","title":"SELECT * 全表查询","detail":"未指定列","file":"app/repo.py","line":1,"suggestion":"指定需要列","confidence":0.8}]}'
+
+    async def _chat(messages=None, **kwargs):
+        return '{"findings": [{"severity":"MEDIUM","category":"performance","title":"SELECT * 全表查询","detail":"未指定列","file":"app/repo.py","line":1,"suggestion":"指定需要列","confidence":0.8}]}'
+
+    llm.chat = _chat
     ctx = make_context(llm_client=llm)
-    performance.analyze_performance(state, ctx)
+    await performance.analyze_performance(state, ctx)
     assert len(state["performance_findings"]) >= 1
 
 
 # ---- impact ----
 
 
-def test_impact_node_parses_and_builds_graph():
+async def test_impact_node_parses_and_builds_graph():
     state = make_state(
         diff_analysis={
             "files": [
@@ -289,7 +328,7 @@ def test_impact_node_parses_and_builds_graph():
         },
     )
     ctx = make_context(registry)
-    impact.analyze_impact(state, ctx)
+    await impact.analyze_impact(state, ctx)
     assert "code_graph" in state
     assert "impact_radius" in state
 
@@ -297,7 +336,7 @@ def test_impact_node_parses_and_builds_graph():
 # ---- scoring with cross-validation ----
 
 
-def test_scoring_cross_validation_detects_contradiction():
+async def test_scoring_cross_validation_detects_contradiction():
     state = make_state(
         rule_findings=[
             {
@@ -322,11 +361,11 @@ def test_scoring_cross_validation_detects_contradiction():
         classification={"summary": {"coverage": 1.0}},
     )
     ctx = make_context(llm_client=None)
-    scoring.score_risks(state, ctx)
+    await scoring.score_risks(state, ctx)
     assert state["need_human_review"] is True
 
 
-def test_scoring_fallback_no_llm():
+async def test_scoring_fallback_no_llm():
     state = make_state(
         rule_findings=[{"severity": "HIGH", "title": "SQL风险"}],
         security_findings=[],
@@ -335,7 +374,7 @@ def test_scoring_fallback_no_llm():
         classification={"summary": {"coverage": 0.5}},
     )
     ctx = make_context(llm_client=None)
-    scoring.score_risks(state, ctx)
+    await scoring.score_risks(state, ctx)
     assert state["risk_score"] >= 0.2
     assert len(state["breakdown"]) >= 3
 
@@ -343,7 +382,7 @@ def test_scoring_fallback_no_llm():
 # ---- report ----
 
 
-def test_report_llm_generates_recommendations():
+async def test_report_llm_generates_recommendations():
     state = make_state(
         risk_score=0.65,
         risk_summary="中等风险",
@@ -363,18 +402,18 @@ def test_report_llm_generates_recommendations():
     )
     llm = make_llm_client()
     ctx = make_context(llm_client=llm)
-    report.summarize(state, ctx)
+    await report.summarize(state, ctx)
     assert "整体风险" in state["summary"]
     assert len(state["recommendations"]) >= 1
 
 
-def test_report_fallback_no_llm():
+async def test_report_fallback_no_llm():
     state = make_state(
         risk_score=0.7,
         classification={"layers": ["controller"], "summary": {"coverage": 0.6}},
         rule_findings=[{}],
     )
     ctx = make_context(llm_client=None)
-    report.summarize(state, ctx)
+    await report.summarize(state, ctx)
     assert state["summary"].startswith("整体风险")
     assert len(state["recommendations"]) == 2

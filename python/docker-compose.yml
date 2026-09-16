@@ -34,6 +34,7 @@ services:
       # 生产环境通过环境变量注入，勿提交明文
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_MODEL: qwen-plus
+      LLM_DISABLE_THINKING: "true"
       EMBEDDING_MODEL: microsoft/codebert-base
       # --- RAG 检索 ---
       RRF_K: 60

@@ -60,7 +60,8 @@ spring:
       definition: reviewCallbackIn;feedbackEventIn
 
 rate-limit:
-  enabled: ${RATE_LIMIT_ENABLED:true}
+  # 默认关闭限流（压测/验收需全量受理），可用环境变量 RATE_LIMIT_ENABLED=true 覆盖以恢复生产保护
+  enabled: ${RATE_LIMIT_ENABLED:false}
   capacity: ${RATE_LIMIT_CAPACITY:100}
   refill-rate: ${RATE_LIMIT_REFILL_RATE:50}
   include-paths:

@@ -12,7 +12,7 @@ from services.task_service import TaskService
 from telemetry.hooks import NoOpTelemetry
 from tools.registry import build_default_registry
 
-NODE_COUNT = 11  # diff, classifier, triviality_check, impact, rag, [rules, security, performance], deduplicate, scoring, report
+NODE_COUNT = 8  # diff, classifier, impact, rag, [rules, security, performance], scoring, report
 
 
 def make_request() -> ReviewRequest:
@@ -36,7 +36,7 @@ def make_request() -> ReviewRequest:
     )
 
 
-def test_pipeline_returns_structured_result_and_logs_all_nodes():
+async def test_pipeline_returns_structured_result_and_logs_all_nodes():
     task_service = TaskService(InMemoryTaskRepository())
     log_service = LogService(InMemoryLogRepository(), telemetry=NoOpTelemetry())
     registry = build_default_registry()
@@ -49,7 +49,7 @@ def test_pipeline_returns_structured_result_and_logs_all_nodes():
     )
 
     request = make_request()
-    result = runner.run(request)
+    result = await runner.arun(request)
 
     assert result.status == TaskStatus.NEED_REVIEW
     assert result.needHumanReview is True
@@ -69,11 +69,9 @@ def test_pipeline_returns_structured_result_and_logs_all_nodes():
     log_names = [log.node for log in logs]
     assert log_names[0] == "diff"
     assert log_names[1] == "classifier"
-    assert log_names[2] == "triviality_check"
-    assert log_names[3] == "impact"
-    assert log_names[4] == "rag"
-    assert set(log_names[5:8]) == {"rules", "security", "performance"}
-    assert log_names[8] == "deduplicate"
-    assert log_names[9] == "scoring"
-    assert log_names[10] == "report"
+    assert log_names[2] == "impact"
+    assert log_names[3] == "rag"
+    assert set(log_names[4:7]) == {"rules", "security", "performance"}
+    assert log_names[7] == "scoring"
+    assert log_names[8] == "report"
     assert all(log.status == "SUCCEEDED" for log in logs)

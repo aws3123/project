@@ -42,28 +42,6 @@ class AppSettings(BaseSettings):
     app_port: int = 8000
 
     # -------------------------------------------------------------------------
-    # 业务风险 Worker 配置（与 Java BFF 层通信相关）
-    # -------------------------------------------------------------------------
-    # Worker 心跳上报地址：Python 服务定期向 Java 后端发送"我还活着"的信号
-    business_risk_worker_heartbeat_url: str = (
-        "http://localhost:8080/api/internal/business-risk/worker-heartbeat"
-    )
-    # Worker 认证令牌：用于 Java 和 Python 之间的身份验证，防止非法请求
-    business_risk_worker_token: str = "dev-callback"
-    # 令牌放在 HTTP 请求的哪个 Header 中
-    business_risk_worker_token_header: str = "X-Worker-Token"
-    # Worker 版本号，用于 Java 端识别 Python 服务版本
-    business_risk_worker_version: str = "2026.05.30"
-    # 最大并发数：同时处理几个业务风险评估任务
-    business_risk_worker_max_concurrency: int = 4
-    # 心跳间隔：每隔多少秒向 Java 后端报告一次"我还活着"
-    business_risk_worker_heartbeat_interval_seconds: int = 15
-    # 支持的业务风险 Schema 版本列表（逗号分隔）
-    business_risk_schema_versions_supported: str = "2.0,3.0"
-    # Java 端预处理支持的版本
-    business_risk_java_preprocess_versions_supported: str = "3.0"
-
-    # -------------------------------------------------------------------------
     # Kafka 异步链路配置（Java 生产者 → Python 消费者 → 回调回 Java）
     # -------------------------------------------------------------------------
     # 总开关：false 时不启动消费者/生产者（回滚开关，配合 auto_offset_reset 排干积压）
@@ -76,10 +54,10 @@ class AppSettings(BaseSettings):
     kafka_review_tasks_topic: str = "ai.review.tasks"
     # Topic 2：Python 回调通知（Python 生产，Java 消费）
     kafka_review_callbacks_topic: str = "ai.review.callbacks"
-    # 并发上限：同时运行多少个审查流水线（对齐 LLM 配额，别把配额打爆）
-    kafka_max_concurrency: int = 4
-    # 单次 poll 最多拉取的消息数
-    kafka_max_poll_records: int = 20
+    # 并发上限：同时运行多少个审查流水线（压测口径 = 拉取并发，对齐 LLM 配额）
+    kafka_max_concurrency: int = 500
+    # 单次 poll 最多拉取的消息数（压测口径 = 批内并发，需与并发量匹配避免批大小卡吞吐）
+    kafka_max_poll_records: int = 500
     # 两次 poll 之间的最大间隔（ms）：单任务 LLM 可能跑 180s，批处理需留足余量防 rebalance
     kafka_max_poll_interval_ms: int = 1800000
     # 瞬时失败（LLM 超时/网络）进程内重试次数
@@ -167,6 +145,16 @@ class AppSettings(BaseSettings):
     llm_api_key: str = "dev-key"
     # 使用的大语言模型名称。qwen-plus 是通义千问的增强版
     llm_model: str = "qwen-plus"
+    # 关闭思考模式（thinking）。本地 llama.cpp 部署的 Qwen3 是推理模型，
+    # 开启思考时会先输出 reasoning_content，白烧 token 且拖慢响应；
+    # 置 True 时通过 chat_template_kwargs 关闭思考，让输出直达正文。
+    llm_disable_thinking: bool = False
+    # 压测用 LLM 延迟模拟（秒）。非 0 时每次 LLM 调用前固定 sleep 该时长，
+    # 用于在真实 LLM 不可控延迟下复现压测链路行为（0 = 关闭，走真实调用）
+    llm_mock_delay_seconds: float = 0.0
+    # LLM 调用最大并发限额：信号量限制全局同时在飞的 LLM 请求数，
+    # 独立于消费拉取并发（kafka_max_concurrency），对齐 LLM 配额/压测模拟
+    llm_max_concurrency: int = 2500
     # 嵌入模型名称。嵌入模型负责把文本转成向量，用于语义搜索
     embedding_model: str = "microsoft/codebert-base"
 
@@ -259,18 +247,6 @@ class AppSettings(BaseSettings):
     # "prometheus" → 同时写日志 + 输出 Prometheus 指标（/metrics 端点采集）
     # "noop"       → 不收集（noop = no operation，空操作）
     telemetry_backend: Literal["logging", "prometheus", "noop"] = "logging"
-
-    # -------------------------------------------------------------------------
-    # 语义热点扫描配置
-    # -------------------------------------------------------------------------
-    # 语义热点扫描：自动扫描代码变更，找出可能存在风险的"热点"区域。
-    # 比如某个文件最近频繁出 bug，就会被标记为"热点"。
-    # 是否启用语义热点扫描
-    semantic_hotspot_enabled: bool = True
-    # 并发数：同时分析几个文件
-    semantic_hotspot_concurrency: int = 5
-    # 置信度阈值：只有模型认为风险概率超过这个值的结果才会被保留
-    semantic_hotspot_confidence_threshold: float = 0.6
 
     # -------------------------------------------------------------------------
     # Pydantic 模型配置

@@ -28,14 +28,14 @@ class _FakeLLM:
         self.fallback_text = fallback_text
         self.decision_calls = 0
 
-    def chat_structured(self, messages, output_schema, **kwargs) -> dict:
+    async def chat_structured(self, messages, output_schema, **kwargs) -> dict:
         self.decision_calls += 1
         if self._decisions:
             return self._decisions.pop(0)
         # 脚本耗尽 → 若有 output_schema 则返回合法性校验后的终止决策
         raise RuntimeError("decisions exhausted")
 
-    def chat(self, messages, **kwargs) -> str:
+    async def chat(self, messages, **kwargs) -> str:
         return self.fallback_text
 
 
@@ -68,7 +68,7 @@ def _agent(llm, registry=None):
 # ---------------------------------------------------------------------------
 
 
-def test_react_loop_calls_tool_then_final_answer():
+async def test_react_loop_calls_tool_then_final_answer():
     llm = _FakeLLM(
         [
             {
@@ -83,14 +83,14 @@ def test_react_loop_calls_tool_then_final_answer():
         ]
     )
     registry = _FakeRegistry()
-    result, trace = _agent(llm, registry).run("你是安全审计", "审阅代码")
+    result, trace = await _agent(llm, registry).run("你是安全审计", "审阅代码")
 
     assert result == {"title": "SQL注入风险", "severity": "HIGH"}
     assert [name for name, _ in registry.calls] == ["code_knowledge_graph"]
     assert [t["tool"] for t in trace] == ["code_knowledge_graph"]
 
 
-def test_react_loop_direct_final_answer():
+async def test_react_loop_direct_final_answer():
     llm = _FakeLLM(
         [
             {
@@ -100,14 +100,14 @@ def test_react_loop_direct_final_answer():
         ]
     )
     registry = _FakeRegistry()
-    result, trace = _agent(llm, registry).run("你", "代码")
+    result, trace = await _agent(llm, registry).run("你", "代码")
 
     assert result["title"] == "无风险"
     assert registry.calls == []  # 未调用任何工具（无需取证即直答）
     assert trace == []
 
 
-def test_react_falls_back_when_steps_exhausted():
+async def test_react_falls_back_when_steps_exhausted():
     # 全部决策都是调工具 → 步数耗尽仍无终答 → 回退到单次调用
     llm = _FakeLLM(
         [
@@ -118,13 +118,13 @@ def test_react_falls_back_when_steps_exhausted():
     )
     agent = _agent(llm)
     agent._max_steps = 2
-    result, _trace = agent.run("你", "代码")
+    result, _trace = await agent.run("你", "代码")
 
     assert result == {"title": "回退结果"}
     assert llm.decision_calls == 2
 
 
-def test_react_output_schema_validation():
+async def test_react_output_schema_validation():
     class Schema(BaseModel):
         title: str
 
@@ -137,11 +137,11 @@ def test_react_output_schema_validation():
         ]
     )
     # 传入 output_schema 时，结果应经过 model_dump
-    result, _trace = _agent(llm).run("你", "代码", output_schema=Schema)
+    result, _trace = await _agent(llm).run("你", "代码", output_schema=Schema)
     assert result == {"title": "由schema校验"}
 
 
-def test_react_rejects_disallowed_tool_and_recovers():
+async def test_react_rejects_disallowed_tool_and_recovers():
     llm = _FakeLLM(
         [
             {"action": "call_tool", "tool_name": "evil_tool", "arguments": {}},
@@ -152,7 +152,7 @@ def test_react_rejects_disallowed_tool_and_recovers():
         ]
     )
     registry = _FakeRegistry()
-    result, trace = _agent(llm, registry).run("你", "代码")
+    result, trace = await _agent(llm, registry).run("你", "代码")
 
     assert result == {"title": "ok"}
     # 非法工具不应真正执行

@@ -17,7 +17,7 @@ export function submitFeedback(payload: FeedbackSubmitRequest, traceId?: string)
 export interface FeedbackStatsParams {
   from: Date
   to: Date
-  source?: 'review' | 'business_risk'
+  source?: 'review'
 }
 
 export function fetchFeedbackStats(params: FeedbackStatsParams, traceId?: string) {

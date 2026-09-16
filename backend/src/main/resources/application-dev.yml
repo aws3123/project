@@ -4,6 +4,9 @@ spring:
     username: review
     password: reviewdb123
     driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      # 3000 VU 尖峰压测需连接池放大（上午终版验证值），可用 SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE 覆盖
+      maximum-pool-size: 200
   sql:
     init:
       mode: always

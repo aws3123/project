@@ -7,7 +7,7 @@ import { getOrCreateTraceId } from '../utils/trace'
 interface FeedbackWidgetProps {
   taskId: string
   sessionId: string
-  source?: 'review' | 'business_risk'
+  source?: 'review'
   systemAnswer?: string
   className?: string
 }

@@ -1,17 +1,16 @@
-"""AIService tests covering task/result services wiring."""
+"""AIService tests covering runner delegation.
+
+全链路异步化后，AIService 只依赖注入的 async runner（runner.arun），
+不再自行持久化 task/result（改由 Java 后端 + GraphRunner 负责）。
+本测试验证 AIService 对 runner 的委托行为。
+"""
 
 from __future__ import annotations
 
-from unittest.mock import Mock
-
-from repositories.result_repository import InMemoryResultRepository
-from repositories.task_repository import InMemoryTaskRepository
 from schemas.api.request import ReviewRequest
 from schemas.api.result import Recommendation, ReviewResult, RiskBreakdown
 from schemas.domain.enums import ReviewMode, TaskStatus
 from services.ai_service import AIService
-from services.result_service import ResultService
-from services.task_service import TaskService
 
 
 def build_request() -> ReviewRequest:
@@ -37,40 +36,30 @@ def build_runner_result(request: ReviewRequest) -> ReviewResult:
     )
 
 
-def test_run_persists_task_and_result():
-    task_repo = InMemoryTaskRepository()
-    result_repo = InMemoryResultRepository()
-    task_service = TaskService(task_repo)
-    result_service = ResultService(result_repo)
-    runner = lambda req: build_runner_result(req)
-    ai_service = AIService(task_service, result_service, runner)
-
+async def test_delegates_to_runner_without_event_sink():
     request = build_request()
-    result = ai_service.run(request)
+    expected = build_runner_result(request)
 
-    assert result.riskScore == 5
-    stored_task = task_service.get(result.taskId)
-    assert stored_task.status == TaskStatus.SUCCEEDED
-    stored_result = result_service.get(result.taskId)
-    assert stored_result is not None
+    async def runner(req):
+        assert req is request
+        return expected
+
+    ai_service = AIService(runner)
+
+    result = await ai_service.run(request)
+    assert result is expected
 
 
-def test_run_need_review_marks_need_review_state():
-    task_repo = InMemoryTaskRepository()
-    result_repo = InMemoryResultRepository()
-    task_service = TaskService(task_repo)
-    result_service = ResultService(result_repo)
-
+async def test_delegates_to_runner_with_event_sink():
     request = build_request()
-    runner_result = build_runner_result(request).model_copy(
-        update={"status": TaskStatus.NEED_REVIEW}
-    )
-    runner = Mock(return_value=runner_result)
-    ai_service = AIService(task_service, result_service, runner)
+    expected = build_runner_result(request)
+    sink = lambda e: None  # noqa: E731
 
-    result = ai_service.run(request)
+    async def runner(req, **kwargs):
+        assert kwargs.get("event_sink") is sink
+        return expected
 
-    assert result.status == TaskStatus.NEED_REVIEW
-    stored_task = task_service.get(str(request.taskId))
-    assert stored_task is not None
-    assert stored_task.status == TaskStatus.NEED_REVIEW
+    ai_service = AIService(runner)
+
+    result = await ai_service.run(request, sink)
+    assert result is expected
