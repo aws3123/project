@@ -53,7 +53,8 @@ def snapshot(conn, project_id: str, expected: int) -> dict:
 
 
 def passed(data: dict) -> bool:
-    return (data["persisted"] == data["expected"] == data["terminal"] == data["outbox"]
+    return (data["failed"] == 0
+            and data["persisted"] == data["expected"] == data["terminal"] == data["outbox"]
             and data["outboxPending"] == data["missingOutbox"] == data["terminalWithoutResult"]
             == data["duplicateResultTasks"] == 0)
 

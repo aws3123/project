@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from typing import Any
+from threading import RLock
 
 from config.settings import AppSettings
 from repositories.chroma import search_by_embedding
@@ -18,6 +19,7 @@ class RagRetrievalService:
     def __init__(self, settings: AppSettings | None = None):
         self.settings = settings or AppSettings()
         self._reranker: Any | None = None  # Lazy-loaded
+        self._reranker_lock = RLock()
         # Chroma and the local CrossEncoder are process-shared resources.  Do
         # not let the Kafka worker's 500-way task concurrency overwhelm them.
         self._retrieve_semaphore = asyncio.Semaphore(
@@ -230,9 +232,10 @@ class RagRetrievalService:
             return candidates[:top_k]
 
     def _get_reranker(self):
-        """Lazy-load Cross-Encoder model."""
-        if self._reranker is None:
-            from sentence_transformers import CrossEncoder
+        """Lazy-load Cross-Encoder model exactly once per process."""
+        with self._reranker_lock:
+            if self._reranker is None:
+                from sentence_transformers import CrossEncoder
 
-            self._reranker = CrossEncoder(self.settings.rerank_model_name)
-        return self._reranker
+                self._reranker = CrossEncoder(self.settings.rerank_model_name, local_files_only=True)
+            return self._reranker

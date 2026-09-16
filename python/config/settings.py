@@ -64,10 +64,13 @@ class AppSettings(BaseSettings):
     kafka_transient_retries: int = 3
     # 瞬时失败重试退避间隔（ms）
     kafka_transient_backoff_ms: int = 2000
-    # Redis SETNX 去重开关：重复消息不重复处理，避免烧 LLM token
+    # Redis 去重开关：完成态任务不重复处理，避免烧 LLM token
     kafka_dedup_enabled: bool = True
-    # 去重键 TTL（秒）：大于单任务最长生命周期即可
+    # 完成态去重键 TTL（秒）：大于业务允许的重复投递窗口即可
     kafka_dedup_ttl_seconds: int = 86400
+    # 处理中租约 TTL（秒）：进程崩溃后，未提交的 Kafka 消息在租约到期后可被重投处理。
+    # 正常长任务会续租，因此该值不限制真实 LLM 的执行时长。
+    kafka_processing_lease_seconds: int = 15
     # SASL 鉴权占位（内网可 PLAINTEXT，留出鉴权位）
     kafka_security_protocol: str = "PLAINTEXT"
     kafka_sasl_mechanism: str = ""

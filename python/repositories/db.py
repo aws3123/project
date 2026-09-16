@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from threading import RLock
 from typing import Any
 
 from sqlalchemy import create_engine
@@ -56,16 +57,18 @@ def get_minio_client(settings: AppSettings | None = None):
 
 # Global embedding model cache (loaded once per process lifetime)
 _embedding_model: Any | None = None
+_embedding_model_lock = RLock()
 
 
 def _get_embedding_model(model_name: str = "microsoft/codebert-base"):
     """Lazy-load and cache the local sentence-transformer model."""
     global _embedding_model
-    if _embedding_model is None:
-        from sentence_transformers import SentenceTransformer
+    with _embedding_model_lock:
+        if _embedding_model is None:
+            from sentence_transformers import SentenceTransformer
 
-        _embedding_model = SentenceTransformer(model_name)
-    return _embedding_model
+            _embedding_model = SentenceTransformer(model_name, local_files_only=True)
+        return _embedding_model
 
 
 def _fetch_query_embedding(query: str, settings: AppSettings) -> list[float]:

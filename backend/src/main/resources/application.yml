@@ -38,6 +38,9 @@ spring:
             back-off-multiplier: 2.0
       kafka:
         binder:
+          # Topic 与分区由基础设施预先管理，应用只连接既有 Topic。
+          autoCreateTopics: false
+          autoAddPartitions: false
           metrics:
             # 暴露 Kafka 消费者 Lag / 消息速率等指标到 Micrometer（Prometheus 可采集）
             enabled: true
@@ -45,6 +48,12 @@ spring:
           reviewCallbackIn-in-0:
             consumer:
               enableDlq: true
+              ackMode: RECORD
+              configuration:
+                max.poll.records: 200
+                fetch.min.bytes: 1048576
+                fetch.max.wait.ms: 25
+                max.poll.interval.ms: 900000
               dlqName: ${MQ_CALLBACK_TOPIC:ai.review.callbacks}-dlq
               dlqProducerProperties:
                 configuration:
@@ -52,6 +61,12 @@ spring:
           feedbackEventIn-in-0:
             consumer:
               enableDlq: true
+              ackMode: RECORD
+              configuration:
+                max.poll.records: 200
+                fetch.min.bytes: 1048576
+                fetch.max.wait.ms: 25
+                max.poll.interval.ms: 900000
               dlqName: ${MQ_FEEDBACK_TOPIC:ai.feedback.events}-dlq
               dlqProducerProperties:
                 configuration:

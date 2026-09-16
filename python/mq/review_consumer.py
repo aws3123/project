@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -19,6 +20,8 @@ from schemas.api.backend_contract import parse_async_payload
 logger = logging.getLogger(__name__)
 
 DEDUP_KEY_PREFIX = "review:consumed:"
+COMPLETED_DEDUP_VALUE = "completed"
+PROCESSING_DEDUP_PREFIX = "processing:"
 
 
 # 永久失败：schema 不兼容、diff 非法、payload 不存在等，重试无意义，直接进 DEAD_LETTER
@@ -35,7 +38,8 @@ class ReviewKafkaConsumer:
       - enable_auto_commit=False，手动 commit（at-least-once）
       - 批处理：getmany 取一批 → 并发（信号量限流）逐条处理 → 整批完成后 commit。
         批级提交避免了分区内乱序提交导致的"跳过未处理消息"问题；
-        若进程中途崩溃，整批重新投递（at-least-once，重复处理由 Redis 去重兜底）。
+        若进程中途崩溃，整批重新投递（at-least-once）。Redis 仅标记终态任务；
+        处理中任务使用可续租的租约，崩溃后租约到期即可由重投消息接管。
       - ack 策略：成功 → RESULT 回调；瞬时失败重试耗尽 / 永久失败 → DEAD_LETTER 回调，
         两者都视为"已处理"，随后正常 commit，避免无限重投打爆消费线程。
     """
@@ -136,9 +140,17 @@ class ReviewKafkaConsumer:
                     for record in records:
                         tasks.append(self._handle(record.value))
                 if tasks:
-                    await asyncio.gather(
+                    results = await asyncio.gather(
                         *(bounded(t) for t in tasks), return_exceptions=True
                     )
+                    failures = [
+                        result for result in results if isinstance(result, BaseException)
+                    ]
+                    if failures:
+                        first = failures[0]
+                        if isinstance(first, asyncio.CancelledError):
+                            raise first
+                        raise RuntimeError("Task handler failed; Kafka batch will not commit") from first
                 await self._consumer.commit()
             except asyncio.CancelledError:
                 logger.info("Review consumer cancelled")
@@ -159,99 +171,74 @@ class ReviewKafkaConsumer:
         session_id = message.get("sessionId") or None
         trace_id = message.get("traceId") or task_id
 
-        if self._settings.kafka_dedup_enabled and not await self._acquire_dedup(
-            task_id
-        ):
+        claimed, lease_owner = await self._claim_processing_lease(task_id)
+        if not claimed:
             KAFKA_DUPLICATES_SKIPPED.inc()
             logger.debug("Duplicate task skipped taskId=%s", task_id)
             return
 
-        # 计量作用域：整个任务处理期间累加真实 token 用量，
-        # RESULT 回调时随 usage 回传 Java 记账（无 LLM 调用时用量为 0）
-        with MeteringScope() as scope:
-            # 1. 进度回执：用户端 SSE 从 QUEUED → PROCESSING 由 Java 收到本回调后触发
-            await self._producer.send_callback(
-                "PROCESSING", task_id, session_id=session_id, trace_id=trace_id
-            )
-
-            try:
-                payload = await self._payload_client.fetch(task_id)
-                request = parse_async_payload(self._build_request(message, payload))
-                result = await self._process_message(request)
+        lease_renewer = self._start_lease_renewer(task_id, lease_owner)
+        try:
+            # 计量作用域：整个任务处理期间累加真实 token 用量，
+            # RESULT 回调时随 usage 回传 Java 记账（无 LLM 调用时用量为 0）
+            with MeteringScope() as scope:
                 await self._producer.send_callback(
-                    "RESULT",
-                    task_id,
-                    session_id=session_id,
-                    trace_id=trace_id,
-                    result=self._result_to_dict(result),
-                    usage=self._usage_snapshot(scope),
+                    "PROCESSING", task_id, session_id=session_id, trace_id=trace_id
                 )
-            except (PayloadNotFoundError, PermanentFailure) as exc:
-                code = (
-                    exc.code if isinstance(exc, PermanentFailure) else "PAYLOAD_NOT_FOUND"
-                )
-                logger.warning(
-                    "Permanent failure taskId=%s code=%s: %s", task_id, code, exc
-                )
-                await self._producer.send_callback(
-                    "DEAD_LETTER",
-                    task_id,
-                    session_id=session_id,
-                    trace_id=trace_id,
-                    error_code=code,
-                    error_message=str(exc),
-                )
-            except Exception as exc:
-                # 瞬时失败：进程内重试，耗尽后进 DEAD_LETTER（避免无限重投）
-                logger.warning("Transient failure taskId=%s, will retry: %s", task_id, exc)
-                error_code = "TRANSIENT_FAILURE"
-                error_message = str(exc)
-                retries = self._settings.kafka_transient_retries
-                for attempt in range(1, retries + 1):
-                    await asyncio.sleep(
-                        self._settings.kafka_transient_backoff_ms * attempt / 1000
+                try:
+                    payload = await self._payload_client.fetch(task_id)
+                    request = parse_async_payload(self._build_request(message, payload))
+                    result = await self._process_message(request)
+                    await self._producer.send_callback(
+                        "RESULT", task_id, session_id=session_id, trace_id=trace_id,
+                        result=self._result_to_dict(result), usage=self._usage_snapshot(scope),
                     )
-                    try:
-                        payload = await self._payload_client.fetch(task_id)
-                        request = parse_async_payload(
-                            self._build_request(message, payload)
-                        )
-                        result = await self._process_message(request)
-                        await self._producer.send_callback(
-                            "RESULT",
-                            task_id,
-                            session_id=session_id,
-                            trace_id=trace_id,
-                            result=self._result_to_dict(result),
-                            usage=self._usage_snapshot(scope),
-                        )
-                        return
-                    except (PayloadNotFoundError, PermanentFailure) as permanent:
-                        error_code = (
-                            permanent.code
-                            if isinstance(permanent, PermanentFailure)
-                            else "PAYLOAD_NOT_FOUND"
-                        )
-                        error_message = str(permanent)
-                        break
-                    except Exception as retry_exc:
-                        logger.warning(
-                            "Transient retry %d/%d failed taskId=%s: %s",
-                            attempt,
-                            retries,
-                            task_id,
-                            retry_exc,
-                        )
-                        error_code = "TRANSIENT_FAILURE"
-                        error_message = str(retry_exc)
-                await self._producer.send_callback(
-                    "DEAD_LETTER",
-                    task_id,
-                    session_id=session_id,
-                    trace_id=trace_id,
-                    error_code=error_code,
-                    error_message=error_message,
-                )
+                    await self._mark_completed(task_id, lease_owner)
+                    return
+                except asyncio.CancelledError:
+                    raise
+                except (PayloadNotFoundError, PermanentFailure) as exc:
+                    code = exc.code if isinstance(exc, PermanentFailure) else "PAYLOAD_NOT_FOUND"
+                    logger.warning("Permanent failure taskId=%s code=%s: %s", task_id, code, exc)
+                    await self._producer.send_callback(
+                        "DEAD_LETTER", task_id, session_id=session_id, trace_id=trace_id,
+                        error_code=code, error_message=str(exc),
+                    )
+                    await self._mark_completed(task_id, lease_owner)
+                    return
+                except Exception as exc:
+                    logger.warning("Transient failure taskId=%s, will retry: %s", task_id, exc)
+                    error_code, error_message = "TRANSIENT_FAILURE", str(exc)
+                    for attempt in range(1, self._settings.kafka_transient_retries + 1):
+                        await asyncio.sleep(self._settings.kafka_transient_backoff_ms * attempt / 1000)
+                        try:
+                            payload = await self._payload_client.fetch(task_id)
+                            request = parse_async_payload(self._build_request(message, payload))
+                            result = await self._process_message(request)
+                            await self._producer.send_callback(
+                                "RESULT", task_id, session_id=session_id, trace_id=trace_id,
+                                result=self._result_to_dict(result), usage=self._usage_snapshot(scope),
+                            )
+                            await self._mark_completed(task_id, lease_owner)
+                            return
+                        except asyncio.CancelledError:
+                            raise
+                        except (PayloadNotFoundError, PermanentFailure) as permanent:
+                            error_code = permanent.code if isinstance(permanent, PermanentFailure) else "PAYLOAD_NOT_FOUND"
+                            error_message = str(permanent)
+                            break
+                        except Exception as retry_exc:
+                            logger.warning("Transient retry %d/%d failed taskId=%s: %s", attempt, self._settings.kafka_transient_retries, task_id, retry_exc)
+                            error_message = str(retry_exc)
+                    await self._producer.send_callback(
+                        "DEAD_LETTER", task_id, session_id=session_id, trace_id=trace_id,
+                        error_code=error_code, error_message=error_message,
+                    )
+                    await self._mark_completed(task_id, lease_owner)
+        finally:
+            if lease_renewer is not None:
+                lease_renewer.cancel()
+                await asyncio.gather(lease_renewer, return_exceptions=True)
 
     def _build_request(
         self, message: dict[str, Any], payload: dict[str, Any]
@@ -292,22 +279,76 @@ class ReviewKafkaConsumer:
             return {"model": None, "promptTokens": 0, "completionTokens": 0, "totalTokens": 0}
         return usage.snapshot()
 
-    async def _acquire_dedup(self, task_id: str) -> bool:
-        """Redis SETNX 去重：仅首次看到该 taskId 时返回 True。"""
-        if self._redis is None:
-            return True
+    async def _claim_processing_lease(self, task_id: str) -> tuple[bool, str | None]:
+        """认领任务处理租约；只跳过已完成任务，绝不吞掉崩溃后的重投消息。"""
+        if not self._settings.kafka_dedup_enabled or self._redis is None:
+            return True, None
+        key = f"{DEDUP_KEY_PREFIX}{task_id}"
+        owner = f"{PROCESSING_DEDUP_PREFIX}{uuid.uuid4().hex}"
+        lease_seconds = self._settings.kafka_processing_lease_seconds
         try:
-            return bool(
-                await self._redis.set(
-                    f"{DEDUP_KEY_PREFIX}{task_id}",
-                    "1",
-                    nx=True,
-                    ex=self._settings.kafka_dedup_ttl_seconds,
-                )
-            )
+            while True:
+                if await self._redis.set(key, owner, nx=True, ex=lease_seconds):
+                    return True, owner
+                state = await self._redis.get(key)
+                if state == COMPLETED_DEDUP_VALUE:
+                    return False, None
+                # 旧版本无法区分处理中和完成态，遗留的 "1" 只能按可接管租约处理。
+                # 已提交的 Kafka offset 不会再次到达；若确实重投，结果回调本身幂等。
+                if state == "1":
+                    reclaimed = await self._reclaim_legacy_lease(key, owner, lease_seconds)
+                    if reclaimed:
+                        return True, owner
+                # 活跃 worker 的租约尚未到期：不提交该 Kafka 批，让消息等待其完成
+                # 或在 worker 崩溃后等租约过期再接管。
+                await asyncio.sleep(1)
         except Exception:
-            # Redis 不可用时退化为不去重（结果 upsert 天然幂等，最多重复烧 token）
             logger.warning(
                 "Redis dedup unavailable, proceeding without dedup taskId=%s", task_id
             )
-            return True
+            return True, None
+
+    async def _reclaim_legacy_lease(self, key: str, owner: str, lease_seconds: int) -> bool:
+        return bool(await self._redis.eval(
+            "if redis.call('GET', KEYS[1]) == '1' then "
+            "redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2]) return 1 end return 0",
+            1, key, owner, lease_seconds,
+        ))
+
+    def _start_lease_renewer(
+        self, task_id: str, owner: str | None
+    ) -> asyncio.Task[None] | None:
+        if self._redis is None or owner is None:
+            return None
+
+        async def renew() -> None:
+            key = f"{DEDUP_KEY_PREFIX}{task_id}"
+            interval = max(1, self._settings.kafka_processing_lease_seconds // 3)
+            while True:
+                await asyncio.sleep(interval)
+                renewed = await self._redis.eval(
+                    "if redis.call('GET', KEYS[1]) == ARGV[1] then "
+                    "return redis.call('EXPIRE', KEYS[1], ARGV[2]) end return 0",
+                    1, key, owner, self._settings.kafka_processing_lease_seconds,
+                )
+                if not renewed:
+                    logger.warning("Processing lease lost taskId=%s", task_id)
+                    return
+
+        return asyncio.create_task(renew(), name=f"review-lease-{task_id}")
+
+    async def _mark_completed(self, task_id: str, owner: str | None) -> None:
+        """RESULT/DEAD_LETTER 已成功写出后才写完成态，避免重投被提前吞掉。"""
+        if self._redis is None or owner is None:
+            return
+        try:
+            await self._redis.eval(
+                "if redis.call('GET', KEYS[1]) == ARGV[1] then "
+                "return redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[3]) end return 0",
+                1, f"{DEDUP_KEY_PREFIX}{task_id}", owner, COMPLETED_DEDUP_VALUE,
+                self._settings.kafka_dedup_ttl_seconds,
+            )
+        except Exception:
+            # 完成态写入失败时不阻断 Kafka offset 提交：RESULT 回调是幂等的，
+            # 后续少量重复优于把已完成任务卡住。
+            logger.warning("Unable to mark completed dedup state taskId=%s", task_id)

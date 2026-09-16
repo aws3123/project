@@ -87,7 +87,7 @@ async def run_rag(state: GraphState, ctx: NodeContext) -> GraphState:
             nl_query, code_metadata, settings.top_k
         )
     except Exception as e:
-        logger.error("RAG retrieval failed: %s", safe_detail(e))
+        logger.exception("RAG retrieval failed: %s", safe_detail(e))
         fused, retrieval_status, retrieval_reason = [], "DEGRADED", safe_detail(e)
 
     # 格式化检索结果为 rag_context（向后兼容）

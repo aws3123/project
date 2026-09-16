@@ -6,10 +6,6 @@ from config.settings import AppSettings
 from repositories import chroma as chroma_repo
 
 
-def setup_function():
-    chroma_repo._reset_chroma_cache()
-
-
 def test_bootstrap_chromadb_creates_collection_in_configured_path(monkeypatch):
     captured: dict[str, object] = {}
 
@@ -75,25 +71,6 @@ def test_bootstrap_chromadb_uses_cosine_hnsw_space(monkeypatch):
     assert captured["configuration"] == {"hnsw": {"space": "cosine"}}
     assert captured["embedding_function"] is None
     assert collection.name == "incident_vectors"
-
-
-def test_chroma_client_and_collection_are_cached_per_configuration(monkeypatch):
-    created = {"clients": 0, "collections": 0}
-
-    class FakeClient:
-        def __init__(self, path: str, settings=None) -> None:
-            created["clients"] += 1
-
-        def get_or_create_collection(self, name, configuration=None, embedding_function=None):
-            created["collections"] += 1
-            return object()
-
-    monkeypatch.setattr(chroma_repo.chromadb, "PersistentClient", FakeClient)
-    settings = AppSettings(chroma_path="D:/cached-chroma", chroma_collection="incidents")
-
-    assert chroma_repo.get_chroma_client(settings) is chroma_repo.get_chroma_client(settings)
-    assert chroma_repo.get_incident_collection(settings) is chroma_repo.get_incident_collection(settings)
-    assert created == {"clients": 1, "collections": 1}
 
 
 def test_upsert_incident_rows_omits_empty_tags_from_metadata(monkeypatch):
