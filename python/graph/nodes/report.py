@@ -11,7 +11,7 @@ from llm.client import LLMStructuredOutputError
 from schemas.domain.llm_output import ReportOutput
 
 
-def summarize(state: GraphState, ctx: NodeContext) -> GraphState:
+async def summarize(state: GraphState, ctx: NodeContext) -> GraphState:
     """报告生成主函数 —— 生成审查报告摘要和建议。
 
     （签名与语义不变，保证流水线与测试零改动。）
@@ -48,7 +48,7 @@ def summarize(state: GraphState, ctx: NodeContext) -> GraphState:
     )
 
     try:
-        result = ctx.llm_client.chat_structured(
+        result = await ctx.llm_client.chat_structured(
             messages=messages,
             output_schema=ReportOutput,
             max_tokens=1536,

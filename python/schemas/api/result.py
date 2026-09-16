@@ -131,62 +131,6 @@ class HealthStatus(BaseModel):
     llm: HealthComponent  # 大语言模型服务
 
 
-# =============================================================================
-# 业务风险就绪检查模型 —— 用于业务风险接口的健康检查
-# =============================================================================
-class BusinessRiskReadinessComponent(BaseModel):
-    """业务风险模块中单个组件的就绪状态。"""
-
-    status: str
-    detail: str | None = None
-
-
-class BusinessRiskSourceReadinessStatus(BaseModel):
-    """业务风险源处理模块的整体就绪状态。
-
-    在处理业务风险请求之前，需要检查各个依赖组件是否就绪。
-    """
-
-    # 整体就绪状态
-    overall: str
-    # 路由组件是否就绪
-    route: BusinessRiskReadinessComponent
-    # 配置是否就绪
-    config: BusinessRiskReadinessComponent
-    # 持久化层是否就绪
-    persistence: BusinessRiskReadinessComponent
-    # LLM 服务是否就绪
-    llm: BusinessRiskReadinessComponent
-
-
-# =============================================================================
-# 业务风险审查结果模型
-# =============================================================================
-class BusinessRiskResult(BaseModel):
-    """业务风险审查的最终结果。
-
-    和 ReviewResult 类似，但专门用于业务风险场景（如"订单金额超限"等）。
-    """
-
-    # 任务 ID
-    taskId: str
-    # 任务状态
-    status: TaskStatus
-    # 运行 ID（必须提供，用 validation_alias 支持下划线风格的输入）
-    runId: str = Field(validation_alias="run_id")
-    # 风险摘要
-    riskSummary: str | None = None
-    # 详细发现列表
-    details: list[str] = Field(default_factory=list)
-    # 建议的记忆更新
-    proposedMemoryUpdates: dict[str, Any] = Field(
-        default_factory=dict,
-        validation_alias="proposed_memory_updates",
-    )
-    # 链路追踪 ID
-    traceId: str | None = None
-
-
 """Schemas representing review results and scoring details."""
 
 from typing import Any
@@ -243,29 +187,3 @@ class HealthStatus(BaseModel):
     minio: HealthComponent
     vector: HealthComponent
     llm: HealthComponent
-
-
-class BusinessRiskReadinessComponent(BaseModel):
-    status: str
-    detail: str | None = None
-
-
-class BusinessRiskSourceReadinessStatus(BaseModel):
-    overall: str
-    route: BusinessRiskReadinessComponent
-    config: BusinessRiskReadinessComponent
-    persistence: BusinessRiskReadinessComponent
-    llm: BusinessRiskReadinessComponent
-
-
-class BusinessRiskResult(BaseModel):
-    taskId: str
-    status: TaskStatus
-    runId: str = Field(validation_alias="run_id")
-    riskSummary: str | None = None
-    details: list[str] = Field(default_factory=list)
-    proposedMemoryUpdates: dict[str, Any] = Field(
-        default_factory=dict,
-        validation_alias="proposed_memory_updates",
-    )
-    traceId: str | None = None

@@ -10,14 +10,9 @@ import httpx
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
-from app.dependencies import get_business_risk_source_readiness
 from app.utils import safe_detail
 from config.settings import AppSettings
-from schemas.api.result import (
-    BusinessRiskSourceReadinessStatus,
-    HealthComponent,
-    HealthStatus,
-)
+from schemas.api.result import HealthComponent, HealthStatus
 
 router = APIRouter()
 
@@ -166,63 +161,6 @@ def _to_component(value: Any) -> HealthComponent:
     raise TypeError("Invalid health component payload")
 
 
-def _to_business_risk_readiness_component(
-    value: Any, default_detail: str
-) -> dict[str, str | None]:
-    if value is None:
-        return {"status": "UP", "detail": default_detail}
-    if hasattr(value, "model_dump"):
-        return value.model_dump()
-    if isinstance(value, dict):
-        return {
-            "status": value.get("status", "UP"),
-            "detail": value.get("detail", default_detail),
-        }
-    raise TypeError("Invalid business risk readiness component payload")
-
-
-def _to_business_risk_source_readiness_status(
-    value: Any,
-) -> BusinessRiskSourceReadinessStatus:
-    if isinstance(value, BusinessRiskSourceReadinessStatus):
-        return value
-    if isinstance(value, dict):
-        route = _to_business_risk_readiness_component(
-            value.get("route"),
-            "business-risk-source readiness route registered",
-        )
-        config = _to_business_risk_readiness_component(
-            value.get("config"),
-            "llm_api_key configured",
-        )
-        persistence = _to_business_risk_readiness_component(
-            value.get("persistence"),
-            "persistence backend configured",
-        )
-        llm = _to_business_risk_readiness_component(
-            value.get("llm"),
-            "llm_api_key configured",
-        )
-        overall = value.get("overall")
-        if overall is None:
-            overall = (
-                "UP"
-                if all(
-                    component["status"] == "UP"
-                    for component in (route, config, persistence, llm)
-                )
-                else "DOWN"
-            )
-        return BusinessRiskSourceReadinessStatus(
-            overall=overall,
-            route=route,
-            config=config,
-            persistence=persistence,
-            llm=llm,
-        )
-    raise TypeError("Invalid business risk readiness payload")
-
-
 def _compute_overall(components: dict[str, HealthComponent]) -> str:
     for name in _REQUIRED_COMPONENTS:
         if _to_component(components[name]).status == "DOWN":
@@ -248,16 +186,4 @@ async def health_check(settings: AppSettings = Depends(get_settings)):
     overall = _compute_overall(components)
     payload = HealthStatus(overall=overall, **components).model_dump()
     status_code = 200 if overall == "UP" else 503
-    return JSONResponse(status_code=status_code, content=payload)
-
-
-@router.get(
-    "/health/business-risk-source", response_model=BusinessRiskSourceReadinessStatus
-)
-async def business_risk_source_readiness():
-    readiness = _to_business_risk_source_readiness_status(
-        get_business_risk_source_readiness()
-    )
-    payload = readiness.model_dump()
-    status_code = 200 if readiness.overall == "UP" else 503
     return JSONResponse(status_code=status_code, content=payload)

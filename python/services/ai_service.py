@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
 from graph.events import EventSink
 from schemas.api.request import ReviewRequest
@@ -10,11 +10,11 @@ from schemas.api.result import ReviewResult
 class AIService:
     def __init__(
         self,
-        runner: Callable[..., ReviewResult],
+        runner: Callable[..., Awaitable[ReviewResult]],
     ) -> None:
         self._runner = runner
 
-    def run(
+    async def run(
         self,
         request: ReviewRequest,
         event_sink: EventSink | None = None,
@@ -28,5 +28,5 @@ class AIService:
         经 GraphRunner 在节点边界发出进度事件（SSE 流式审查用）。
         """
         if event_sink is None:
-            return self._runner(request)
-        return self._runner(request, event_sink=event_sink)
+            return await self._runner(request)
+        return await self._runner(request, event_sink=event_sink)

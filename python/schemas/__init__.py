@@ -4,7 +4,7 @@ schemas 包初始化文件
 
 按分层拆分：
 - schemas/api/    对外契约（request / result / backend_contract）
-- schemas/domain/ 领域模型（enums / task / log / llm_output / semantic_finding / business_risk*）
+- schemas/domain/ 领域模型（enums / task / log / llm_output / semantic_finding）
 
 调用方应直接按模块导入（如 `from schemas.api.request import ReviewRequest`）。
 本文件仅为兼容保留，新代码无需经包级再导出。
@@ -15,19 +15,8 @@ schemas 包初始化文件
 from schemas.api.request import HandoffRequest, ReviewRequest
 
 # --- 结果模型 ---
-from schemas.api.result import BusinessRiskResult, ReviewResult, RiskBreakdown
+from schemas.api.result import ReviewResult, RiskBreakdown
 
-# --- 业务风险分析相关模型 ---
-from schemas.domain.business_risk import (
-    BusinessInvariant,  # 业务不变量定义
-    BusinessRiskItem,  # 业务风险条目
-    BusinessRiskReport,  # 业务风险报告
-    BusinessRiskRequest,  # 业务风险请求
-    BusinessRiskResponse,  # 业务风险响应
-    DataFlowPath,  # 数据流路径
-    InvariantViolation,  # 不变量违反
-    MethodIssue,  # 方法问题
-)
 from schemas.domain.enums import (
     HandoffDecision,
     RAGStatus,
@@ -55,19 +44,9 @@ __all__ = [
     "HandoffRequest",
     # 结果
     "ReviewResult",
-    "BusinessRiskResult",
     "RiskBreakdown",
     # 任务
     "ReviewTask",
     # 日志
     "NodeLog",
-    # 业务风险
-    "BusinessInvariant",
-    "DataFlowPath",
-    "InvariantViolation",
-    "MethodIssue",
-    "BusinessRiskItem",
-    "BusinessRiskReport",
-    "BusinessRiskRequest",
-    "BusinessRiskResponse",
 ]

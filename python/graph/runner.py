@@ -22,6 +22,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import threading  # 线程锁：并行执行时保护日志写入的线程安全
 from collections.abc import Callable
@@ -661,3 +662,288 @@ class GraphRunner:
             ]
         except Exception as exc:
             logger.warning("Image URL replacement failed: %s", safe_detail(exc))
+
+    # ==========================================================================
+    # 异步执行模型（AsyncOpenAI 全链路异步化）
+    # --------------------------------------------------------------------------
+    # 与同步的 run/run_state/_run_parallel/_run_single_agent 一一对应，
+    # 仅把"线程池并行 + 同步 node 调用"替换为"asyncio 协程 + await node"。
+    # 断点续传 / 熔断 / event_sink / on_agent_done 语义与同步版一致。
+    # 主审查流水线改用这些 async 入口；同步入口保留供未迁移调用方兼容。
+    # ==========================================================================
+
+    async def arun(
+        self,
+        request: ReviewRequest,
+        event_sink: EventSink | None = None,
+    ) -> ReviewResult:
+        """异步执行完整流水线（与 run 等价，改用 await）。"""
+        task_id = str(request.taskId)
+        emit_run_started(event_sink, task_id, self.count_nodes())
+        state: GraphState = {
+            "task_id": task_id,
+            "request": request.model_dump(by_alias=True),
+        }
+        try:
+            state = await self.arun_state(state, event_sink=event_sink)
+        except Exception as exc:
+            emit_run_error(event_sink, task_id, type(exc).__name__, safe_detail(exc))
+            raise
+        result = self._build_result(request, state)
+        emit_run_finished(event_sink, task_id, result)
+        return result
+
+    async def arun_state(
+        self, state: GraphState, event_sink: EventSink | None = None
+    ) -> GraphState:
+        """异步执行流水线核心循环（与 run_state 等价）。
+
+        逐阶段执行所有节点。单节点阶段直接 await 节点；多节点阶段用
+        asyncio 并发执行。断点续传 / 熔断 / 回调逻辑与同步版一致。
+        """
+        task_id = str(state.get("task_id") or state.get("run_id") or "unknown")
+        context = NodeContext(
+            task_id=task_id,
+            registry=self._config.registry,
+            task_service=self._config.task_service,
+            telemetry=self._config.telemetry,
+            llm_client=self._config.llm_client,
+        )
+        ckpt_svc = self._config.checkpoint_service
+
+        completed: set[int] = set()
+        if ckpt_svc:
+            ckpt = ckpt_svc.load(task_id)
+            if ckpt:
+                state = ckpt.get("state", state)
+                completed = set(ckpt.get("completed_phases", []))
+                logger.info(
+                    "Resuming task %s from checkpoint, completed_phases=%s",
+                    task_id,
+                    sorted(completed),
+                )
+
+        for phase_idx, phase in enumerate(self._phases):
+            if len(phase) == 0:
+                continue
+            if phase_idx in completed:
+                continue
+
+            if len(phase) == 1:
+                name, node = phase[0]
+                start = perf_counter()
+                input_snapshot = dict(state)
+                emit_step_started(event_sink, task_id, name)
+                try:
+                    state = await node(state, context)
+                    self._append_log(
+                        name,
+                        context.task_id,
+                        input_snapshot,
+                        dict(state),
+                        start,
+                        "SUCCEEDED",
+                    )
+                    emit_step_finished(
+                        event_sink,
+                        task_id,
+                        name,
+                        "SUCCEEDED",
+                        int((perf_counter() - start) * 1000),
+                    )
+                    completed.add(phase_idx)
+                    if ckpt_svc:
+                        ckpt_svc.save(
+                            task_id,
+                            {
+                                "state": dict(state),
+                                "completed_phases": sorted(completed),
+                            },
+                        )
+                except Exception as exc:
+                    self._append_log(
+                        name,
+                        context.task_id,
+                        input_snapshot,
+                        {"error": str(exc)},
+                        start,
+                        "FAILED",
+                    )
+                    emit_step_finished(
+                        event_sink,
+                        task_id,
+                        name,
+                        "FAILED",
+                        int((perf_counter() - start) * 1000),
+                    )
+                    raise
+            else:
+                selected = self._select_agents_for_phase(phase, state)
+
+                saved_deltas: dict[str, dict] = {}
+                phase_input: GraphState = dict(state)
+
+                if ckpt_svc and ckpt:
+                    saved_deltas = ckpt.get("parallel_results", {}) or {}
+                    pi = ckpt.get("phase_input")
+                    if pi:
+                        phase_input = pi
+                    state = self._merge_results(dict(phase_input), saved_deltas)
+
+                remaining = [(n, fn) for n, fn in selected if n not in saved_deltas]
+
+                if not remaining:
+                    state = self._merge_results(dict(phase_input), saved_deltas)
+                    completed.add(phase_idx)
+                    if ckpt_svc:
+                        ckpt_svc.save(
+                            task_id,
+                            {
+                                "state": dict(state),
+                                "completed_phases": sorted(completed),
+                            },
+                        )
+                else:
+                    if ckpt_svc:
+                        ckpt_svc.save(
+                            task_id,
+                            {
+                                "state": dict(state),
+                                "completed_phases": sorted(completed),
+                                "phase_input": dict(phase_input),
+                                "parallel_results": dict(saved_deltas),
+                            },
+                        )
+
+                    def _on_agent_done(agent_name: str, agent_output: dict) -> None:
+                        if not ckpt_svc:
+                            return
+                        delta = {
+                            k: v
+                            for k, v in agent_output.items()
+                            if k not in phase_input or phase_input[k] != v
+                        }
+                        saved_deltas[agent_name] = delta
+                        ckpt_svc.save(
+                            task_id,
+                            {
+                                "state": dict(state),
+                                "completed_phases": sorted(completed),
+                                "phase_input": dict(phase_input),
+                                "parallel_results": dict(saved_deltas),
+                            },
+                        )
+
+                    merged_state = await self._arun_parallel(
+                        remaining,
+                        state,
+                        context,
+                        on_agent_done=_on_agent_done,
+                        event_sink=event_sink,
+                    )
+
+                    state = merged_state
+                    completed.add(phase_idx)
+                    if ckpt_svc:
+                        ckpt_svc.save(
+                            task_id,
+                            {
+                                "state": dict(state),
+                                "completed_phases": sorted(completed),
+                            },
+                        )
+
+        if ckpt_svc:
+            ckpt_svc.delete(task_id)
+
+        return state
+
+    async def _arun_parallel(
+        self,
+        phase,
+        state,
+        context,
+        on_agent_done=None,
+        event_sink=None,
+    ):
+        """异步并行执行一个阶段内的多个 Agent。
+
+        用 asyncio.gather + wait_for 替换旧 ThreadPoolExecutor：
+        - 熔断器逻辑保留（跳过 / record_failure）
+        - 超时改用 asyncio.TimeoutError（并会取消对应协程与 in-flight LLM 请求）
+        - on_agent_done（断点增量保存）与 event_sink 事件语义不变
+        """
+        cb = self._config.circuit_breaker
+
+        async def _run_one(name, fn):
+            if cb and cb.is_open(name):
+                logger.warning("Agent %s circuit open, skipping", name)
+                return name, {}
+            try:
+                agent_state = await asyncio.wait_for(
+                    self._arun_single_agent(
+                        name, fn, state, context, on_agent_done, event_sink
+                    ),
+                    timeout=AGENT_EXECUTION_TIMEOUT_SECONDS,
+                )
+                if cb:
+                    cb.record_success(name)
+                return name, agent_state
+            except asyncio.TimeoutError:
+                logger.error(
+                    "Agent %s timeout after %ss",
+                    name,
+                    AGENT_EXECUTION_TIMEOUT_SECONDS,
+                )
+                if cb:
+                    cb.record_failure(name)
+                return name, {}
+            except Exception as exc:
+                logger.error("Agent %s failed: %s", name, safe_detail(exc))
+                if cb:
+                    cb.record_failure(name)
+                return name, {}
+
+        done = dict(
+            await asyncio.gather(*(_run_one(n, f) for n, f in phase))
+        )
+
+        for name, _fn in phase:
+            if name not in done:
+                done[name] = {}
+
+        return self._merge_results(state, done)
+
+    async def _arun_single_agent(
+        self, name, fn, state, context, on_done=None, event_sink=None
+    ):
+        """异步执行单个 Agent 节点（与 _run_single_agent 等价，改用 await）。"""
+        start = perf_counter()
+        emit_step_started(event_sink, context.task_id, name)
+        try:
+            result_state = await fn(state, context)
+            self._append_log(
+                name, context.task_id, {}, dict(result_state), start, "SUCCEEDED"
+            )
+            emit_step_finished(
+                event_sink,
+                context.task_id,
+                name,
+                "SUCCEEDED",
+                int((perf_counter() - start) * 1000),
+            )
+            if on_done:
+                on_done(name, dict(result_state))
+            return result_state
+        except Exception as exc:
+            self._append_log(
+                name, context.task_id, {}, {"error": str(exc)}, start, "FAILED"
+            )
+            emit_step_finished(
+                event_sink,
+                context.task_id,
+                name,
+                "FAILED",
+                int((perf_counter() - start) * 1000),
+            )
+            raise

@@ -71,13 +71,6 @@ class GraphState(TypedDict, total=False):
     summary: str  # 审查报告摘要（给人类看的总结）
     details: list[str]  # 审查报告的具体发现列表
     recommendations: list[dict[str, Any]]  # 可操作的改进建议
-    business_invariants: dict[str, Any]  # 业务不变量（如"库存扣减必须在事务内"）
-    data_flow_paths: dict[str, Any]  # 数据流路径（方法间的调用链路）
-    invariant_violations: dict[str, Any]  # 不变量违反项（如"库存操作缺少事务保护"）
-    method_issues: dict[str, Any]  # 方法级别的问题（热点方法的异常检测）
-    semantic_findings: dict[str, Any]  # 语义分析发现（LLM 对热点方法的业务风险判断）
-    business_risk_report: dict[str, Any]  # 业务风险评估报告
-    verified_risks: dict[str, Any]  # 经过自验证的风险项
     trivial: bool  # 是否为平凡变更（纯注释/文档，可跳过深度分析）
     force_human_review: bool  # 是否强制人工复核（Agent 间矛盾时触发）
     cross_validated_findings: list[

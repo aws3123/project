@@ -17,6 +17,7 @@ ReAct = **Rea**soning + **Act**ing：
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any, Literal
@@ -65,7 +66,7 @@ class ReActAgent:
     # 公开入口
     # ------------------------------------------------------------------
 
-    def run(
+    async def run(
         self,
         system_prompt: str,
         user_content: str,
@@ -73,7 +74,7 @@ class ReActAgent:
         temperature: float = 0.1,
         max_tokens: int = 2048,
     ) -> tuple[Any, list[dict]]:
-        """执行 ReAct 循环。
+        """异步执行 ReAct 循环。
 
         Returns:
             (result, trace)
@@ -90,7 +91,7 @@ class ReActAgent:
 
         result: Any | None = None
         for _step in range(1, self._max_steps + 1):
-            decision = self._ask_decision(messages, temperature, max_tokens)
+            decision = await self._ask_decision(messages, temperature, max_tokens)
             if decision is None:
                 break  # 决策调用失败 → 走回退
 
@@ -108,7 +109,7 @@ class ReActAgent:
                         }
                     )
                     continue
-                observation = self._call_tool(
+                observation = await self._call_tool(
                     tool_name, decision.get("arguments") or {}
                 )
                 trace.append(
@@ -140,7 +141,9 @@ class ReActAgent:
 
         # 步数超限 / 循环内失败 → 回退为单次调用，保证有输出
         if result is None:
-            result = self._fallback(base_messages, output_schema, temperature, max_tokens)
+            result = await self._fallback(
+                base_messages, output_schema, temperature, max_tokens
+            )
 
         return result, trace
 
@@ -148,7 +151,7 @@ class ReActAgent:
     # 内部：循环的每一步
     # ------------------------------------------------------------------
 
-    def _ask_decision(
+    async def _ask_decision(
         self,
         messages: list[dict[str, str]],
         temperature: float,
@@ -156,7 +159,7 @@ class ReActAgent:
     ) -> dict | None:
         """让 LLM 决定当前步是调工具还是给终答。失败返回 None（触发回退）。"""
         try:
-            raw = self._llm.chat_structured(
+            raw = await self._llm.chat_structured(
                 messages=messages,
                 output_schema=_ReactDecision,
                 temperature=temperature,
@@ -173,10 +176,11 @@ class ReActAgent:
             return None
         return raw
 
-    def _call_tool(self, tool_name: str, arguments: dict) -> str:
+    async def _call_tool(self, tool_name: str, arguments: dict) -> str:
         """调用 registry 里的工具，返回可读的观察字符串（异常降级为错误信息）。"""
         try:
-            result = self._registry.run(
+            result = await asyncio.to_thread(
+                self._registry.run,
                 tool_name,
                 arguments,
                 ToolContext(task_id=self._task_id),
@@ -219,7 +223,7 @@ class ReActAgent:
                 return None
         return parsed
 
-    def _fallback(
+    async def _fallback(
         self,
         base_messages: list[dict[str, str]],
         output_schema: type[BaseModel] | None,
@@ -229,13 +233,13 @@ class ReActAgent:
         """回退为单次调用（等价于非 ReAct 的原路径），保证节点有输出。"""
         try:
             if output_schema is not None:
-                return self._llm.chat_structured(
+                return await self._llm.chat_structured(
                     messages=base_messages,
                     output_schema=output_schema,
                     temperature=temperature,
                     max_tokens=max_tokens,
                 )
-            raw = self._llm.chat(
+            raw = await self._llm.chat(
                 messages=base_messages,
                 temperature=temperature,
                 max_tokens=max_tokens,

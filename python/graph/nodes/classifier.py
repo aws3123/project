@@ -10,11 +10,13 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from graph.state import GraphState, NodeContext
 from tools.base import ToolContext, ToolResult
 
 
-def classify_changes(state: GraphState, ctx: NodeContext) -> GraphState:
+async def classify_changes(state: GraphState, ctx: NodeContext) -> GraphState:
     """对代码变更进行分层分类。
 
     1. 调用 test_coverage_checker 工具获取变更元信息
@@ -36,8 +38,8 @@ def classify_changes(state: GraphState, ctx: NodeContext) -> GraphState:
     diff_meta = state.get("diff_analysis", {})
     payload = diff_meta or {"files": state["request"].get("files", [])}
     # 调用测试覆盖率检查工具，获取额外的覆盖率信息
-    result: ToolResult = ctx.registry.run(
-        "test_coverage_checker", payload, ToolContext(task_id=ctx.task_id)
+    result: ToolResult = await asyncio.to_thread(
+        ctx.registry.run, "test_coverage_checker", payload, ToolContext(task_id=ctx.task_id)
     )
     files = payload.get("files", [])
     # 根据文件路径关键词判断所属架构层

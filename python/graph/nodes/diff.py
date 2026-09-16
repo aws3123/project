@@ -10,11 +10,13 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from graph.state import GraphState, NodeContext
 from tools.base import ToolContext, ToolResult
 
 
-def analyze_diff(state: GraphState, ctx: NodeContext) -> GraphState:
+async def analyze_diff(state: GraphState, ctx: NodeContext) -> GraphState:
     """分析代码差异，提取变更元信息。
 
     调用 diff_analyzer 工具，从请求中提取变更的文件列表和 diff URL，
@@ -31,8 +33,8 @@ def analyze_diff(state: GraphState, ctx: NodeContext) -> GraphState:
     files = state["request"].get("files", [])
     payload = {"files": files, "diffUrl": state["request"].get("diffUrl")}
     # 调用 diff_analyzer 工具执行分析
-    result: ToolResult = ctx.registry.run(
-        "diff_analyzer", payload, ToolContext(task_id=ctx.task_id)
+    result: ToolResult = await asyncio.to_thread(
+        ctx.registry.run, "diff_analyzer", payload, ToolContext(task_id=ctx.task_id)
     )
     # 将分析结果写入共享状态
     state["diff_analysis"] = result.payload

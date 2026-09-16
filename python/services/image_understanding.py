@@ -12,6 +12,7 @@ VL 不可用/超时时降级为 OCR 文本，不中断流程。
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -139,13 +140,13 @@ _VLM_PROMPT = (
 )
 
 
-def understand_image(
+async def understand_image(
     figure: FigureBlock,
     settings: AppSettings,
     llm_client,
 ) -> ImageUnderstanding:
     """图块理解入口：OCR 主 + VL 辅，返回结构化结果。"""
-    ocr_text = run_ocr(figure, settings)
+    ocr_text = await asyncio.to_thread(run_ocr, figure, settings)
     figure.raw_ocr_text = ocr_text
 
     result = ImageUnderstanding(figure=figure, ocr_text=ocr_text)
@@ -160,7 +161,7 @@ def understand_image(
 
     # VL 辅助：生成结构化类图描述
     try:
-        structured = llm_client.chat_vision_structured(
+        structured = await llm_client.chat_vision_structured(
             _VLM_PROMPT,
             image_paths=[str(figure.image_path)],
             output_schema=_DiagramSchema,

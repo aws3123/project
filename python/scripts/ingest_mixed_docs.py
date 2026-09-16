@@ -24,6 +24,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import logging
 import sys
 from collections import defaultdict  # 带默认值的字典，访问不存在的 key 时自动创建默认值
@@ -349,10 +350,29 @@ def ingest_document(
         )
         all_unified.extend(unified)
 
+    # ❗ 去重 chunk ID（修复 _aggregate_by_class 的重复 ID 缺陷）
+    # Fallback 块（BFF 无法解析的语言 / 语言未知走回退方案）的 name 为空、
+    # start_line 恒为 1，_aggregate_by_class 对多个回退块会生成相同 id（如
+    # "xxx.md:method::1"）。Chroma upsert 要求 id 全局唯一，重复会抛
+    # DuplicateIDError 导致导入失败。这里在整篇文档汇聚后追加序号保证唯一。
+    seen_ids: set[str] = set()
+    for i, chunk in enumerate(all_unified):
+        cid = chunk["id"]
+        if cid in seen_ids:
+            chunk["id"] = f"{cid}#{i}"
+        seen_ids.add(chunk["id"])
+
+    if len(seen_ids) != len(all_unified):
+        logger.warning(
+            "Deduped %d duplicate chunk id(s) in %s",
+            len(all_unified) - len(seen_ids),
+            doc.source_file,
+        )
+
     return all_unified, stats
 
 
-def _build_diagram_chunks(
+async def _build_diagram_chunks(
     figures: list,
     source_doc: str,
     settings: AppSettings,
@@ -378,7 +398,7 @@ def _build_diagram_chunks(
 
     for seq, fig in enumerate(figures):
         try:
-            result = understand_image(fig, settings, llm_client)
+            result = await understand_image(fig, settings, llm_client)
         except Exception as exc:
             logger.warning("Image understanding failed for %s: %s", fig.image_path, exc)
             continue
@@ -471,13 +491,8 @@ def generate_embeddings(chunks: list[dict], settings: AppSettings) -> None:
         chunk["embedding"] = _fetch_query_embedding(embed_text, settings)
 
 
-def run_ingest(docs_dir: str, settings: AppSettings | None = None) -> None:
-    """主摄入入口：执行完整的文档摄入流水线。
-
-    参数:
-        docs_dir: 事故文档目录路径
-        settings: 应用配置（可选）
-    """
+async def run_ingest(docs_dir: str, settings: AppSettings | None = None) -> None:
+    """主摄入入口：执行完整的文档摄入流水线。"""
     settings = settings or AppSettings()
 
     # ── 第 1 步：健康检查 BFF ──
@@ -520,7 +535,7 @@ def run_ingest(docs_dir: str, settings: AppSettings | None = None) -> None:
         chunks, stats = ingest_document(doc, bff_client, settings)
 
         # PDF 图块：OCR 主 + VL 辅，伪文本化为图块 chunk（非 PDF 为空列表，零开销）
-        diagram_chunks, d_stats = _build_diagram_chunks(
+        diagram_chunks, d_stats = await _build_diagram_chunks(
             getattr(doc, "figures", []), doc.source_file, settings, llm_client
         )
 
@@ -643,7 +658,7 @@ def main():
     settings = AppSettings()
     # 如果命令行没指定目录，从配置中读取默认值
     docs_dir = args.docs_dir or settings.incident_docs_dir
-    run_ingest(docs_dir, settings)
+    asyncio.run(run_ingest(docs_dir, settings))
 
 
 if __name__ == "__main__":

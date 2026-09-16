@@ -19,7 +19,7 @@ from llm.client import LLMStructuredOutputError
 from schemas.domain.llm_output import ScoringOutput
 
 
-def score_risks(state: GraphState, ctx: NodeContext) -> GraphState:
+async def score_risks(state: GraphState, ctx: NodeContext) -> GraphState:
     """风险评分主函数 —— 综合所有分析结果计算风险分数。
 
     （签名与语义不变，保证流水线与测试零改动。）
@@ -64,7 +64,7 @@ def score_risks(state: GraphState, ctx: NodeContext) -> GraphState:
     )
 
     try:
-        result = ctx.llm_client.chat_structured(
+        result = await ctx.llm_client.chat_structured(
             messages=messages,
             output_schema=ScoringOutput,
             max_tokens=1024,

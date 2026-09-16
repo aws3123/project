@@ -15,7 +15,7 @@ from domain.shared.diff_extractor import build_diff_snippet
 from graph.state import GraphState, NodeContext
 
 
-def audit_security(state: GraphState, ctx: NodeContext) -> GraphState:
+async def audit_security(state: GraphState, ctx: NodeContext) -> GraphState:
     """安全审计主函数 —— 结合确定性扫描和 LLM 审计。
 
     （签名与语义不变，保证流水线与测试零改动。）
@@ -89,7 +89,9 @@ def audit_security(state: GraphState, ctx: NodeContext) -> GraphState:
             node_name="security",
         )
         try:
-            result, tool_trace = agent.run(system_prompt, user_content, max_tokens=1024)
+            result, tool_trace = await agent.run(
+                system_prompt, user_content, max_tokens=1024
+            )
             llm_findings = parse_llm_response(result)
             if tool_trace:
                 state.setdefault("tool_logs", []).extend(tool_trace)
@@ -99,7 +101,7 @@ def audit_security(state: GraphState, ctx: NodeContext) -> GraphState:
     else:
         messages = build_audit_messages(diff_snippet, method_names)
         try:
-            result = ctx.llm_client.chat(messages=messages, max_tokens=1024)
+            result = await ctx.llm_client.chat(messages=messages, max_tokens=1024)
             llm_findings = parse_llm_response(result)
         except Exception:
             llm_findings = []  # LLM 失败时降级：保留确定性扫描结果

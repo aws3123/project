@@ -174,7 +174,7 @@ class ReviewKafkaConsumer:
             try:
                 payload = await self._payload_client.fetch(task_id)
                 request = parse_async_payload(self._build_request(message, payload))
-                result = await asyncio.to_thread(self._process_message, request)
+                result = await self._process_message(request)
                 await self._producer.send_callback(
                     "RESULT",
                     task_id,
@@ -213,7 +213,7 @@ class ReviewKafkaConsumer:
                         request = parse_async_payload(
                             self._build_request(message, payload)
                         )
-                        result = await asyncio.to_thread(self._process_message, request)
+                        result = await self._process_message(request)
                         await self._producer.send_callback(
                             "RESULT",
                             task_id,

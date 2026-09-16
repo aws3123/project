@@ -20,7 +20,10 @@
 
 from __future__ import annotations  # 延迟类型注解，避免循环导入
 
-from collections.abc import Callable  # Callable = 可调用对象的类型提示（函数、方法等）
+from collections.abc import (  # 可调用对象 / 可等待协程对象的类型提示
+    Awaitable,
+    Callable,
+)
 from dataclasses import dataclass  # 自动生成 __init__ 等样板代码
 from typing import TYPE_CHECKING, Any
 
@@ -41,7 +44,7 @@ if TYPE_CHECKING:
 
 # 类型别名：让代码更易读
 # NodeFn = 一个节点函数的类型：接收 (状态, 上下文)，返回更新后的状态
-NodeFn = Callable[[GraphState, NodeContext], GraphState]
+NodeFn = Callable[[GraphState, NodeContext], Awaitable[GraphState]]
 # Phase = 一个阶段：包含多个 (名称, 节点函数) 的元组列表
 Phase = list[tuple[str, NodeFn]]
 

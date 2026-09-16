@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -22,13 +23,13 @@ class RagRetrievalService:
     # Public API
     # ------------------------------------------------------------------
 
-    def retrieve(
+    async def retrieve(
         self,
         nl_query: str,
         code_metadata: list[dict] | None = None,
         top_k: int = 5,
     ) -> tuple[list[dict], str, str | None]:
-        """Unified retrieval: NL query + code metadata.
+        """Unified async retrieval: NL query + code metadata.
 
         Args:
             nl_query: Natural language search query
@@ -41,16 +42,18 @@ class RagRetrievalService:
             status: "NORMAL" | "DEGRADED" | "NO_RELEVANT_INCIDENTS"
         """
         # 1. Optional query rewrite (default off)
-        queries = self._maybe_rewrite_query(nl_query)
+        queries = await self._maybe_rewrite_query(nl_query)
 
         # 2. Build enhanced query
         enhanced_query = self._build_enhanced_query(queries[0], code_metadata)
-        query_embedding = _fetch_query_embedding(enhanced_query, self.settings)
+        query_embedding = await asyncio.to_thread(
+            _fetch_query_embedding, enhanced_query, self.settings
+        )
 
         # 3. Vector recall (ChromaDB, no language filter)
         try:
-            vector_results = search_by_embedding(
-                query_embedding, top_k * 3, self.settings
+            vector_results = await asyncio.to_thread(
+                search_by_embedding, query_embedding, top_k * 3, self.settings
             )
         except Exception as e:
             logger.warning("Vector recall failed: %s", e)
@@ -58,8 +61,8 @@ class RagRetrievalService:
 
         # 4. Keyword recall (ES BM25 + language boost)
         try:
-            keyword_results = search_unified(
-                enhanced_query, top_k * 3, code_metadata, self.settings
+            keyword_results = await asyncio.to_thread(
+                search_unified, enhanced_query, top_k * 3, code_metadata, self.settings
             )
         except Exception as e:
             logger.warning("Keyword recall failed: %s", e)
@@ -76,7 +79,7 @@ class RagRetrievalService:
             fused = self._apply_language_boost(fused, code_metadata)
 
         # 7. Cross-Encoder rerank (top_k*3 → top_k)
-        fused = self._rerank(fused, queries[0], top_k)
+        fused = await self._rerank(fused, queries[0], top_k)
 
         # 8. Score threshold fallback
         if not fused or all(
@@ -90,7 +93,7 @@ class RagRetrievalService:
     # Query rewrite (optional, default off)
     # ------------------------------------------------------------------
 
-    def _maybe_rewrite_query(self, nl_query: str) -> list[str]:
+    async def _maybe_rewrite_query(self, nl_query: str) -> list[str]:
         """Optional LLM query rewrite. Default off to avoid latency."""
         if not self.settings.enable_query_rewrite:
             return [nl_query]
@@ -100,7 +103,7 @@ class RagRetrievalService:
 
             llm = LLMClient(self.settings)
             prompt = f"将以下问题改写为3个不同角度的检索查询（用于事故知识库搜索），每行一个：\n{nl_query}"
-            response = llm.chat(prompt, max_tokens=200)
+            response = await llm.chat(prompt, max_tokens=200)
             variants = [line.strip() for line in response.split("\n") if line.strip()][
                 :3
             ]
@@ -185,7 +188,7 @@ class RagRetrievalService:
     # Cross-Encoder rerank
     # ------------------------------------------------------------------
 
-    def _rerank(self, results: list[dict], query: str, top_k: int) -> list[dict]:
+    async def _rerank(self, results: list[dict], query: str, top_k: int) -> list[dict]:
         """Cross-Encoder reranking on top_k*3 candidates."""
         candidates = results[: top_k * 3]
 
@@ -201,7 +204,7 @@ class RagRetrievalService:
                 )
                 for item in candidates
             ]
-            scores = reranker.predict(pairs)
+            scores = await asyncio.to_thread(reranker.predict, pairs)
 
             for item, score in zip(candidates, scores, strict=False):
                 item["score"] = float(score)

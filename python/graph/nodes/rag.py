@@ -17,6 +17,7 @@ RAG 是什么？
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 # 安全地获取异常详情
@@ -55,7 +56,7 @@ from services.rag_retrieval_service import RagRetrievalService
 logger = logging.getLogger(__name__)
 
 
-def run_rag(state: GraphState, ctx: NodeContext) -> GraphState:
+async def run_rag(state: GraphState, ctx: NodeContext) -> GraphState:
     """RAG 检索 + LLM 分析节点。
 
     输入：state["classification"] —— 代码分类结果
@@ -79,11 +80,11 @@ def run_rag(state: GraphState, ctx: NodeContext) -> GraphState:
     # 提取代码元数据
     code_metadata = build_code_metadata(state)
 
-    # 调用统一检索服务
+    # 调用统一检索服务（异步全链路）
     retrieval_service = RagRetrievalService(settings)
     try:
-        fused, retrieval_status, retrieval_reason = retrieval_service.retrieve(
-            nl_query, code_metadata, top_k=settings.top_k
+        fused, retrieval_status, retrieval_reason = await retrieval_service.retrieve(
+            nl_query, code_metadata, settings.top_k
         )
     except Exception as e:
         logger.error("RAG retrieval failed: %s", safe_detail(e))
@@ -129,7 +130,7 @@ def run_rag(state: GraphState, ctx: NodeContext) -> GraphState:
             # 构建 LLM 消息
             messages = build_rag_messages(context_text, diff_snippet)
             # 调用 LLM 结构化输出
-            llm_result = ctx.llm_client.chat_structured(
+            llm_result = await ctx.llm_client.chat_structured(
                 messages=messages,
                 output_schema=RAGAnalysisOutput,
                 max_tokens=1024,

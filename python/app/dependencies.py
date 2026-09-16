@@ -28,7 +28,6 @@ from graph.agent_selector import select_agents
 
 # GraphBuilder：建造者模式，一步步构建审查流水线
 from graph.builder import GraphBuilder
-from graph.business_risk_runner import BusinessRiskRunner
 from graph.circuit_breaker import CircuitBreaker
 
 # 导入所有节点函数（每个节点就是一个普通的 Python 函数）
@@ -36,20 +35,12 @@ from graph.nodes import (
     analyze_diff,
     analyze_impact,
     analyze_performance,
-    assess_business_risk,
     audit_security,
-    business_risk_rag,
-    check_invariants,
     classify_changes,
-    deep_read_methods,
-    extract_business_invariants,
     run_rag,
     run_rule_checks,
-    scan_semantic_hotspots,
     score_risks,
     summarize,
-    trace_data_flow,
-    verify_business_risks,
 )
 from graph.runner import GraphRunner
 from llm.client import LLMClient
@@ -59,16 +50,9 @@ from repositories.result_repository import InMemoryResultRepository
 from repositories.result_repository_sql import SQLResultRepository
 from repositories.task_repository import InMemoryTaskRepository
 from repositories.task_repository_sql import SQLTaskRepository
-from schemas.api.result import (
-    BusinessRiskReadinessComponent,
-    BusinessRiskSourceReadinessStatus,
-)
 from services.ai_service import AIService
-from services.business_risk_source_service import BusinessRiskSourceService
-from services.business_risk_worker_state import BusinessRiskWorkerState
 from services.checkpoint_service import CheckpointService
 from services.log_service import LogService
-from services.memory_service import MemoryService
 from services.result_service import ResultService
 from services.task_service import TaskService
 from telemetry.hooks import (
@@ -267,45 +251,6 @@ def _build_graph_runner(
     return builder.build()
 
 
-def _build_business_risk_runner(
-    task_service: TaskService | None,
-    log_service: LogService,
-    telemetry: TelemetryHook | None = None,
-    registry: ToolRegistry | None = None,
-    llm_client: LLMClient | None = None,
-    circuit_breaker: CircuitBreaker | None = None,
-) -> GraphRunner:
-    """构建业务风险分析流水线的 GraphRunner。
-
-    流水线结构：
-      阶段1（串行）：提取业务不变量 → 追踪数据流
-      阶段2（并行）：检查不变量 | 深度阅读方法 | 语义热点扫描
-      阶段3（串行）：评估业务风险 → RAG 检索 → 验证业务风险
-    """
-    registry = registry or build_default_registry()
-    builder = GraphBuilder(
-        registry=registry,
-        log_service=log_service,
-        telemetry=telemetry or NoOpTelemetry(),
-        task_service=task_service,
-        llm_client=llm_client,
-        circuit_breaker=circuit_breaker or CircuitBreaker(),
-    )
-    builder.add_node("extract_business_invariants", extract_business_invariants)
-    builder.add_node("trace_data_flow", trace_data_flow)
-    builder.add_parallel_group(
-        [
-            ("check_invariants", check_invariants),
-            ("deep_read_methods", deep_read_methods),
-            ("semantic_hotspot_scan", scan_semantic_hotspots),
-        ]
-    )
-    builder.add_node("assess_business_risk", assess_business_risk)
-    builder.add_node("business_risk_rag", business_risk_rag)
-    builder.add_node("verify_business_risks", verify_business_risks)
-    return builder.build()
-
-
 # ---------------------------------------------------------------------------
 # 遥测（Telemetry）
 # ---------------------------------------------------------------------------
@@ -351,98 +296,13 @@ def get_ai_service() -> AIService:
         llm_client=llm_client,
         checkpoint_service=checkpoint_service,
     )
-    # AIService 只依赖 runner.run 方法（依赖注入 / 鸭子类型）
-    return AIService(runner.run)
-
-
-_worker_state: BusinessRiskWorkerState | None = None
-_worker_state_lock = RLock()
-
-
-def get_business_risk_worker_state() -> BusinessRiskWorkerState:
-    """获取业务风险工作器状态单例。"""
-    global _worker_state
-    with _worker_state_lock:
-        if _worker_state is None:
-            _worker_state = BusinessRiskWorkerState()
-        return _worker_state
-
-
-def get_memory_service() -> MemoryService:
-    """获取会话记忆服务。"""
-    return MemoryService(get_settings())
-
-
-def get_business_risk_service() -> BusinessRiskSourceService:
-    """组装并返回业务风险分析服务。"""
-    settings = get_settings()
-    telemetry = _resolve_telemetry(settings)
-    log_service = _create_log_service(telemetry=telemetry)
-    llm_client = get_llm_client()
-    runner = _build_business_risk_runner(
-        task_service=None,
-        log_service=log_service,
-        telemetry=telemetry,
-        llm_client=llm_client,
-    )
-    return BusinessRiskSourceService(
-        BusinessRiskRunner(runner), get_business_risk_worker_state()
-    )
+    # AIService 依赖 runner.arun（异步入口，AsyncOpenAI 全链路异步化）
+    return AIService(runner.arun)
 
 
 # ---------------------------------------------------------------------------
 # 健康检查（Health Check）
 # ---------------------------------------------------------------------------
-
-
-def get_business_risk_source_readiness() -> BusinessRiskSourceReadinessStatus:
-    """检查业务风险分析服务的就绪状态。
-
-    检查项：
-      - route：路由是否注册
-      - config：LLM API Key 是否配置
-      - persistence：持久化后端是否需要（无状态工作器不需要）
-      - llm：LLM 客户端是否可用
-    只有所有组件都是 "UP" 时，整体才是 "UP"。
-    """
-    settings = get_settings()
-
-    route = BusinessRiskReadinessComponent(
-        status="UP", detail="business-risk-source readiness route registered"
-    )
-
-    llm_key = settings.llm_api_key.strip()
-    if llm_key:
-        config = BusinessRiskReadinessComponent(
-            status="UP", detail="llm_api_key configured"
-        )
-        llm = BusinessRiskReadinessComponent(
-            status="UP", detail="llm_api_key configured"
-        )
-    else:
-        config = BusinessRiskReadinessComponent(
-            status="DOWN", detail="llm_api_key is required"
-        )
-        llm = BusinessRiskReadinessComponent(
-            status="DOWN", detail="llm_api_key is required"
-        )
-
-    persistence = BusinessRiskReadinessComponent(
-        status="UP", detail="stateless worker does not require task persistence"
-    )
-
-    components = (route, config, persistence, llm)
-    overall = (
-        "UP" if all(component.status == "UP" for component in components) else "DOWN"
-    )
-
-    return BusinessRiskSourceReadinessStatus(
-        overall=overall,
-        route=route,
-        config=config,
-        persistence=persistence,
-        llm=llm,
-    )
 
 
 def get_trace_id(request: Request) -> str:

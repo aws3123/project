@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from graph.state import GraphState, NodeContext
 from tools.base import ToolContext, ToolResult
 
@@ -64,7 +66,7 @@ def _normalize_finding(item: dict, tool: str) -> dict:
     }
 
 
-def run_rule_checks(state: GraphState, ctx: NodeContext) -> GraphState:
+async def run_rule_checks(state: GraphState, ctx: NodeContext) -> GraphState:
     """执行所有规则检查工具，收集发现。
 
     依次运行 RULE_TOOLS 中的每个工具，将结果合并后写入 state["rule_findings"]。
@@ -82,7 +84,9 @@ def run_rule_checks(state: GraphState, ctx: NodeContext) -> GraphState:
     context = ToolContext(task_id=ctx.task_id)
     # 依次运行每个规则工具
     for tool in RULE_TOOLS:
-        result: ToolResult = ctx.registry.run(tool, payload, context)
+        result: ToolResult = await asyncio.to_thread(
+            ctx.registry.run, tool, payload, context
+        )
         # 获取工具返回的发现列表；如果没有发现，用默认占位
         tool_findings = result.payload.get("findings", []) or [DEFAULT_FINDING]
         for item in tool_findings:

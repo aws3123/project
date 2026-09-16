@@ -9,7 +9,6 @@
 
 路由结构：
   /ai/review/*     → 代码审查相关接口
-  /ai/business-risk-source/* → 业务风险分析接口
   /ai/health/*     → 健康检查接口
   /ai/handoff/*    → 审查结果交接接口
 """
@@ -23,25 +22,17 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from app import exceptions
-from app.dependencies import (
-    get_ai_service,
-    get_business_risk_source_readiness,
-    get_business_risk_worker_state,
-    get_settings,
-)
-from app.routers import business_risk_source, handoff, health, review
+from app.dependencies import get_ai_service, get_settings
+from app.routers import handoff, health, review
 from app.utils import create_trace_id
 from config.logging import configure_logging
-from services.worker_registry import WorkerRegistry
 
 # 初始化日志系统（在应用启动时执行一次）
 configure_logging()
 logger = logging.getLogger(__name__)
 
 
-# 全局变量：Worker 注册表实例、心跳任务、Kafka 异步链路消费者
-_registry_task: asyncio.Task | None = None
-_registry: WorkerRegistry | None = None
+# 全局变量：Kafka 异步链路消费者
 _kafka_consumer_task: asyncio.Task | None = None
 _kafka_consumer: object | None = None
 
@@ -52,29 +43,13 @@ async def lifespan(app: FastAPI):
 
     启动时：
       1. 加载配置
-      2. 创建 WorkerRegistry（向 Java 后端注册自己）
-      3. 启动心跳循环（定期告诉 Java 后端"我还活着"）
-      4. 若 kafka_enabled，启动 Kafka 审查任务消费者（Java 生产者 → Python 消费者）
+      2. 若 kafka_enabled，启动 Kafka 审查任务消费者（Java 生产者 → Python 消费者）
     关闭时：
-      1. 注销 Worker（告诉 Java 后端"我要下线了"）
-      2. 取消心跳任务
-      3. 停止 Kafka 消费者
+      1. 取消 Kafka 消费者
     """
-    global _registry, _registry_task, _kafka_consumer, _kafka_consumer_task
+    global _kafka_consumer, _kafka_consumer_task
     settings = get_settings()
     app.state.settings = settings  # 将配置挂载到 app 对象上，供全局访问
-
-    # 创建 Worker 注册表（负责与 Java 后端的服务发现通信）
-    _registry = WorkerRegistry(
-        settings=settings,
-        readiness_provider=get_business_risk_source_readiness,  # 就绪状态检查函数
-        worker_state=get_business_risk_worker_state(),
-    )
-    # 启动心跳循环（一个异步任务，定期发送心跳）
-    _registry_task = asyncio.create_task(_registry.heartbeat_loop())
-    logger.info(
-        "WorkerRegistry heartbeat sender started instance=%s", _registry._instance_id
-    )
 
     # 若启用 Kafka 异步链路，启动审查任务消费者
     if settings.kafka_enabled:
@@ -93,11 +68,6 @@ async def lifespan(app: FastAPI):
         _kafka_consumer_task.cancel()  # 取消消费任务
     if _kafka_consumer is not None:
         await _kafka_consumer.stop()  # 停止消费者/生产者，提交未提交 offset
-    if _registry is not None:
-        await _registry.unregister()  # 注销 Worker
-    if _registry_task is not None:
-        _registry_task.cancel()  # 取消心跳任务
-    logger.info("WorkerRegistry unregistered")
 
 
 # 创建 FastAPI 应用实例
@@ -118,9 +88,6 @@ async def metrics() -> PlainTextResponse:
 
 # 注册路由（将 URL 路径映射到处理函数）
 app.include_router(review.router, prefix="/ai", tags=["review"])
-app.include_router(
-    business_risk_source.router, prefix="/ai", tags=["business-risk-source"]
-)
 app.include_router(health.router, prefix="/ai", tags=["health"])
 app.include_router(handoff.router, prefix="/ai", tags=["handoff"])
 

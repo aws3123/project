@@ -17,11 +17,13 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from graph.state import GraphState, NodeContext
 from tools.base import ToolContext, ToolResult
 
 
-def analyze_impact(state: GraphState, ctx: NodeContext) -> GraphState:
+async def analyze_impact(state: GraphState, ctx: NodeContext) -> GraphState:
     """分析代码变更的影响范围。
 
     执行流程：
@@ -55,7 +57,8 @@ def analyze_impact(state: GraphState, ctx: NodeContext) -> GraphState:
         ast_relations = preprocessed_relations
     else:
         # Java 端没有预处理 → 调用 Python 端的 ast_parser 工具解析
-        ast_result: ToolResult = ctx.registry.run(
+        ast_result: ToolResult = await asyncio.to_thread(
+            ctx.registry.run,
             "ast_parser",
             {"files": files},
             ToolContext(task_id=ctx.task_id),
@@ -66,7 +69,8 @@ def analyze_impact(state: GraphState, ctx: NodeContext) -> GraphState:
         )  # 实体间关系（调用、继承等）
 
     # 调用代码知识图谱工具：输入实体+关系+变更文件 → 输出影响范围
-    kg_result: ToolResult = ctx.registry.run(
+    kg_result: ToolResult = await asyncio.to_thread(
+        ctx.registry.run,
         "code_knowledge_graph",
         {
             "entities": ast_entities,

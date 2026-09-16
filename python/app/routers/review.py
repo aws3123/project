@@ -46,9 +46,8 @@ async def review_sync(
         request = parse_sync_payload(payload, trace_id)
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=exc.errors()) from exc
-    # 阻塞的全流水线执行移入线程池，避免卡死事件循环
-    # （旧实现直接在 async 路由内同步执行，期间健康检查等所有请求都会排队）
-    return await asyncio.to_thread(ai_service.run, request)
+    # 全链路异步：ai_service.run 为 async（AsyncOpenAI），协程直接承载
+    return await ai_service.run(request)
 
 
 @router.post("/review/sync/stream")
@@ -68,16 +67,15 @@ async def review_sync_stream(
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=exc.errors()) from exc
 
-    loop = asyncio.get_running_loop()
     queue: asyncio.Queue[dict] = asyncio.Queue()
 
     def sink(event: dict) -> None:
-        """事件接收器：工作线程内调用，线程安全地投递到事件循环。"""
-        loop.call_soon_threadsafe(queue.put_nowait, event)
+        """事件接收器：异步流水线在事件循环内调用，直接投递到队列。"""
+        queue.put_nowait(event)
 
     async def run_pipeline() -> None:
         try:
-            await asyncio.to_thread(ai_service.run, request, sink)
+            await ai_service.run(request, sink)
         except Exception:
             # run_error 已由 runner 经 sink 发出；此处仅记录，避免
             # 后台 task 的异常无人消费
