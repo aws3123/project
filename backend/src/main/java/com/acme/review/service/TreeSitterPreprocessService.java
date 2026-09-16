@@ -23,9 +23,11 @@ public class TreeSitterPreprocessService {
     private static final Logger log = LoggerFactory.getLogger(TreeSitterPreprocessService.class);
 
     private final TreeSitterNativeParser nativeParser;
+    private final AstMetricsService astMetrics;
 
-    public TreeSitterPreprocessService(TreeSitterNativeParser nativeParser) {
+    public TreeSitterPreprocessService(TreeSitterNativeParser nativeParser, AstMetricsService astMetrics) {
         this.nativeParser = nativeParser;
+        this.astMetrics = astMetrics;
     }
 
     private static final Pattern DIFF_HUNK_PATTERN = Pattern.compile(
@@ -73,8 +75,7 @@ public class TreeSitterPreprocessService {
             "implements\\s+([\\w.,\\s]+)");
 
     public AstPreprocessedResult preprocess(String diffContent) {
-        List<SourceFileInput> files = splitDiffIntoFiles(diffContent);
-        return preprocessFiles(files);
+        return astMetrics.recordPreprocess(diffContent, () -> preprocessFiles(splitDiffIntoFiles(diffContent)));
     }
 
     public AstPreprocessedResult preprocessFiles(List<SourceFileInput> files) {
@@ -102,9 +103,13 @@ public class TreeSitterPreprocessService {
             }
 
             if (nativeResult != null && !nativeResult.getEntities().isEmpty()) {
+                astMetrics.recordNativeParsed(nativeResult.getEntities().size());
                 allEntities.addAll(nativeResult.getEntities());
                 allRelations.addAll(nativeResult.getRelations());
             } else {
+                if (lang != null) {
+                    astMetrics.recordNativeFallback();
+                }
                 allNativeOk = false;
             }
         }

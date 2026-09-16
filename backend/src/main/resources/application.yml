@@ -180,6 +180,14 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+    distribution:
+      # 受理链路与 AST 预处理启用分位数直方图，供 Grafana 用 histogram_quantile 计算 P95/P99
+      percentiles-histogram:
+        http.server.requests: true
+        review.ast.parse: true
+      slo:
+        http.server.requests: 10ms,25ms,50ms,100ms,250ms,500ms,1s,2s
+        review.ast.parse: 1ms,2ms,5ms,10ms,25ms,50ms,100ms,250ms,500ms
 
 logging:
   pattern:
