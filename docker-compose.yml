@@ -20,6 +20,8 @@ services:
       retries: 5
 
   python-ai:
+    image: ghcr.io/aws3123/project/python-ai:latest
+    pull_policy: always
     build:
       context: ./python
       dockerfile: Dockerfile
@@ -49,6 +51,7 @@ services:
       # 密钥从宿主机环境注入，禁止在编排文件中硬编码明文
       LLM_API_KEY: ${LLM_API_KEY:-dev-key}
       LLM_MODEL: qwen-plus
+      LLM_DISABLE_THINKING: "true"
       EMBEDDING_MODEL: microsoft/codebert-base
       # --- RAG 检索 ---
       RRF_K: 60
@@ -133,6 +136,8 @@ services:
       - "my-kafka:host-gateway"
 
   frontend:
+    image: ghcr.io/aws3123/project/frontend:latest
+    pull_policy: always
     build:
       context: ./frontend
       dockerfile: Dockerfile
