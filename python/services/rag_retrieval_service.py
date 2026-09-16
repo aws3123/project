@@ -18,6 +18,11 @@ class RagRetrievalService:
     def __init__(self, settings: AppSettings | None = None):
         self.settings = settings or AppSettings()
         self._reranker: Any | None = None  # Lazy-loaded
+        # Chroma and the local CrossEncoder are process-shared resources.  Do
+        # not let the Kafka worker's 500-way task concurrency overwhelm them.
+        self._retrieve_semaphore = asyncio.Semaphore(
+            self.settings.rag_max_concurrency
+        )
 
     # ------------------------------------------------------------------
     # Public API
@@ -41,6 +46,15 @@ class RagRetrievalService:
             (results, status, reason)
             status: "NORMAL" | "DEGRADED" | "NO_RELEVANT_INCIDENTS"
         """
+        async with self._retrieve_semaphore:
+            return await self._retrieve_limited(nl_query, code_metadata, top_k)
+
+    async def _retrieve_limited(
+        self,
+        nl_query: str,
+        code_metadata: list[dict] | None,
+        top_k: int,
+    ) -> tuple[list[dict], str, str | None]:
         # 1. Optional query rewrite (default off)
         queries = await self._maybe_rewrite_query(nl_query)
 

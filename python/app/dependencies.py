@@ -54,6 +54,7 @@ from services.ai_service import AIService
 from services.checkpoint_service import CheckpointService
 from services.log_service import LogService
 from services.result_service import ResultService
+from services.rag_retrieval_service import RagRetrievalService
 from services.task_service import TaskService
 from telemetry.hooks import (
     CompositeTelemetryHook,
@@ -171,6 +172,10 @@ def get_log_service() -> LogService:
 _llm_client: LLMClient | None = None
 _llm_lock = RLock()
 
+# RAG 检索服务含本地 reranker 等重资源，必须整个进程复用。
+_rag_retrieval_service: RagRetrievalService | None = None
+_rag_retrieval_lock = RLock()
+
 
 def get_llm_client() -> LLMClient:
     """获取 LLM 客户端单例（线程安全的懒加载）。"""
@@ -179,6 +184,15 @@ def get_llm_client() -> LLMClient:
         if _llm_client is None:
             _llm_client = LLMClient()
         return _llm_client
+
+
+def get_rag_retrieval_service() -> RagRetrievalService:
+    """获取进程级唯一的 RAG 检索服务。"""
+    global _rag_retrieval_service
+    with _rag_retrieval_lock:
+        if _rag_retrieval_service is None:
+            _rag_retrieval_service = RagRetrievalService(get_settings())
+        return _rag_retrieval_service
 
 
 # ---------------------------------------------------------------------------
@@ -194,6 +208,7 @@ def _build_graph_runner(
     llm_client: LLMClient | None = None,
     circuit_breaker: CircuitBreaker | None = None,
     checkpoint_service: CheckpointService | None = None,
+    rag_retrieval_service: RagRetrievalService | None = None,
 ) -> GraphRunner:
     """构建主审查流水线的 GraphRunner。
 
@@ -229,6 +244,7 @@ def _build_graph_runner(
         circuit_breaker=circuit_breaker or CircuitBreaker(),
         agent_selector=select_agents,  # 动态 Agent 选择器
         checkpoint_service=checkpoint_service,
+        rag_retrieval_service=rag_retrieval_service,
     )
     # 串行节点
     builder.add_node("diff", analyze_diff)
@@ -289,12 +305,14 @@ def get_ai_service() -> AIService:
     log_service = _create_log_service(telemetry=telemetry)
     llm_client = get_llm_client()
     checkpoint_service = CheckpointService(settings)
+    rag_retrieval_service = get_rag_retrieval_service()
     runner = _build_graph_runner(
         task_service=task_service,
         log_service=log_service,
         telemetry=telemetry,
         llm_client=llm_client,
         checkpoint_service=checkpoint_service,
+        rag_retrieval_service=rag_retrieval_service,
     )
     # AIService 依赖 runner.arun（异步入口，AsyncOpenAI 全链路异步化）
     return AIService(runner.arun)

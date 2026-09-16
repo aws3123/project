@@ -29,25 +29,16 @@ def make_state(**overrides) -> GraphState:
     return base
 
 
-# rag 节点内部直接实例化 RagRetrievalService 做真实检索（向量/BM25/RRF），
-# 单元测试中 patch 掉该服务，返回确定性结果，避免依赖 ES/embedding 基础设施。
-def _patch_rag_retrieval(monkeypatch, results=None, raise_exc: bool = False):
-    import graph.nodes.rag as rag_mod
-
+# RAG 检索服务由依赖注入层创建；单元测试注入 fake，避免依赖 ES/embedding 基础设施。
+def make_rag_retrieval_service(results=None, raise_exc: bool = False):
     if raise_exc:
-        _DEFAULT = results
-
         class _FakeRetrieval:
-            def __init__(self, settings):
-                pass
-
             async def retrieve(self, *args, **kwargs):
                 raise RuntimeError(
                     "db down api_key=super-secret-token"  # 含敏感串，测试脱敏
                 )
 
-        monkeypatch.setattr(rag_mod, "RagRetrievalService", _FakeRetrieval)
-        return
+        return _FakeRetrieval()
 
     _DEFAULT = results or [
         {
@@ -59,22 +50,26 @@ def _patch_rag_retrieval(monkeypatch, results=None, raise_exc: bool = False):
     ]
 
     class _FakeRetrieval:
-        def __init__(self, settings):
-            pass
-
         async def retrieve(self, *args, **kwargs):
             if results is not None:
                 return [], "NORMAL", "no results"
             return _DEFAULT, "NORMAL", None
 
-    monkeypatch.setattr(rag_mod, "RagRetrievalService", _FakeRetrieval)
+    return _FakeRetrieval()
 
 
-def make_context(mock_registry=None, llm_client=None) -> NodeContext:
+def make_context(
+    mock_registry=None, llm_client=None, rag_retrieval_service=None
+) -> NodeContext:
     registry = mock_registry or Mock()
     if mock_registry is None:
         registry.run.return_value = ToolResult(name="tool", payload={"findings": []})
-    return NodeContext(task_id="task-1", registry=registry, llm_client=llm_client)
+    return NodeContext(
+        task_id="task-1",
+        registry=registry,
+        llm_client=llm_client,
+        rag_retrieval_service=rag_retrieval_service,
+    )
 
 
 def make_llm_client(
@@ -156,21 +151,21 @@ async def test_rules_node_accumulates_findings():
 # ---- rag ----
 
 
-async def test_rag_node_sets_context(monkeypatch):
+async def test_rag_node_sets_context():
     state = make_state(
         classification={"layers": ["controller"]},
         request={"metadata": {}},
         diff_analysis={"summary": {"paths": []}},
     )
-    _patch_rag_retrieval(monkeypatch)
+    retrieval_service = make_rag_retrieval_service()
     llm = make_llm_client(rag_analysis="存在SQL注入风险")
-    ctx = make_context(llm_client=llm)
+    ctx = make_context(llm_client=llm, rag_retrieval_service=retrieval_service)
     await rag.run_rag(state, ctx)
     assert state["rag_context"]
     assert "rag_analysis" in state
 
 
-async def test_rag_node_with_graph_recall(monkeypatch):
+async def test_rag_node_with_graph_recall():
     state = make_state(
         classification={"layers": ["controller"]},
         request={"metadata": {}},
@@ -195,21 +190,21 @@ async def test_rag_node_with_graph_recall(monkeypatch):
             "affected_files": [],
         },
     )
-    _patch_rag_retrieval(monkeypatch)
-    ctx = make_context(llm_client=None)
+    retrieval_service = make_rag_retrieval_service()
+    ctx = make_context(llm_client=None, rag_retrieval_service=retrieval_service)
     await rag.run_rag(state, ctx)
     assert state["rag_context"]
 
 
-async def test_rag_node_marks_degraded_when_incident_search_degrades(monkeypatch):
+async def test_rag_node_marks_degraded_when_incident_search_degrades():
     state = make_state(
         classification={"layers": ["controller"]},
         request={"metadata": {}},
         diff_analysis={"summary": {"paths": []}},
     )
     # 检索抛异常 → 节点应标记 DEGRADED 且不外泄内部错误串
-    _patch_rag_retrieval(monkeypatch, raise_exc=True)
-    ctx = make_context(llm_client=None)
+    retrieval_service = make_rag_retrieval_service(raise_exc=True)
+    ctx = make_context(llm_client=None, rag_retrieval_service=retrieval_service)
     await rag.run_rag(state, ctx)
     assert state["tool_logs"][-1]["status"] == "DEGRADED"
     assert state["rag_status"] == "DEGRADED"

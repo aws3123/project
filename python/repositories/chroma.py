@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from threading import RLock
+from typing import Any
 
 import chromadb
 from chromadb.config import Settings
@@ -10,20 +12,53 @@ from config.settings import AppSettings
 from repositories.db import _fetch_query_embedding
 
 
+# Chroma's persistent client owns an internal HTTP transport.  Recreating a
+# wrapper for every retrieval lets one wrapper close shared transport state
+# while another concurrent retrieval is still using it.  Keep the client and
+# collection alive for the whole worker process instead.
+_client_lock = RLock()
+_query_lock = RLock()
+_chroma_clients: dict[str, Any] = {}
+_incident_collections: dict[tuple[str, str], Any] = {}
+
+
+def _chroma_path(settings: AppSettings) -> str:
+    return str(Path(settings.chroma_path))
+
+
+def _reset_chroma_cache() -> None:
+    """Clear process caches. Intended for tests only."""
+    with _client_lock:
+        _chroma_clients.clear()
+        _incident_collections.clear()
+
+
 def get_chroma_client(settings: AppSettings | None = None):
     settings = settings or AppSettings()
-    path = str(Path(settings.chroma_path))
-    return chromadb.PersistentClient(path=path, settings=Settings())
+    path = _chroma_path(settings)
+    with _client_lock:
+        client = _chroma_clients.get(path)
+        if client is None:
+            client = chromadb.PersistentClient(path=path, settings=Settings())
+            _chroma_clients[path] = client
+        return client
 
 
 def get_incident_collection(settings: AppSettings | None = None):
     settings = settings or AppSettings()
-    client = get_chroma_client(settings)
-    return client.get_or_create_collection(
-        name=settings.chroma_collection,
-        configuration={"hnsw": {"space": "cosine"}},
-        embedding_function=None,
-    )
+    path = _chroma_path(settings)
+    key = (path, settings.chroma_collection)
+    with _client_lock:
+        collection = _incident_collections.get(key)
+        if collection is None:
+            client = get_chroma_client(settings)
+            collection = client.get_or_create_collection(
+                name=settings.chroma_collection,
+                configuration={"hnsw": {"space": "cosine"}},
+                embedding_function=None,
+            )
+            _incident_collections[key] = collection
+        return collection
 
 
 def bootstrap_chromadb(settings: AppSettings | None = None):
@@ -180,11 +215,15 @@ def search_incidents_chromadb(
     settings = settings or AppSettings()
     collection = get_incident_collection(settings)
     query_embedding = _fetch_query_embedding(query, settings)
-    response = collection.query(
-        query_embeddings=[query_embedding],
-        n_results=top_k,
-        include=["documents", "metadatas", "distances"],
-    )
+    # The embedded Chroma transport is not safe to close/reopen concurrently.
+    # Serialising the very short local query protects that shared transport;
+    # embedding and Elasticsearch recall still execute outside this lock.
+    with _query_lock:
+        response = collection.query(
+            query_embeddings=[query_embedding],
+            n_results=top_k,
+            include=["documents", "metadatas", "distances"],
+        )
 
     documents = response.get("documents", [[]])[0]
     metadatas = response.get("metadatas", [[]])[0]
@@ -209,11 +248,12 @@ def search_by_embedding(
     """
     settings = settings or AppSettings()
     collection = get_incident_collection(settings)
-    response = collection.query(
-        query_embeddings=[query_embedding],
-        n_results=top_k,
-        include=["documents", "metadatas", "distances"],
-    )
+    with _query_lock:
+        response = collection.query(
+            query_embeddings=[query_embedding],
+            n_results=top_k,
+            include=["documents", "metadatas", "distances"],
+        )
 
     documents = response.get("documents", [[]])[0]
     metadatas = response.get("metadatas", [[]])[0]

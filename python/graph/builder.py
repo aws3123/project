@@ -66,6 +66,7 @@ class BuilderConfig:
         None  # Agent 选择器（动态决定跑哪些 Agent）
     )
     checkpoint_service: CheckpointService | None = None  # 断点续传服务（可选）
+    rag_retrieval_service: Any | None = None  # 进程级 RAG 检索服务
 
 
 class GraphBuilder:
@@ -96,17 +97,19 @@ class GraphBuilder:
         circuit_breaker: CircuitBreaker | None = None,
         agent_selector: Callable[[GraphState], list[tuple[str, NodeFn]]] | None = None,
         checkpoint_service: CheckpointService | None = None,
+        rag_retrieval_service: Any | None = None,
     ) -> None:
         # 将所有依赖打包存入 _config，后续 build() 时一次性取出
         self._config = BuilderConfig(
-            registry,
-            log_service,
-            telemetry,
-            task_service,
-            llm_client,
-            circuit_breaker,
-            agent_selector,
-            checkpoint_service,
+            registry=registry,
+            log_service=log_service,
+            telemetry=telemetry,
+            task_service=task_service,
+            llm_client=llm_client,
+            circuit_breaker=circuit_breaker,
+            agent_selector=agent_selector,
+            checkpoint_service=checkpoint_service,
+            rag_retrieval_service=rag_retrieval_service,
         )
         # _phases 是有序的"阶段列表"，每个阶段是一个节点列表
         # 单节点列表 = 顺序执行，多节点列表 = 并行执行
@@ -157,6 +160,7 @@ class GraphBuilder:
             or CircuitBreaker(),  # 没提供则用默认熔断器
             agent_selector=self._config.agent_selector,
             checkpoint_service=self._config.checkpoint_service,
+            rag_retrieval_service=self._config.rag_retrieval_service,
         )
         # 用 .copy() 复制阶段列表，防止外部后续修改影响已构建的 Runner
         return GraphRunner(phases=self._phases.copy(), config=config)

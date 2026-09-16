@@ -32,6 +32,7 @@ from telemetry.hooks import TelemetryHook
 # Python 实际运行时为 False —— 这样导入只为了给类型检查器看，不会真正执行导入
 # 好处：避免循环导入，同时保留类型提示
 if TYPE_CHECKING:
+    from services.rag_retrieval_service import RagRetrievalService
     from tools.registry import ToolRegistry
 
 
@@ -98,3 +99,4 @@ class NodeContext:
     task_service: TaskService | None = None
     telemetry: TelemetryHook | None = None
     llm_client: Any | None = None
+    rag_retrieval_service: RagRetrievalService | None = None

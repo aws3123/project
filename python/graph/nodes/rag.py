@@ -51,8 +51,6 @@ from llm.token_counter import truncate_to_budget
 from schemas.domain.llm_output import RAGAnalysisOutput
 
 # 导入统一检索服务
-from services.rag_retrieval_service import RagRetrievalService
-
 logger = logging.getLogger(__name__)
 
 
@@ -81,8 +79,10 @@ async def run_rag(state: GraphState, ctx: NodeContext) -> GraphState:
     code_metadata = build_code_metadata(state)
 
     # 调用统一检索服务（异步全链路）
-    retrieval_service = RagRetrievalService(settings)
     try:
+        retrieval_service = ctx.rag_retrieval_service
+        if retrieval_service is None:
+            raise RuntimeError("RAG retrieval service is not configured")
         fused, retrieval_status, retrieval_reason = await retrieval_service.retrieve(
             nl_query, code_metadata, settings.top_k
         )

@@ -164,6 +164,9 @@ class AppSettings(BaseSettings):
     # Top-K：检索时返回最相关的前 K 条结果。
     # 比如 top_k=5 就是返回最相关的 5 条文档片段。
     top_k: int = 5
+    # RAG 同时检索的最大任务数。它独立于 Kafka 消费并发，保护 Chroma 的
+    # 内嵌 HTTP transport 和本地 CrossEncoder，避免高峰时复用已关闭 client。
+    rag_max_concurrency: int = 32
 
     # RRF（Reciprocal Rank Fusion，倒数排名融合）的参数。
     # 当同时使用向量检索和关键词检索时，需要用 RRF 算法合并两路结果。

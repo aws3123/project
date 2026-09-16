@@ -31,12 +31,17 @@ import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 
@@ -53,6 +58,7 @@ public class OutboxPoller {
     private static final String MESSAGE_ID_KEY = "messageId";
     private static final int BATCH_SIZE = 500;
     private static final int MAX_POLL_RETRY = 10;
+    private static final int SEND_CONCURRENCY = 32;
 
     private final OutboxEventMapper outboxMapper;
     private final StreamBridge streamBridge;
@@ -64,6 +70,11 @@ public class OutboxPoller {
     private final ReviewResultMapper reviewResultMapper;
     private final TaskAuditLogMapper auditLogMapper;
     private final SseRegistry sseRegistry;
+    @Autowired
+    @Lazy
+    private OutboxPoller self;
+
+    private final ExecutorService sendExecutor = Executors.newFixedThreadPool(SEND_CONCURRENCY);
 
     @Scheduled(fixedDelay = 100)
     public void poll() {
@@ -72,9 +83,15 @@ public class OutboxPoller {
             return;
         }
 
-        for (OutboxEvent event : events) {
-            sendEvent(event);
-        }
+        events.stream()
+                .map(event -> sendExecutor.submit(() -> self.sendEvent(event)))
+                .forEach(future -> {
+                    try {
+                        future.get(30, TimeUnit.SECONDS);
+                    } catch (Exception e) {
+                        log.warn("Outbox send task did not complete cleanly", e);
+                    }
+                });
     }
 
     private List<OutboxEvent> fetchPendingEvents() {

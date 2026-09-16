@@ -111,6 +111,7 @@ class RunnerConfig:
         | None
     ) = None  # Agent 选择器：动态决定跑哪些 Agent
     checkpoint_service: CheckpointService | None = None  # 断点续传服务（可选）
+    rag_retrieval_service: Any | None = None  # 进程级 RAG 检索服务
 
 
 class GraphRunner:
@@ -190,6 +191,7 @@ class GraphRunner:
             task_service=self._config.task_service,
             telemetry=self._config.telemetry,
             llm_client=self._config.llm_client,
+            rag_retrieval_service=self._config.rag_retrieval_service,
         )
         ckpt_svc = self._config.checkpoint_service
 
@@ -708,6 +710,7 @@ class GraphRunner:
             task_service=self._config.task_service,
             telemetry=self._config.telemetry,
             llm_client=self._config.llm_client,
+            rag_retrieval_service=self._config.rag_retrieval_service,
         )
         ckpt_svc = self._config.checkpoint_service
 
