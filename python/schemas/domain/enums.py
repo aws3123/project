@@ -74,6 +74,7 @@ class RAGStatus(str, Enum):
 
     NORMAL = "NORMAL"
     DEGRADED = "DEGRADED"
+    NO_RELEVANT_INCIDENTS = "NO_RELEVANT_INCIDENTS"
 
 
 # =============================================================================
@@ -121,6 +122,7 @@ class RAGStatus(str, Enum):
 
     NORMAL = "NORMAL"
     DEGRADED = "DEGRADED"
+    NO_RELEVANT_INCIDENTS = "NO_RELEVANT_INCIDENTS"
 
 
 class HandoffDecision(str, Enum):

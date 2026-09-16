@@ -44,7 +44,11 @@ public class TreeSitterNativeParser {
 
     private static final Logger log = LoggerFactory.getLogger(TreeSitterNativeParser.class);
 
-    private final Map<TreeSitterLanguage, TSParser> parsers = new EnumMap<>(TreeSitterLanguage.class);
+    // Tree-sitter's TSParser is NOT thread-safe: concurrent parseString() on a shared
+    // instance corrupts native state (Stack/heads) and aborts the JVM (SIGABRT via
+    // assertion failures). Isolate one parser per thread so it is never shared across threads.
+    private final ThreadLocal<Map<TreeSitterLanguage, TSParser>> parsersByThread =
+            ThreadLocal.withInitial(() -> new EnumMap<>(TreeSitterLanguage.class));
 
     // ── Enhanced pattern matcher patterns ──────────────────────────────────
 
@@ -101,7 +105,7 @@ public class TreeSitterNativeParser {
     // ── Layer 1: Tree-sitter JNI ──────────────────────────────────────────
 
     private TSParser getOrCreateParser(TreeSitterLanguage lang) {
-        return parsers.computeIfAbsent(lang, k -> {
+        return parsersByThread.get().computeIfAbsent(lang, k -> {
             TSParser p = new TSParser();
             TSLanguage grammar = switch (k) {
                 case JAVA -> new org.treesitter.TreeSitterJava();

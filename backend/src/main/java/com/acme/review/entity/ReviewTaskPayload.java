@@ -1,6 +1,8 @@
 package com.acme.review.entity;
 
+import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -16,6 +18,7 @@ import java.time.Instant;
 @TableName("review_task_payload")
 public class ReviewTaskPayload {
 
+    @TableId(value = "task_id", type = IdType.INPUT)
     @TableField("task_id")
     private String taskId;
 

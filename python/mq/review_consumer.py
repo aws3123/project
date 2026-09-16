@@ -13,6 +13,7 @@ from config.settings import AppSettings
 from llm.metering import MeteringScope
 from mq.callback_producer import CallbackProducer
 from mq.payload_client import PayloadClient, PayloadNotFoundError
+from schemas.api.backend_contract import parse_async_payload
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +173,7 @@ class ReviewKafkaConsumer:
 
             try:
                 payload = await self._payload_client.fetch(task_id)
-                request = self._build_request(message, payload)
+                request = parse_async_payload(self._build_request(message, payload))
                 result = await asyncio.to_thread(self._process_message, request)
                 await self._producer.send_callback(
                     "RESULT",
@@ -209,7 +210,9 @@ class ReviewKafkaConsumer:
                     )
                     try:
                         payload = await self._payload_client.fetch(task_id)
-                        request = self._build_request(message, payload)
+                        request = parse_async_payload(
+                            self._build_request(message, payload)
+                        )
                         result = await asyncio.to_thread(self._process_message, request)
                         await self._producer.send_callback(
                             "RESULT",
