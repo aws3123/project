@@ -54,6 +54,7 @@ public class StreamResumeService {
     private final ReviewTaskMapper taskRepo;
     private final ReviewResultMapper resultRepo;
     private final ObjectMapper objectMapper;
+    private final ConcurrentMetricsService metrics;
 
     private ExecutorService tailExecutor;
 
@@ -82,11 +83,16 @@ public class StreamResumeService {
             return false;
         }
         ensureExecutor();
+        metrics.recordSseConnect();
 
         List<StoredEvent> replay = eventStore.replayAfter(taskId, lastEventId);
         // 无缓存：缓存存在与否是判断"是否是同步流式任务"的关键依据
         if (!eventStore.hasEvents(taskId)) {
-            return handleNoCache(taskId, emitter);
+            boolean handled = handleNoCache(taskId, emitter);
+            if (!handled) {
+                metrics.recordSseDisconnect();
+            }
+            return handled;
         }
 
         String cursor = lastEventId;
@@ -100,11 +106,13 @@ public class StreamResumeService {
         }
         if (terminal) {
             safeComplete(emitter);
+            metrics.recordSseDisconnect();
             return true;
         }
 
         AtomicBoolean running = new AtomicBoolean(true);
-        armEmitter(emitter, running);
+        AtomicBoolean connected = new AtomicBoolean(true);
+        armEmitter(emitter, running, connected);
         final String tailFrom = cursor;
         tailExecutor.execute(() -> tail(taskId, tailFrom, emitter, running));
         return true;
@@ -194,19 +202,27 @@ public class StreamResumeService {
     }
 
     private boolean isTerminal(String eventName) {
-        return EVENT_RUN_FINISHED.equals(eventName) || EVENT_RUN_ERROR.equals(eventName);
+        return EVENT_RUN_FINISHED.equals(eventName) || EVENT_RUN_ERROR.equals(eventName)
+                || "result".equals(eventName) || "task_failed".equals(eventName);
     }
 
-    private void armEmitter(SseEmitter emitter, AtomicBoolean running) {
-        emitter.onCompletion(() -> running.set(false));
+    private void armEmitter(SseEmitter emitter, AtomicBoolean running, AtomicBoolean connected) {
+        emitter.onCompletion(() -> closeConnection(running, connected));
         emitter.onError(e -> {
-            running.set(false);
+            closeConnection(running, connected);
             safeComplete(emitter);
         });
         emitter.onTimeout(() -> {
-            running.set(false);
+            closeConnection(running, connected);
             safeComplete(emitter);
         });
+    }
+
+    private void closeConnection(AtomicBoolean running, AtomicBoolean connected) {
+        running.set(false);
+        if (connected.compareAndSet(true, false)) {
+            metrics.recordSseDisconnect();
+        }
     }
 
     private void send(SseEmitter emitter, StoredEvent event) {

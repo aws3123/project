@@ -4,6 +4,9 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
 scrape_configs:
   # Prometheus 自身健康状态
   - job_name: prometheus
@@ -25,3 +28,8 @@ scrape_configs:
       - targets: ["python-ai:8000"]
         labels:
           service: python-ai
+
+  # Kafka exporter is optional; when enabled it supplies lag/DLQ metrics.
+  - job_name: kafka-exporter
+    static_configs:
+      - targets: ["kafka-exporter:9308"]

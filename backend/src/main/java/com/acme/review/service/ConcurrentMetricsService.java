@@ -66,6 +66,9 @@ public class ConcurrentMetricsService {
     private final Timer pythonLatencyTimer;
     private final Timer syncLatencyTimer;
     private final Timer asyncLatencyTimer;
+    private final Counter submittedCounter;
+    private final Counter completedCounter;
+    private final Counter failedCounter;
 
     /**
      * 构造函数，初始化 Micrometer 指标注册表
@@ -97,6 +100,15 @@ public class ConcurrentMetricsService {
                 .description("End-to-end async review latency")
                 .publishPercentiles(0.5, 0.9, 0.95, 0.99)
                 .register(meterRegistry);
+
+        this.submittedCounter = Counter.builder("review.tasks.submitted")
+                .description("Review tasks accepted by the API").register(meterRegistry);
+        this.completedCounter = Counter.builder("review.tasks.completed")
+                .description("Review tasks that reached a successful terminal state").register(meterRegistry);
+        this.failedCounter = Counter.builder("review.tasks.failed")
+                .description("Review tasks that reached a failed terminal state").register(meterRegistry);
+        Gauge.builder("review.sse.active.connections", this, ConcurrentMetricsService::getActiveSseConnections)
+                .description("Open review SSE connections").register(meterRegistry);
     }
 
     // ==========================================
@@ -104,13 +116,13 @@ public class ConcurrentMetricsService {
     // ===========================================
 
     /** 记录任务提交 */
-    public void recordSubmit()       { tasksSubmitted.increment(); }
+    public void recordSubmit()       { tasksSubmitted.increment(); submittedCounter.increment(); }
     
     /** 记录任务成功完成 */
-    public void recordComplete()     { tasksCompleted.increment(); }
+    public void recordComplete()     { tasksCompleted.increment(); completedCounter.increment(); }
     
     /** 记录任务失败 */
-    public void recordFailure()      { tasksFailed.increment(); }
+    public void recordFailure()      { tasksFailed.increment(); failedCounter.increment(); }
     
     /** 记录同步分发 */
     public void recordSync()         { syncDispatched.increment(); }

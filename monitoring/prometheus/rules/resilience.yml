@@ -1,0 +1,16 @@
+groups:
+  - name: async-resilience
+    interval: 15s
+    rules:
+      - record: resilience:dlq_total
+        expr: sum(kafka_topic_partition_current_offset{topic=~".*-dlq"}) or vector(0)
+      - record: resilience:active_sse
+        expr: sum(review_sse_active_connections) or vector(0)
+      - record: resilience:outbox_pending
+        expr: sum(review_outbox_pending) or vector(0)
+      - record: resilience:task_p99_seconds
+        expr: histogram_quantile(0.99, sum by (le) (rate(review_async_latency_seconds_bucket[5m])))
+      - record: resilience:inflight_tasks
+        expr: sum(review_tasks_inflight) or vector(0)
+      - record: resilience:kafka_duplicates_skipped
+        expr: sum(increase(review_kafka_duplicates_skipped_total[5m])) or vector(0)

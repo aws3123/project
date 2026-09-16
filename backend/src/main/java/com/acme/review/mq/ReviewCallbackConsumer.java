@@ -21,6 +21,7 @@ import org.springframework.messaging.Message;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -152,6 +153,7 @@ public class ReviewCallbackConsumer {
         } else {
             metrics.recordComplete();
         }
+        recordAsyncLatency(task);
 
         Map<String, Object> sseData = Map.of(
                 "taskId", task.getTaskId(),
@@ -183,6 +185,7 @@ public class ReviewCallbackConsumer {
         writeAudit(task.getTaskId(), prev, ReviewTaskStatus.FAILED.name(),
                 "CALLBACK", "DEAD_LETTER: " + callback.getErrorCode());
         metrics.recordFailure();
+        recordAsyncLatency(task);
         sseRegistry.send(task.getTaskId(), "task_failed", Map.of(
                 "taskId", task.getTaskId(),
                 "status", "FAILED",
@@ -202,6 +205,12 @@ public class ReviewCallbackConsumer {
             return ReviewTaskStatus.FAILED;
         }
         return ReviewTaskStatus.SUCCESS;
+    }
+
+    private void recordAsyncLatency(ReviewTask task) {
+        if (task.getCreatedAt() != null) {
+            metrics.recordAsyncLatency(Math.max(0, Duration.between(task.getCreatedAt(), Instant.now()).toMillis()));
+        }
     }
 
     private String resolveMessageId(Message<?> message, ReviewCallbackMessage callback) {

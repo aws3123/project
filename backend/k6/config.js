@@ -107,10 +107,12 @@ export function generateDiff(size) {
  * 生成异步受理请求体（mode=ASYNC，taskId 由后端生成）。
  * 受理链路：Java BFF 同步完成 AST 预处理 → Outbox 落库 → 返回 202。
  */
-export function makeAsyncPayload(diffSize) {
+export function makeAsyncPayload(diffSize, runId = __ENV.PERF_RUN_ID) {
+  // 每次验收使用唯一 RUN_ID，后续数据库对账只统计本次压测产生的任务。
+  const projectId = runId ? `perf-${runId}` : 'perf-test';
   return JSON.stringify({
-    projectId: 'perf-test',
-    projectName: 'Performance Test Project',
+    projectId,
+    projectName: runId ? `Performance Test ${runId}` : 'Performance Test Project',
     prUrl: `https://github.com/perf-org/perf-repo/pull/${Math.floor(Math.random() * 100000)}`,
     diffContent: generateDiff(diffSize),
     mode: 'ASYNC',

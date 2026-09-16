@@ -185,9 +185,11 @@ management:
       percentiles-histogram:
         http.server.requests: true
         review.ast.parse: true
+        review.async.latency: true
       slo:
         http.server.requests: 10ms,25ms,50ms,100ms,250ms,500ms,1s,2s
         review.ast.parse: 1ms,2ms,5ms,10ms,25ms,50ms,100ms,250ms,500ms
+        review.async.latency: 100ms,250ms,500ms,1s,2s,5s,10s,30s,60s,120s
 
 logging:
   pattern:

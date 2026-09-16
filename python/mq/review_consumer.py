@@ -8,6 +8,7 @@ from typing import Any
 
 from aiokafka import AIOKafkaConsumer
 from aiokafka.errors import KafkaError
+from telemetry.async_resilience import KAFKA_DUPLICATES_SKIPPED, KAFKA_MESSAGES_RECEIVED
 
 from config.settings import AppSettings
 from llm.metering import MeteringScope
@@ -150,6 +151,7 @@ class ReviewKafkaConsumer:
                 await asyncio.sleep(1)
 
     async def _handle(self, message: dict[str, Any]) -> None:
+        KAFKA_MESSAGES_RECEIVED.inc()
         task_id = str(message.get("taskId") or "")
         if not task_id:
             logger.warning("Message missing taskId, skipping: %s", str(message)[:200])
@@ -160,6 +162,7 @@ class ReviewKafkaConsumer:
         if self._settings.kafka_dedup_enabled and not await self._acquire_dedup(
             task_id
         ):
+            KAFKA_DUPLICATES_SKIPPED.inc()
             logger.debug("Duplicate task skipped taskId=%s", task_id)
             return
 

@@ -12,6 +12,7 @@ import com.acme.review.repository.mapper.ReviewTaskMapper;
 import com.acme.review.repository.mapper.TaskAuditLogMapper;
 import com.acme.review.service.ConcurrentMetricsService;
 import com.acme.review.service.SseRegistry;
+import com.acme.review.service.TokenUsageService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.messaging.support.MessageBuilder;
@@ -36,6 +37,7 @@ class ReviewCallbackConsumerTest {
     private ConsumedMessageMapper consumedMessageMapper;
     private SseRegistry sseRegistry;
     private ConcurrentMetricsService metrics;
+    private TokenUsageService tokenUsageService;
     private Consumer<org.springframework.messaging.Message<ReviewCallbackMessage>> fn;
 
     @BeforeEach
@@ -46,8 +48,9 @@ class ReviewCallbackConsumerTest {
         consumedMessageMapper = mock(ConsumedMessageMapper.class);
         sseRegistry = mock(SseRegistry.class);
         metrics = mock(ConcurrentMetricsService.class);
+        tokenUsageService = mock(TokenUsageService.class);
         ReviewCallbackConsumer consumer = new ReviewCallbackConsumer(
-                taskRepo, resultRepo, auditLogMapper, consumedMessageMapper, sseRegistry, metrics);
+                taskRepo, resultRepo, auditLogMapper, consumedMessageMapper, sseRegistry, metrics, tokenUsageService);
         fn = consumer.reviewCallbackIn();
     }
 

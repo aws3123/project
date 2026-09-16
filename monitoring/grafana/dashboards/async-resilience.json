@@ -1,0 +1,10 @@
+{"uid":"async-resilience","title":"Async Review · Resilience验收","schemaVersion":39,"version":1,"refresh":"15s","time":{"from":"now-1h","to":"now"},"panels":[
+{"id":1,"type":"stat","title":"DLQ 消息总数（目标 0）","gridPos":{"h":4,"w":6,"x":0,"y":0},"targets":[{"expr":"resilience:dlq_total"}]},
+{"id":2,"type":"stat","title":"Outbox Pending","gridPos":{"h":4,"w":6,"x":6,"y":0},"targets":[{"expr":"resilience:outbox_pending"}]},
+{"id":7,"type":"stat","title":"In-flight Tasks","gridPos":{"h":4,"w":6,"x":12,"y":0},"targets":[{"expr":"resilience:inflight_tasks"}]},
+{"id":8,"type":"stat","title":"5m 去重消息数","gridPos":{"h":4,"w":6,"x":18,"y":0},"targets":[{"expr":"resilience:kafka_duplicates_skipped"}]},
+{"id":3,"type":"timeseries","title":"任务 P99（秒）","gridPos":{"h":8,"w":12,"x":0,"y":4},"targets":[{"expr":"resilience:task_p99_seconds"}]},
+{"id":4,"type":"timeseries","title":"活跃 SSE 连接","gridPos":{"h":8,"w":12,"x":12,"y":4},"targets":[{"expr":"resilience:active_sse"}]},
+{"id":5,"type":"timeseries","title":"k6 HTTP P99","gridPos":{"h":8,"w":12,"x":0,"y":12},"targets":[{"expr":"histogram_quantile(0.99, sum by (le) (rate(k6_http_req_duration_seconds_bucket[5m])))"}]},
+{"id":6,"type":"timeseries","title":"Kafka Consumer Lag","gridPos":{"h":8,"w":12,"x":12,"y":12},"targets":[{"expr":"sum by (topic) (kafka_consumergroup_lag)"}]}
+]}

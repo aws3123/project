@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.util.Map;
@@ -16,6 +17,8 @@ public class SseRegistry {
 
     private final ConcurrentHashMap<String, SseEmitter> emitters = new ConcurrentHashMap<>();
     private final ConcurrentMetricsService metrics;
+    private final ReviewStreamEventStore eventStore;
+    private final ObjectMapper objectMapper;
 
     public SseEmitter register(String taskId) {
         SseEmitter emitter = new SseEmitter(120_000L);
@@ -38,15 +41,36 @@ public class SseRegistry {
     }
 
     public void send(String taskId, String eventName, Object data) {
+        String serialized = serialize(data);
+        String eventId = eventStore.enabled() ? eventStore.append(taskId, eventName, serialized) : null;
+        if (isTerminal(eventName)) {
+            eventStore.markTerminal(taskId);
+        }
         SseEmitter emitter = emitters.get(taskId);
         if (emitter == null) {
             return;
         }
         try {
-            emitter.send(SseEmitter.event().name(eventName).data(data));
+            SseEmitter.SseEventBuilder event = SseEmitter.event().name(eventName).data(serialized);
+            if (eventId != null) {
+                event.id(eventId);
+            }
+            emitter.send(event);
         } catch (IOException e) {
             log.debug("SSE send failed taskId={}, removing", taskId);
             cleanup(taskId);
+        }
+    }
+
+    private boolean isTerminal(String eventName) {
+        return "result".equals(eventName) || "task_failed".equals(eventName);
+    }
+
+    private String serialize(Object data) {
+        try {
+            return objectMapper.writeValueAsString(data);
+        } catch (Exception ex) {
+            return "{}";
         }
     }
 

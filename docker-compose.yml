@@ -164,10 +164,19 @@ services:
       - "9090:9090"
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/rules:/etc/prometheus/rules:ro
       - prometheus-data:/prometheus
     depends_on:
       - java-backend
       - python-ai
+
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.8.0
+    command: ["--kafka.server=my-kafka:9092"]
+    extra_hosts:
+      - "my-kafka:host-gateway"
+    ports:
+      - "9308:9308"
 
   grafana:
     image: grafana/grafana:11.1.0
