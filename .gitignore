@@ -61,5 +61,19 @@ docs/.playwright-mcp/
 playwright-report/
 test-results/
 pytest_baseline.txt
+pytest_out.txt
 compact_vhdx.txt
 UTF8
+.tmp/
+.skillhub_out.txt
+resume_tmp.*
+_resume_unzip*/
+
+# ===== 部署包 / 归档（不入库）=====
+*.tar
+*.tgz
+*.tar.gz
+
+# ===== 运行时数据 =====
+python/data/
+python/D_/
