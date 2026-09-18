@@ -90,6 +90,23 @@ def average_sample(values: list[float]) -> dict[str, float | None]:
     return {"average": sum(values) / len(values) if values else None}
 
 
+def host_normalized_cpu_summary(
+    cpu: dict[str, Any], logical_cpus: float
+) -> dict[str, dict[str, float | None]]:
+    """Express multi-core process CPU as a percentage of host capacity."""
+    return {
+        instance: {
+            "average": (
+                round(stats["average"] / logical_cpus, 3)
+                if stats.get("average") is not None
+                else None
+            )
+        }
+        for instance, stats in cpu.items()
+        if isinstance(stats, dict)
+    }
+
+
 def parse_kafka_describe(text: str) -> list[dict[str, int | str]]:
     rows: list[dict[str, int | str]] = []
     for raw in text.splitlines():
@@ -230,17 +247,9 @@ def summarize(args: argparse.Namespace) -> None:
     cpu = summary.get("python_cpu_core_percent", {})
     host_cpus = os.environ.get("HOST_LOGICAL_CPUS")
     if host_cpus and isinstance(cpu, dict):
-        cores = float(host_cpus)
-        summary["python_cpu_host_normalized_percent"] = {
-            instance: {
-                "average": (
-                    stats["average"] / cores
-                    if stats.get("average") is not None
-                    else None
-                )
-            }
-            for instance, stats in cpu.items() if isinstance(stats, dict)
-        }
+        summary["python_cpu_host_normalized_percent"] = host_normalized_cpu_summary(
+            cpu, float(host_cpus)
+        )
     summary["kafka"] = kafka_summary(output / "kafka-lag.csv")
     (output / "prometheus-raw.json").write_text(json.dumps(raw, indent=2), encoding="utf-8")
     (output / "metrics-summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")

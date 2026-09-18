@@ -9,6 +9,11 @@ set -euo pipefail
 : "${PROM_TARGETS_FILE:?PROM_TARGETS_FILE is required}"
 : "${PROM_RELOAD_COMMAND:?PROM_RELOAD_COMMAND is required}"
 
+# process_cpu_seconds_total is a multi-core process metric and may exceed 100.
+# Normalize it by the host's logical CPU count for a resume-friendly percentage.
+HOST_LOGICAL_CPUS="${HOST_LOGICAL_CPUS:-$(getconf _NPROCESSORS_ONLN)}"
+export HOST_LOGICAL_CPUS
+
 PHASE=""
 DRY_RUN=false
 RATES="20,30,40,50,60,80"
