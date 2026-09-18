@@ -40,6 +40,8 @@ class AppSettings(BaseSettings):
     app_host: str = "0.0.0.0"
     # 服务监听的端口号。FastAPI 默认用 8000 端口
     app_port: int = 8000
+    # 可选的稳定实例标签；压测时由每个 Uvicorn 进程显式设置。
+    performance_instance_id: str = ""
 
     # -------------------------------------------------------------------------
     # Kafka 异步链路配置（Java 生产者 → Python 消费者 → 回调回 Java）

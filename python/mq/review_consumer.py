@@ -5,11 +5,18 @@ import json
 import logging
 import uuid
 from collections.abc import Awaitable, Callable
+from time import perf_counter
 from typing import Any
 
 from aiokafka import AIOKafkaConsumer
 from aiokafka.errors import KafkaError
-from telemetry.async_resilience import KAFKA_DUPLICATES_SKIPPED, KAFKA_MESSAGES_RECEIVED
+from telemetry.async_resilience import (
+    KAFKA_DUPLICATES_SKIPPED,
+    KAFKA_MESSAGES_RECEIVED,
+    increment_task_processing_retry,
+    observe_task_processing,
+    task_processing_instance_id,
+)
 
 from config.settings import AppSettings
 from llm.metering import MeteringScope
@@ -170,6 +177,7 @@ class ReviewKafkaConsumer:
             return
         session_id = message.get("sessionId") or None
         trace_id = message.get("traceId") or task_id
+        instance = task_processing_instance_id(self._settings)
 
         claimed, lease_owner = await self._claim_processing_lease(task_id)
         if not claimed:
@@ -185,10 +193,20 @@ class ReviewKafkaConsumer:
                 await self._producer.send_callback(
                     "PROCESSING", task_id, session_id=session_id, trace_id=trace_id
                 )
+                processing_started = perf_counter()
+
+                def observe_terminal_processing(outcome: str) -> None:
+                    observe_task_processing(
+                        perf_counter() - processing_started,
+                        instance=instance,
+                        outcome=outcome,
+                    )
+
                 try:
                     payload = await self._payload_client.fetch(task_id)
                     request = parse_async_payload(self._build_request(message, payload))
                     result = await self._process_message(request)
+                    observe_terminal_processing("success")
                     await self._producer.send_callback(
                         "RESULT", task_id, session_id=session_id, trace_id=trace_id,
                         result=self._result_to_dict(result), usage=self._usage_snapshot(scope),
@@ -200,6 +218,7 @@ class ReviewKafkaConsumer:
                 except (PayloadNotFoundError, PermanentFailure) as exc:
                     code = exc.code if isinstance(exc, PermanentFailure) else "PAYLOAD_NOT_FOUND"
                     logger.warning("Permanent failure taskId=%s code=%s: %s", task_id, code, exc)
+                    observe_terminal_processing("failure")
                     await self._producer.send_callback(
                         "DEAD_LETTER", task_id, session_id=session_id, trace_id=trace_id,
                         error_code=code, error_message=str(exc),
@@ -210,11 +229,13 @@ class ReviewKafkaConsumer:
                     logger.warning("Transient failure taskId=%s, will retry: %s", task_id, exc)
                     error_code, error_message = "TRANSIENT_FAILURE", str(exc)
                     for attempt in range(1, self._settings.kafka_transient_retries + 1):
+                        increment_task_processing_retry(instance)
                         await asyncio.sleep(self._settings.kafka_transient_backoff_ms * attempt / 1000)
                         try:
                             payload = await self._payload_client.fetch(task_id)
                             request = parse_async_payload(self._build_request(message, payload))
                             result = await self._process_message(request)
+                            observe_terminal_processing("success")
                             await self._producer.send_callback(
                                 "RESULT", task_id, session_id=session_id, trace_id=trace_id,
                                 result=self._result_to_dict(result), usage=self._usage_snapshot(scope),
@@ -230,6 +251,7 @@ class ReviewKafkaConsumer:
                         except Exception as retry_exc:
                             logger.warning("Transient retry %d/%d failed taskId=%s: %s", attempt, self._settings.kafka_transient_retries, task_id, retry_exc)
                             error_message = str(retry_exc)
+                    observe_terminal_processing("failure")
                     await self._producer.send_callback(
                         "DEAD_LETTER", task_id, session_id=session_id, trace_id=trace_id,
                         error_code=error_code, error_message=error_message,
