@@ -7,6 +7,7 @@ import csv
 import json
 import math
 import os
+import re
 import subprocess
 import time
 import urllib.parse
@@ -39,11 +40,11 @@ def fetch_prometheus_text(url: str) -> str:
 
 
 def metric_counter(text: str, name: str) -> float:
-    prefix = name + " "
+    pattern = re.compile(r"^" + re.escape(name) + r"(?:\{[^}]*\})?\s+([-+0-9.eE]+)$")
     return sum(
-        float(line[len(prefix):].split()[0])
+        float(match.group(1))
         for line in text.splitlines()
-        if line.startswith(prefix)
+        if (match := pattern.match(line)) is not None
     )
 
 
