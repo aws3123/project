@@ -109,6 +109,7 @@ run_load_window() {
   seconds="$(duration_seconds "$DURATION")"
   mkdir -p "$output"
   run_reconciliation "$output"
+  python3 "$K6_ROOT/tools/collect_scale_metrics.py" snapshot --output-dir "$output" --label before --python-metrics-url "http://localhost:8000/metrics,http://localhost:8001/metrics"
   if "$DRY_RUN"; then
     echo "+ collect_scale_metrics.py watch --run-id $run_id --duration-seconds $seconds"
     echo "+ k6 run --summary-export $output/k6-summary.json scenarios/s1_decoupling.js"
@@ -122,7 +123,9 @@ run_load_window() {
   ended="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   wait "$watcher_pid" || true
   sleep "${PROM_SCRAPE_SETTLE_SECONDS:-20}"
-  python3 "$K6_ROOT/tools/collect_scale_metrics.py" summarize --run-id "$run_id" --output-dir "$output" --started-at "$started" --ended-at "$ended" --prometheus-url "$PROMETHEUS_URL" --python-instances "$instances" >"$output/summary.log" 2>&1
+  ended="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  python3 "$K6_ROOT/tools/collect_scale_metrics.py" snapshot --output-dir "$output" --label after --python-metrics-url "http://localhost:8000/metrics,http://localhost:8001/metrics"
+  python3 "$K6_ROOT/tools/collect_scale_metrics.py" summarize --run-id "$run_id" --output-dir "$output" --started-at "$started" --ended-at "$ended" --load-started-at "$started" --load-ended-at "$ended" --baseline-dir "$output" --prometheus-url "$PROMETHEUS_URL" --python-instances "$instances" >"$output/summary.log" 2>&1
   run_reconciliation "$output"
 }
 

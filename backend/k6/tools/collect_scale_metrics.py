@@ -33,6 +33,31 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def fetch_prometheus_text(url: str) -> str:
+    with urllib.request.urlopen(url, timeout=15) as response:
+        return response.read().decode("utf-8")
+
+
+def metric_counter(text: str, name: str) -> float:
+    prefix = name + " "
+    return sum(
+        float(line[len(prefix):].split()[0])
+        for line in text.splitlines()
+        if line.startswith(prefix)
+    )
+
+
+def write_python_snapshot(output: Path, urls: list[str], label: str) -> None:
+    snapshot = {}
+    for url in urls:
+        text = fetch_prometheus_text(url)
+        snapshot[url] = {
+            "processing_completed": metric_counter(text, "python_review_task_processing_seconds_count"),
+            "kafka_received": metric_counter(text, "review_kafka_messages_received_total"),
+        }
+    (output / f"python-metrics-{label}.json").write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
+
+
 def parse_timestamp(value: str) -> float:
     return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
 
@@ -128,7 +153,11 @@ def series_values(response: dict[str, Any]) -> dict[str, list[float]]:
     for item in response.get("data", {}).get("result", []):
         labels = item.get("metric", {})
         key = labels.get("instance", "aggregate")
-        result.setdefault(key, []).extend(float(value) for _timestamp, value in item.get("values", []))
+        result.setdefault(key, []).extend(
+            float(value)
+            for _timestamp, value in item.get("values", [])
+            if math.isfinite(float(value))
+        )
     return result
 
 
@@ -163,6 +192,22 @@ def summarize(args: argparse.Namespace) -> None:
     window = max(1, round(end - start))
     raw: dict[str, Any] = {}
     summary: dict[str, Any] = {"run_id": args.run_id, "started_at": args.started_at, "ended_at": args.ended_at}
+    if args.baseline_dir and args.load_ended_at and args.load_started_at:
+        before_path = Path(args.baseline_dir) / "python-metrics-before.json"
+        after_path = Path(args.baseline_dir) / "python-metrics-after.json"
+        if before_path.exists() and after_path.exists():
+            before = json.loads(before_path.read_text(encoding="utf-8"))
+            after = json.loads(after_path.read_text(encoding="utf-8"))
+            elapsed = max(0.001, parse_timestamp(args.load_ended_at) - parse_timestamp(args.load_started_at))
+            completed = sum(after[url]["processing_completed"] - before.get(url, {}).get("processing_completed", 0) for url in after)
+            received = sum(after[url]["kafka_received"] - before.get(url, {}).get("kafka_received", 0) for url in after)
+            summary["throughput"] = {
+                "window_seconds": elapsed,
+                "python_processing_completed": completed,
+                "python_processing_throughput_rps": completed / elapsed,
+                "kafka_messages_received": received,
+                "kafka_consume_throughput_rps": received / elapsed,
+            }
     for name, template in PROM_QUERIES.items():
         query_window = max(window, 300) if name == "python_processing_p99_seconds" else window
         query = template.replace("RUN_WINDOW", f"{query_window}s")
@@ -216,10 +261,18 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument("--output-dir", required=True)
     report.add_argument("--started-at", required=True)
     report.add_argument("--ended-at", required=True)
+    report.add_argument("--load-started-at", default=None)
+    report.add_argument("--load-ended-at", default=None)
+    report.add_argument("--baseline-dir", default=None)
     report.add_argument("--prometheus-url", required=True)
     report.add_argument("--python-instances", required=True)
     report.add_argument("--prometheus-step-seconds", type=int, default=15)
     report.set_defaults(func=summarize)
+    snapshot = commands.add_parser("snapshot")
+    snapshot.add_argument("--output-dir", required=True)
+    snapshot.add_argument("--label", required=True)
+    snapshot.add_argument("--python-metrics-url", required=True)
+    snapshot.set_defaults(func=lambda parsed: write_python_snapshot(Path(parsed.output_dir), parsed.python_metrics_url.split(","), parsed.label))
     return parser
 
 
