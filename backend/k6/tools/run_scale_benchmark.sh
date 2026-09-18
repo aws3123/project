@@ -103,7 +103,8 @@ run_reconciliation() {
 }
 
 run_load_window() {
-  local run_id="$1" instances="$2" output="$ARTIFACT_ROOT/$run_id"
+  local run_id="$1" instances="$2"
+  local output="$ARTIFACT_ROOT/$run_id"
   local started ended watcher_pid seconds
   seconds="$(duration_seconds "$DURATION")"
   mkdir -p "$output"
