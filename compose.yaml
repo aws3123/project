@@ -1,0 +1,401 @@
+name: sentinel
+
+x-logging: &default-logging
+  driver: local
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  mysql:
+    image: mysql:8.4.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-name-resolve
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - app-net
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$$MYSQL_USER -p$$MYSQL_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+
+  redis:
+    image: redis:7.4.2-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
+    volumes:
+      - redis-data:/data
+    networks:
+      - app-net
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a $$REDIS_PASSWORD ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 10s
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio-data:/data
+    networks:
+      - app-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 20s
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-03-12T17-29-24Z
+    restart: "no"
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_REPORT_BUCKET: ${MINIO_REPORT_BUCKET}
+      MINIO_IMAGE_BUCKET: ${MINIO_IMAGE_BUCKET}
+    entrypoint: ["/bin/sh", "-ec"]
+    command: |
+      mc alias set sentinel http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"
+      mc mb --ignore-existing "sentinel/$${MINIO_REPORT_BUCKET}"
+      mc mb --ignore-existing "sentinel/$${MINIO_IMAGE_BUCKET}"
+    networks:
+      - app-net
+    logging: *default-logging
+
+  kafka:
+    image: confluentinc/cp-kafka:7.7.0
+    restart: unless-stopped
+    environment:
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_HEAP_OPTS: -Xms512m -Xmx512m
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks:
+      - app-net
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server kafka:9092 --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 24
+      start_period: 40s
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+
+  kafka-init:
+    image: confluentinc/cp-kafka:7.7.0
+    restart: "no"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-ec"]
+    command: |
+      for topic in ai.review.tasks ai.review.callbacks ai.review.callbacks-dlq ai.feedback.events ai.feedback.events-dlq; do
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic "$${topic}" --partitions 6 --replication-factor 1
+      done
+    networks:
+      - app-net
+    logging: *default-logging
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms1g -Xmx1g
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    networks:
+      - app-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS 'http://127.0.0.1:9200/_cluster/health?wait_for_status=yellow&timeout=1s' >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 24
+      start_period: 40s
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+
+  python-ai:
+    build:
+      context: ./python
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      APP_ENV: prod
+      APP_HOST: 0.0.0.0
+      APP_PORT: "8000"
+      MYSQL_URL: mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      PERSISTENCE_BACKEND: sql
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: ${MINIO_REPORT_BUCKET}
+      MINIO_IMAGE_BUCKET: ${MINIO_IMAGE_BUCKET}
+      CHROMA_PATH: /data/chroma
+      CHROMA_COLLECTION: incident_vectors
+      CHROMA_KEYWORD_INDEX_PATH: /data/chroma/incident_keywords.jsonl
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      ES_INDEX_NAME: incident_keywords
+      LLM_API_BASE: ${LLM_API_BASE}
+      LLM_API_KEY: ${LLM_API_KEY}
+      LLM_MODEL: ${LLM_MODEL}
+      LLM_DISABLE_THINKING: "true"
+      BFF_BASE_URL: http://java-backend:8080
+      BFF_API_KEY: ${API_KEY}
+      BUSINESS_RISK_WORKER_HEARTBEAT_URL: http://java-backend:8080/api/internal/business-risk/worker-heartbeat
+      BUSINESS_RISK_WORKER_TOKEN: ${BUSINESS_RISK_WORKER_TOKEN}
+      KAFKA_ENABLED: "true"
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_GROUP_ID: python-review-worker
+      KAFKA_REVIEW_TASKS_TOPIC: ai.review.tasks
+      KAFKA_REVIEW_CALLBACKS_TOPIC: ai.review.callbacks
+      KAFKA_SECURITY_PROTOCOL: PLAINTEXT
+      TELEMETRY_BACKEND: prometheus
+      HF_HOME: /data/models
+    volumes:
+      - chroma-data:/data/chroma
+      - model-cache:/data/models
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - app-net
+      - observability-net
+    healthcheck:
+      test: ["CMD", "/app/.venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ai/health', timeout=5).read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 8G
+
+  java-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SERVER_PORT: "8080"
+      DB_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE}?useSSL=true&requireSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=UTF-8&connectionCollation=utf8mb4_unicode_ci
+      DB_USERNAME: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      PYTHON_BASE_URL: http://python-ai:8000
+      PYTHON_DISCOVERY_ENABLED: "true"
+      MQ_BINDER: kafka
+      SPRING_CLOUD_STREAM_KAFKA_BINDER_BROKERS: kafka:9092
+      API_KEY: ${API_KEY}
+      CALLBACK_TOKEN: ${CALLBACK_TOKEN}
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_IMAGE_BUCKET: ${MINIO_IMAGE_BUCKET}
+      BUSINESS_RISK_SSE_PERSISTENCE_BACKEND: redis
+      MANAGEMENT_HEALTH_RABBIT_ENABLED: "false"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+      python-ai:
+        condition: service_started
+    networks:
+      - app-net
+      - observability-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/actuator/health/liveness >/dev/null"]
+      interval: 20s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ""
+        VITE_HTTP_TIMEOUT_MS: "120000"
+    restart: unless-stopped
+    environment:
+      NGINX_LISTEN_PORT: "8080"
+      JAVA_BACKEND_URL: http://java-backend:8080
+      JAVA_API_KEY: ${API_KEY}
+    ports:
+      - "127.0.0.1:${APP_HOST_PORT}:8080"
+    depends_on:
+      java-backend:
+        condition: service_healthy
+    networks:
+      - app-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+    ports:
+      - "127.0.0.1:${PROMETHEUS_HOST_PORT}:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
+    depends_on:
+      java-backend:
+        condition: service_started
+      python-ai:
+        condition: service_started
+    networks:
+      - observability-net
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    ports:
+      - "127.0.0.1:${GRAFANA_HOST_PORT}:3000"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_started
+    networks:
+      - observability-net
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+networks:
+  app-net:
+    driver: bridge
+  observability-net:
+    driver: bridge
+
+volumes:
+  mysql-data:
+  redis-data:
+  minio-data:
+  kafka-data:
+  elasticsearch-data:
+  chroma-data:
+  model-cache:
+  prometheus-data:
+  grafana-data:

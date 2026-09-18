@@ -1,36 +1,35 @@
-# Nginx configuration for AI Code Review Sentinel frontend
-# Supports SPA routing and reverse proxy to Java BFF
-
 server {
-    listen       ${NGINX_LISTEN_PORT};
-    server_name  _;
+    listen ${NGINX_LISTEN_PORT};
+    server_name _;
 
-    root   /usr/share/nginx/html;
-    index  index.html;
+    root /usr/share/nginx/html;
+    index index.html;
+    server_tokens off;
 
-    # Gzip compression
     gzip on;
     gzip_vary on;
     gzip_min_length 1024;
-    gzip_types text/plain text/css application/json application/javascript text/xml application/xml text/javascript image/svg+xml;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml image/svg+xml;
 
-    # Security headers
-    add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header X-XSS-Protection "0" always;
 
-    # API reverse proxy → Java BFF
+    # Docker's embedded DNS allows Java backend replicas to change without
+    # rebuilding or restarting this frontend container.
+    resolver 127.0.0.11 valid=10s ipv6=off;
+
     location /api/ {
-        proxy_pass         ${JAVA_BACKEND_URL};
+        set $java_backend ${JAVA_BACKEND_URL};
+        proxy_pass $java_backend;
         proxy_http_version 1.1;
-
-        proxy_set_header Host              $host;
-        proxy_set_header X-Real-IP         $remote_addr;
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-
-        # SSE support (business-risk stream)
-        proxy_set_header Connection        '';
+        proxy_set_header X-API-Key ${JAVA_API_KEY};
+        proxy_set_header Connection "";
         proxy_buffering off;
         proxy_cache off;
         proxy_read_timeout 300s;
@@ -38,21 +37,18 @@ server {
         chunked_transfer_encoding off;
     }
 
-    # Static assets — long cache
     location /assets/ {
         expires 1y;
         add_header Cache-Control "public, immutable";
     }
 
-    # SPA fallback — all unknown routes → index.html
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    # Health check endpoint
     location = /health {
         access_log off;
-        return 200 "ok";
-        add_header Content-Type text/plain;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
     }
 }

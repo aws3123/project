@@ -41,6 +41,7 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+/deploy/production/.env
 
 # ===== 工具 / Agent 目录（不应入库）=====
 .qoder/

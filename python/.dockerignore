@@ -1,4 +1,6 @@
 .venv
+.git
+.gitignore
 __pycache__
 .pytest_cache
 .ruff_cache
@@ -19,3 +21,6 @@ chroma
 dist
 build
 *.egg-info
+docs
+tests
+README*

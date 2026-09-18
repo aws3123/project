@@ -1,4 +1,6 @@
 node_modules
+.git
+.gitignore
 dist
 playwright-report
 test-results
@@ -6,6 +8,7 @@ test-results
 .cache
 .env
 .env.*
+docs
 npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*
