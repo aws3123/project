@@ -61,7 +61,7 @@ async def test_success_metric_is_observed_before_result_callback(monkeypatch) ->
     consumer = make_consumer(Producer(), process_message)
     monkeypatch.setattr(
         "mq.review_consumer.observe_task_processing",
-        lambda _seconds, _instance, _outcome: order.append("metric"),
+        lambda seconds, instance, outcome: order.append("metric"),
     )
 
     await consumer._handle(valid_message())
@@ -87,11 +87,11 @@ async def test_terminal_failure_metric_precedes_dead_letter_and_counts_retry(
     consumer = make_consumer(Producer(), process_message, retries=1)
     monkeypatch.setattr(
         "mq.review_consumer.increment_task_processing_retry",
-        lambda _instance: order.append("retry"),
+        lambda instance: order.append("retry"),
     )
     monkeypatch.setattr(
         "mq.review_consumer.observe_task_processing",
-        lambda _seconds, _instance, outcome: order.append(f"{outcome}-metric"),
+        lambda seconds, instance, outcome: order.append(f"{outcome}-metric"),
     )
 
     await consumer._handle(valid_message())
