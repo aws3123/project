@@ -54,6 +54,8 @@ def write_python_snapshot(output: Path, urls: list[str], label: str) -> None:
         text = fetch_prometheus_text(url)
         snapshot[url] = {
             "processing_completed": metric_counter(text, "python_review_task_processing_seconds_count"),
+            "processing_seconds_total": metric_counter(text, "python_review_task_processing_seconds_sum"),
+            "process_cpu_seconds_total": metric_counter(text, "process_cpu_seconds_total"),
             "kafka_received": metric_counter(text, "review_kafka_messages_received_total"),
         }
     (output / f"python-metrics-{label}.json").write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
@@ -105,6 +107,45 @@ def host_normalized_cpu_summary(
         for instance, stats in cpu.items()
         if isinstance(stats, dict)
     }
+
+
+def _snapshot_delta(before: dict[str, Any], after: dict[str, Any], field: str) -> float:
+    return max(0.0, float(after.get(field, 0.0)) - float(before.get(field, 0.0)))
+
+
+def _task_efficiency_row(before: dict[str, Any], after: dict[str, Any]) -> dict[str, float | None]:
+    completed = _snapshot_delta(before, after, "processing_completed")
+    processing_seconds = _snapshot_delta(before, after, "processing_seconds_total")
+    cpu_seconds = _snapshot_delta(before, after, "process_cpu_seconds_total")
+    return {
+        "completed_tasks": completed,
+        "processing_seconds": processing_seconds,
+        "cpu_seconds": cpu_seconds,
+        "processing_seconds_per_task": round(processing_seconds / completed, 6) if completed else None,
+        "cpu_seconds_per_task": round(cpu_seconds / completed, 6) if completed else None,
+        "cpu_time_percent_of_processing": (
+            round(100 * cpu_seconds / processing_seconds, 6) if processing_seconds else None
+        ),
+    }
+
+
+def python_task_cpu_efficiency(
+    before: dict[str, dict[str, Any]], after: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    """Calculate CPU time per completed task and CPU share of processing time."""
+    instances = {
+        urllib.parse.urlparse(url).netloc: _task_efficiency_row(before.get(url, {}), metrics)
+        for url, metrics in after.items()
+    }
+    aggregate_before = {
+        field: sum(float(metrics.get(field, 0.0)) for metrics in before.values())
+        for field in ("processing_completed", "processing_seconds_total", "process_cpu_seconds_total")
+    }
+    aggregate_after = {
+        field: sum(float(metrics.get(field, 0.0)) for metrics in after.values())
+        for field in ("processing_completed", "processing_seconds_total", "process_cpu_seconds_total")
+    }
+    return {"aggregate": _task_efficiency_row(aggregate_before, aggregate_after), "instances": instances}
 
 
 def parse_kafka_describe(text: str) -> list[dict[str, int | str]]:
@@ -226,6 +267,7 @@ def summarize(args: argparse.Namespace) -> None:
                 "kafka_messages_received": received,
                 "kafka_consume_throughput_rps": received / elapsed,
             }
+            summary["python_task_cpu_efficiency"] = python_task_cpu_efficiency(before, after)
     for name, template in PROM_QUERIES.items():
         query_window = max(window, 300) if name == "python_processing_p99_seconds" else window
         query = template.replace("RUN_WINDOW", f"{query_window}s")
