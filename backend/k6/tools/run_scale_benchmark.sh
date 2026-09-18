@@ -121,6 +121,7 @@ run_load_window() {
   RUN_ID="$run_id" RATE="$RATE" DURATION="$DURATION" k6 run --summary-export "$output/k6-summary.json" "$K6_ROOT/scenarios/s1_decoupling.js" >"$output/k6.log" 2>&1
   ended="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   wait "$watcher_pid" || true
+  sleep "${PROM_SCRAPE_SETTLE_SECONDS:-20}"
   python3 "$K6_ROOT/tools/collect_scale_metrics.py" summarize --run-id "$run_id" --output-dir "$output" --started-at "$started" --ended-at "$ended" --prometheus-url "$PROMETHEUS_URL" --python-instances "$instances" >"$output/summary.log" 2>&1
   run_reconciliation "$output"
 }

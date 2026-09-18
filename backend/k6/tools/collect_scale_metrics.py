@@ -71,8 +71,12 @@ def parse_kafka_describe(text: str) -> list[dict[str, int | str]]:
 
 
 def run_kafka_describe(bootstrap: str, group: str) -> tuple[list[dict[str, int | str]], str | None]:
+    kafka_command = os.environ.get(
+        "KAFKA_CONSUMER_GROUPS_COMMAND",
+        "/opt/infra/kafka/bin/kafka-consumer-groups.sh",
+    )
     command = [
-        "nice", "-n", "19", "ionice", "-c3", "kafka-consumer-groups.sh",
+        "nice", "-n", "19", "ionice", "-c3", kafka_command,
         "--bootstrap-server", bootstrap, "--describe", "--group", group,
     ]
     try:
@@ -156,7 +160,8 @@ def summarize(args: argparse.Namespace) -> None:
     raw: dict[str, Any] = {}
     summary: dict[str, Any] = {"run_id": args.run_id, "started_at": args.started_at, "ended_at": args.ended_at}
     for name, template in PROM_QUERIES.items():
-        query = template.replace("RUN_WINDOW", f"{window}s")
+        query_window = max(window, 300) if name == "python_processing_p99_seconds" else window
+        query = template.replace("RUN_WINDOW", f"{query_window}s")
         try:
             response = prom_query_range(args.prometheus_url, query, start, end, args.prometheus_step_seconds)
             raw[name] = {"query": query, "response": response}
@@ -204,4 +209,3 @@ def build_parser() -> argparse.ArgumentParser:
 if __name__ == "__main__":
     parsed = build_parser().parse_args()
     parsed.func(parsed)
-
