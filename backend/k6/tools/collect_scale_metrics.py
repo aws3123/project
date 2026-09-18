@@ -60,6 +60,10 @@ def summarize_samples(values: list[float]) -> dict[str, float | None]:
     }
 
 
+def average_sample(values: list[float]) -> dict[str, float | None]:
+    return {"average": sum(values) / len(values) if values else None}
+
+
 def parse_kafka_describe(text: str) -> list[dict[str, int | str]]:
     rows: list[dict[str, int | str]] = []
     for raw in text.splitlines():
@@ -166,7 +170,14 @@ def summarize(args: argparse.Namespace) -> None:
             response = prom_query_range(args.prometheus_url, query, start, end, args.prometheus_step_seconds)
             raw[name] = {"query": query, "response": response}
             values = series_values(response)
-            summary[name] = {instance: summarize_samples(series) for instance, series in values.items()}
+            summary[name] = {
+                instance: (
+                    average_sample(series)
+                    if name == "python_cpu_core_percent"
+                    else summarize_samples(series)
+                )
+                for instance, series in values.items()
+            }
         except Exception as exc:  # Keep partial evidence and make absence explicit.
             raw[name] = {"query": query, "error": str(exc)}
             summary[name] = {"error": str(exc)}
@@ -175,7 +186,13 @@ def summarize(args: argparse.Namespace) -> None:
     if host_cpus and isinstance(cpu, dict):
         cores = float(host_cpus)
         summary["python_cpu_host_normalized_percent"] = {
-            instance: {key: (value / cores if value is not None else None) for key, value in stats.items()}
+            instance: {
+                "average": (
+                    stats["average"] / cores
+                    if stats.get("average") is not None
+                    else None
+                )
+            }
             for instance, stats in cpu.items() if isinstance(stats, dict)
         }
     summary["kafka"] = kafka_summary(output / "kafka-lag.csv")
