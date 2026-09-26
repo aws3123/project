@@ -272,4 +272,25 @@ def select_agents(state: GraphState) -> list:
         if layers == ["other"] and not (has_security_entity or has_performance_entity):
             agents.append(("security", audit_security))
 
+    # Jev is an optional additive signal: it may request extra reviewers, but
+    # it can never remove reviewers selected by the existing deterministic rules.
+    # The MCP node only marks a route accepted after its confidence threshold is met.
+    jev_route = state.get("jev_route", {})
+    if jev_route.get("accepted"):
+        route_agents = {
+            "security": ("security", audit_security),
+            "performance": ("performance", analyze_performance),
+        }
+        requested = {
+            "security": ("security",),
+            "performance": ("performance",),
+            "both": ("security", "performance"),
+            "rules_only": (),
+        }.get(jev_route.get("route"), ())
+        selected_names = {name for name, _fn in agents}
+        for name in requested:
+            if name not in selected_names:
+                agents.append(route_agents[name])
+                selected_names.add(name)
+
     return agents

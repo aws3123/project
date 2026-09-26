@@ -42,6 +42,7 @@ from graph.nodes import (
     score_risks,
     summarize,
 )
+from graph.nodes.jev_route import classify_review_route
 from graph.runner import GraphRunner
 from llm.client import LLMClient
 from repositories.log_repository import InMemoryLogRepository
@@ -250,6 +251,11 @@ def _build_graph_runner(
     builder.add_node("diff", analyze_diff)
     builder.add_node("classifier", classify_changes)
     builder.add_node("impact", analyze_impact)
+    if get_settings().jev_review_routing_enabled:
+        # Both the synchronous HTTP path and Kafka worker use this same runner.
+        # When disabled, the graph is unchanged and the legacy selector remains
+        # the sole routing source.
+        builder.add_node("jev_route", classify_review_route)
     builder.add_node(
         "rag", run_rag
     )  # RAG 前置：检索历史事故作为下游并行 Agent 的共享上下文

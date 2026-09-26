@@ -175,6 +175,27 @@ services:
           cpus: "2.0"
           memory: 2G
 
+  jev-mcp:
+    build:
+      context: ./python
+      dockerfile: Dockerfile
+    command: ["python", "-m", "mcp_servers.jev_review_router"]
+    restart: unless-stopped
+    environment:
+      TYPESAFE_API_URL: ${TYPESAFE_API_URL:-https://api.typesafe.ai/v1/systemone}
+      TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
+      JEV_MODEL: ${JEV_MODEL:-jev-latest}
+      JEV_MCP_HOST: 0.0.0.0
+      JEV_MCP_PORT: "8001"
+    networks:
+      - app-net
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
   python-ai:
     build:
       context: ./python
@@ -201,6 +222,10 @@ services:
       LLM_API_KEY: ${LLM_API_KEY}
       LLM_MODEL: ${LLM_MODEL}
       LLM_DISABLE_THINKING: "true"
+      JEV_REVIEW_ROUTING_ENABLED: ${JEV_REVIEW_ROUTING_ENABLED:-false}
+      JEV_MCP_URL: http://jev-mcp:8001/mcp
+      JEV_ROUTE_CONFIDENCE_THRESHOLD: ${JEV_ROUTE_CONFIDENCE_THRESHOLD:-0.80}
+      JEV_MCP_TIMEOUT_SECONDS: ${JEV_MCP_TIMEOUT_SECONDS:-3.0}
       BFF_BASE_URL: http://java-backend:8080
       BFF_API_KEY: ${API_KEY}
       BUSINESS_RISK_WORKER_HEARTBEAT_URL: http://java-backend:8080/api/internal/business-risk/worker-heartbeat
@@ -229,6 +254,8 @@ services:
         condition: service_completed_successfully
       elasticsearch:
         condition: service_healthy
+      jev-mcp:
+        condition: service_started
     networks:
       - app-net
       - observability-net

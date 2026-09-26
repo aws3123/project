@@ -57,10 +57,13 @@ Sentinel 将 React 前端、Spring Boot 编排层和 FastAPI AI 计算层组合�
 └───────────────────────────────┘   └────────────────────────────┘
 ```
 
+Python AI 层在启用 Jev 时，通过内部 Jev MCP 服务为审查方向提供附加建议；该建议只会增加安全/性能审查器，不会取消原有规则或风险路由。
+
 ## 主要能力
 
 - **三种提交方式**：小变更可同步返回；大变更可异步入队；`dispatch` 根据 diff 大小、文件数、风险信号和系统负载自动选择路径。
 - **多阶段分析**：`diff → classifier → impact → RAG → [rules | security | performance] → scoring → report`；同阶段专家并行执行，并可按变更特征裁剪。
+- **可选 Jev MCP 路由**：同步接口和 Kafka 异步 Worker 共用同一个 MCP 工具，按置信度补充安全/性能审查方向；默认关闭，超时、低置信度或服务异常时沿用现有选择逻辑。
 - **变更影响评估**：Java 端 Tree-sitter 预处理，Python 端用 AST 和知识图谱计算调用/依赖影响半径。
 - **历史经验召回**：ChromaDB 向量检索与 Elasticsearch 关键词检索通过 RRF 融合，为审查提供历史事故上下文。
 - **可靠异步编排**：Kafka 任务与回调 Topic、Outbox 投递、失败重试、对账任务、Redis 幂等和 SSE 状态推送共同保障任务闭环。
@@ -88,6 +91,8 @@ Copy-Item deploy/production/.env.example deploy/production/.env
 ```
 
 至少配置 MySQL、Redis、MinIO、应用间认证、LLM 和 Grafana 的密码/令牌。`APP_HOST_PORT` 默认为 `8088`，Prometheus 与 Grafana 分别默认为 `9090` 和 `3001`，它们都只绑定到 `127.0.0.1`。
+
+Jev 路由默认关闭。需要启用时，在生产 `.env` 中设置 `JEV_REVIEW_ROUTING_ENABLED=true` 并配置 `TYPESAFE_API_KEY`；MCP 服务只连接内部 Docker 网络，不映射宿主机端口。Jev 收到的是用于路由判断的变更上下文和限长 diff 摘录。
 
 ### 2. 校验并启动
 
@@ -136,6 +141,10 @@ cd backend && mvn spring-boot:run -Dmaven.test.skip=true
 # Python AI 层（Windows 上不建议开启 --reload）
 cd python && uv sync
 cd python && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# 需要启用时，在 python/.env 设置 JEV_REVIEW_ROUTING_ENABLED=true 和 TYPESAFE_API_KEY。
+# 可选 Jev MCP 服务（另开终端）
+cd python && uv run python -m mcp_servers.jev_review_router
 
 # React 前端（开发服务器将 /api 代理到 localhost:8080）
 pnpm --dir frontend install

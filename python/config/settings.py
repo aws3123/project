@@ -164,6 +164,20 @@ class AppSettings(BaseSettings):
     embedding_model: str = "microsoft/codebert-base"
 
     # -------------------------------------------------------------------------
+    # Jev review routing over MCP (optional; disabled unless explicitly enabled)
+    # -------------------------------------------------------------------------
+    jev_review_routing_enabled: bool = False
+    jev_mcp_url: str = "http://localhost:8001/mcp"
+    jev_route_confidence_threshold: float = 0.80
+    jev_mcp_timeout_seconds: float = 3.0
+    jev_mcp_host: str = "0.0.0.0"
+    jev_mcp_port: int = 8001
+    typesafe_api_url: str = "https://api.typesafe.ai/v1/systemone"
+    typesafe_api_key: str = ""
+    jev_model: str = "jev-latest"
+    jev_api_timeout_seconds: float = 2.5
+
+    # -------------------------------------------------------------------------
     # RAG 检索参数
     # -------------------------------------------------------------------------
     # Top-K：检索时返回最相关的前 K 条结果。

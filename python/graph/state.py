@@ -51,6 +51,7 @@ class GraphState(TypedDict, total=False):
     classification: dict[
         str, Any
     ]  # 变更分类结果（代码所在层次：controller/service/sql 等）
+    jev_route: dict[str, Any]  # Jev MCP 选择的附加审查方向（低置信度时不采纳）
     rule_findings: list[
         dict[str, Any]
     ]  # 规则检查发现（SQL风险、API兼容性、配置变更等）
