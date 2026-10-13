@@ -22,10 +22,11 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from app import exceptions
-from app.dependencies import get_ai_service, get_settings
+from app.dependencies import get_ai_service, get_graph_checkpoints, get_settings
 from app.routers import handoff, health, incidents, review
 from app.utils import create_trace_id
 from config.logging import configure_logging
+from telemetry.langfuse_tracing import get_langfuse_tracing
 
 # 初始化日志系统（在应用启动时执行一次）
 configure_logging()
@@ -51,23 +52,43 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     app.state.settings = settings  # 将配置挂载到 app 对象上，供全局访问
 
-    # 若启用 Kafka 异步链路，启动审查任务消费者
-    if settings.kafka_enabled:
-        from mq.review_consumer import ReviewKafkaConsumer
+    checkpoints = get_graph_checkpoints()
+    await checkpoints.start()
+    tracing = get_langfuse_tracing()
+    tracing.start()
+    try:
+        # HTTP, SSE and Kafka all reuse the same compiled graph and checkpointer.
+        if settings.kafka_enabled:
+            from mq.review_consumer import ReviewKafkaConsumer
 
-        ai_service = get_ai_service()
-        _kafka_consumer = ReviewKafkaConsumer(settings, process_message=ai_service.run)
-        await _kafka_consumer.start()
-        _kafka_consumer_task = asyncio.create_task(_kafka_consumer.run())
-        logger.info("Kafka review consumer task started")
-
-    yield  # <-- 应用运行期间停在这里
-
-    # ---- 应用关闭时的清理工作 ----
-    if _kafka_consumer_task is not None:
-        _kafka_consumer_task.cancel()  # 取消消费任务
-    if _kafka_consumer is not None:
-        await _kafka_consumer.stop()  # 停止消费者/生产者，提交未提交 offset
+            ai_service = get_ai_service()
+            _kafka_consumer = ReviewKafkaConsumer(
+                settings, process_message=ai_service.run
+            )
+            await _kafka_consumer.start()
+            _kafka_consumer_task = asyncio.create_task(_kafka_consumer.run())
+            logger.info("Kafka review consumer task started")
+        yield
+    finally:
+        try:
+            if _kafka_consumer_task is not None:
+                _kafka_consumer_task.cancel()
+                try:
+                    await _kafka_consumer_task
+                except asyncio.CancelledError:
+                    pass
+            if _kafka_consumer is not None:
+                await _kafka_consumer.stop()
+        finally:
+            _kafka_consumer_task = None
+            _kafka_consumer = None
+            get_ai_service.cache_clear()
+            try:
+                await checkpoints.close()
+            finally:
+                get_graph_checkpoints.cache_clear()
+                await tracing.close()
+                get_langfuse_tracing.cache_clear()
 
 
 # 创建 FastAPI 应用实例
@@ -81,9 +102,7 @@ async def metrics() -> PlainTextResponse:
     包含进程级指标（process_*、python_gc 等）以及遥测钩子写入的
     review_node_* 业务指标。
     """
-    return PlainTextResponse(
-        generate_latest(), media_type=CONTENT_TYPE_LATEST
-    )
+    return PlainTextResponse(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 # 注册路由（将 URL 路径映射到处理函数）

@@ -8,6 +8,7 @@ from typing import Any
 
 from config.settings import AppSettings
 from graph.state import GraphState, NodeContext
+from graph.updates import node_input, node_output
 from services.jev_mcp_client import JevMCPClient
 
 logger = logging.getLogger(__name__)
@@ -79,10 +80,9 @@ def _build_context(state: GraphState) -> dict[str, Any]:
     }
 
 
-async def classify_review_route(
-    state: GraphState, ctx: NodeContext
-) -> GraphState:
+async def classify_review_route(state: GraphState, ctx: NodeContext) -> GraphState:
     """Ask Jev for an optional reviewer suggestion; fail open to legacy rules."""
+    state = node_input(state)
     try:
         route_result = await _client().classify(_build_context(state))
         confidence = float(route_result.get("confidence", -1))
@@ -118,4 +118,4 @@ async def classify_review_route(
             ctx.task_id,
             type(exc).__name__,
         )
-    return state
+    return node_output(state, "jev_route")

@@ -19,6 +19,7 @@ from typing import Literal
 
 # BaseSettings 是 pydantic_settings 库提供的类，专门用来管理配置。
 # 它继承自 Pydantic 的 BaseModel，额外增加了"从环境变量/文件读取配置"的能力。
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
@@ -42,6 +43,16 @@ class AppSettings(BaseSettings):
     app_port: int = 8000
     # 可选的稳定实例标签；压测时由每个 Uvicorn 进程显式设置。
     performance_instance_id: str = ""
+
+    # LangGraph execution checkpoints use an independent Redis 8 / Redis Stack.
+    # memory is only for local development; production startup rejects it.
+    graph_checkpoint_backend: Literal["memory", "redis"] = "memory"
+    graph_checkpoint_redis_url: str = ""
+    graph_checkpoint_ttl_seconds: int = Field(default=86400, ge=60)
+    graph_execution_lease_seconds: int = Field(default=60, ge=15)
+    graph_execution_lock_wait_seconds: int = Field(default=180, ge=1)
+    graph_version: str = "review-v1"
+    graph_parallel_failure_mode: Literal["degrade", "raise"] = "degrade"
 
     # -------------------------------------------------------------------------
     # Kafka 异步链路配置（Java 生产者 → Python 消费者 → 回调回 Java）
@@ -269,6 +280,17 @@ class AppSettings(BaseSettings):
     # "prometheus" → 同时写日志 + 输出 Prometheus 指标（/metrics 端点采集）
     # "noop"       → 不收集（noop = no operation，空操作）
     telemetry_backend: Literal["logging", "prometheus", "noop"] = "logging"
+
+    # Langfuse tracing is independent of logs/Prometheus and off until configured.
+    langfuse_enabled: bool = False
+    langfuse_public_key: str = Field(default="", repr=False)
+    langfuse_secret_key: str = Field(default="", repr=False)
+    langfuse_base_url: str = "https://cloud.langfuse.com"
+    langfuse_release: str = ""
+    langfuse_sample_rate: float = Field(default=1.0, ge=0.0, le=1.0)
+    langfuse_capture_content: bool = False
+    langfuse_max_content_chars: int = Field(default=8000, ge=256, le=100000)
+    langfuse_timeout_seconds: int = Field(default=3, ge=1, le=30)
 
     # -------------------------------------------------------------------------
     # Pydantic 模型配置

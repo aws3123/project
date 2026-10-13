@@ -20,11 +20,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 
+from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
 from llm.client import LLMStructuredOutputError
+from telemetry.langfuse_tracing import traced_operation
 from tools.base import ToolContext
 
 logger = logging.getLogger(__name__)
@@ -43,8 +45,17 @@ class _ReactDecision(BaseModel):
     final_text: str | None = None
 
 
+class _ReactState(TypedDict, total=False):
+    base_messages: list[dict[str, str]]
+    messages: list[dict[str, str]]
+    trace: list[dict]
+    steps: int
+    decision: dict | None
+    result: Any
+
+
 class ReActAgent:
-    """对单个 LLM 节点执行 ReAct 循环。"""
+    """通过 LangGraph 子图执行决策、工具、终答和降级路径。"""
 
     def __init__(
         self,
@@ -66,6 +77,7 @@ class ReActAgent:
     # 公开入口
     # ------------------------------------------------------------------
 
+    @traced_operation("react", kind="agent")
     async def run(
         self,
         system_prompt: str,
@@ -86,66 +98,112 @@ class ReActAgent:
             {"role": "system", "content": self._build_system(system_prompt)},
             {"role": "user", "content": user_content},
         ]
-        messages: list[dict[str, str]] = list(base_messages)
-        trace: list[dict] = []
 
-        result: Any | None = None
-        for _step in range(1, self._max_steps + 1):
-            decision = await self._ask_decision(messages, temperature, max_tokens)
+        async def decide(state: _ReactState) -> dict:
+            decision = await self._ask_decision(
+                state["messages"], temperature, max_tokens
+            )
+            return {"decision": decision, "steps": state["steps"] + 1}
+
+        def route_decision(state: _ReactState) -> str:
+            decision = state.get("decision")
             if decision is None:
-                break  # 决策调用失败 → 走回退
+                return "fallback"
+            return "tool" if decision.get("action") == "call_tool" else "answer"
 
-            action = decision.get("action")
-            if action == "call_tool":
-                tool_name = decision.get("tool_name")
-                if tool_name not in self._allowed:
-                    messages.append(
+        async def call_tool(state: _ReactState) -> dict:
+            decision = state["decision"] or {}
+            tool_name = decision.get("tool_name")
+            if tool_name not in self._allowed:
+                return {
+                    "messages": [
+                        *state["messages"],
                         {
                             "role": "user",
                             "content": (
                                 f"工具 '{tool_name}' 不可用，可用：{sorted(self._allowed)}。"
                                 "请调用可用工具，或直接输出最终答案。"
                             ),
-                        }
-                    )
-                    continue
-                observation = await self._call_tool(
-                    tool_name, decision.get("arguments") or {}
-                )
-                trace.append(
+                        },
+                    ]
+                }
+            arguments = decision.get("arguments") or {}
+            observation = await self._call_tool(tool_name, arguments)
+            return {
+                "trace": [
+                    *state["trace"],
                     {
                         "node": self._node,
                         "tool": tool_name,
-                        "arguments": decision.get("arguments") or {},
+                        "arguments": arguments,
                         "method": "react_tool",
-                    }
-                )
-                messages.append(
+                    },
+                ],
+                "messages": [
+                    *state["messages"],
                     {
                         "role": "user",
-                        "content": (
-                            f"工具 {tool_name} 的观察结果：\n"
-                            f"{_truncate(observation, 4000)}"
-                        ),
-                    }
-                )
-                continue
+                        "content": f"工具 {tool_name} 的观察结果：\n{_truncate(observation, 4000)}",
+                    },
+                ],
+            }
 
-            final_text = decision.get("final_text")
+        def answer(state: _ReactState) -> dict:
+            final_text = (state["decision"] or {}).get("final_text")
             if final_text:
-                result = self._coerce(final_text, output_schema)
-                break
-            messages.append(
-                {"role": "user", "content": "请给出最终答案(final_text)。"}
-            )
+                return {"result": self._coerce(final_text, output_schema)}
+            return {
+                "messages": [
+                    *state["messages"],
+                    {
+                        "role": "user",
+                        "content": "请给出最终答案(final_text)。",
+                    },
+                ]
+            }
 
-        # 步数超限 / 循环内失败 → 回退为单次调用，保证有输出
-        if result is None:
-            result = await self._fallback(
-                base_messages, output_schema, temperature, max_tokens
-            )
+        def after_answer(state: _ReactState) -> str:
+            if (state.get("decision") or {}).get("final_text"):
+                return END if state.get("result") is not None else "fallback"
+            return after_tool(state)
 
-        return result, trace
+        def after_tool(state: _ReactState) -> str:
+            return "decide" if state["steps"] < self._max_steps else "fallback"
+
+        async def fallback(state: _ReactState) -> dict:
+            return {
+                "result": await self._fallback(
+                    state["base_messages"], output_schema, temperature, max_tokens
+                )
+            }
+
+        # Called inside a review node, this subgraph inherits its checkpointer.
+        builder = StateGraph(_ReactState)
+        builder.add_node("decide", traced_operation("react.decide")(decide))
+        builder.add_node("tool", traced_operation("react.tool")(call_tool))
+        builder.add_node("answer", traced_operation("react.answer")(answer))
+        builder.add_node("fallback", traced_operation("react.fallback")(fallback))
+        builder.add_edge(START, "decide" if self._max_steps > 0 else "fallback")
+        builder.add_conditional_edges(
+            "decide", route_decision, ["tool", "answer", "fallback"]
+        )
+        builder.add_conditional_edges("tool", after_tool, ["decide", "fallback"])
+        builder.add_conditional_edges(
+            "answer", after_answer, [END, "decide", "fallback"]
+        )
+        builder.add_edge("fallback", END)
+        graph = builder.compile()
+        final = await graph.ainvoke(
+            {
+                "base_messages": base_messages,
+                "messages": list(base_messages),
+                "trace": [],
+                "steps": 0,
+                "result": None,
+            },
+            config={"recursion_limit": max(10, self._max_steps * 2 + 3)},
+        )
+        return final.get("result"), final.get("trace", [])
 
     # ------------------------------------------------------------------
     # 内部：循环的每一步
@@ -200,9 +258,7 @@ class ReActAgent:
             )
             return f"工具 {tool_name} 执行失败：{exc}"
 
-    def _coerce(
-        self, final_text: str, output_schema: type[BaseModel] | None
-    ) -> Any:
+    def _coerce(self, final_text: str, output_schema: type[BaseModel] | None) -> Any:
         """把模型的 final_text 收敛为可用结果：优先按 output_schema 校验，否则 JSON 解析。"""
         try:
             parsed = json.loads(final_text)
@@ -258,10 +314,13 @@ class ReActAgent:
         """把 nodes 自带的系统提示 + 可用工具清单拼成最终的 system prompt。"""
         tool_manifest = self._registry.describe()
         available = [t for t in tool_manifest if t["name"] in self._allowed]
-        tool_desc = "\n".join(
-            f"- {t['name']}: {t.get('description') or '(无描述)'}"
-            for t in available
-        ) or "(无可用工具)"
+        tool_desc = (
+            "\n".join(
+                f"- {t['name']}: {t.get('description') or '(无描述)'}"
+                for t in available
+            )
+            or "(无可用工具)"
+        )
         return (
             f"{system_prompt}\n\n"
             "你可以按需调用下面的工具来获取额外证据（工具调用结果会作为观察反馈给你），"

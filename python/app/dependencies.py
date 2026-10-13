@@ -20,6 +20,7 @@ from functools import lru_cache
 from threading import RLock
 
 from fastapi import Request
+from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from config.settings import AppSettings
 
@@ -28,6 +29,7 @@ from graph.agent_selector import select_agents
 
 # GraphBuilder：建造者模式，一步步构建审查流水线
 from graph.builder import GraphBuilder
+from graph.checkpoints import GraphCheckpointManager
 from graph.circuit_breaker import CircuitBreaker
 
 # 导入所有节点函数（每个节点就是一个普通的 Python 函数）
@@ -52,10 +54,9 @@ from repositories.result_repository_sql import SQLResultRepository
 from repositories.task_repository import InMemoryTaskRepository
 from repositories.task_repository_sql import SQLTaskRepository
 from services.ai_service import AIService
-from services.checkpoint_service import CheckpointService
 from services.log_service import LogService
-from services.result_service import ResultService
 from services.rag_retrieval_service import RagRetrievalService
+from services.result_service import ResultService
 from services.task_service import TaskService
 from telemetry.hooks import (
     CompositeTelemetryHook,
@@ -75,6 +76,11 @@ from tools.registry import ToolRegistry, build_default_registry
 def get_settings() -> AppSettings:
     """获取全局唯一的应用配置实例。"""
     return AppSettings()
+
+
+@lru_cache
+def get_graph_checkpoints() -> GraphCheckpointManager:
+    return GraphCheckpointManager(get_settings())
 
 
 # ---------------------------------------------------------------------------
@@ -208,7 +214,8 @@ def _build_graph_runner(
     registry: ToolRegistry | None = None,
     llm_client: LLMClient | None = None,
     circuit_breaker: CircuitBreaker | None = None,
-    checkpoint_service: CheckpointService | None = None,
+    checkpointer: BaseCheckpointSaver | None = None,
+    checkpoint_lock=None,
     rag_retrieval_service: RagRetrievalService | None = None,
 ) -> GraphRunner:
     """构建主审查流水线的 GraphRunner。
@@ -231,7 +238,7 @@ def _build_graph_runner(
         registry: 工具注册表
         llm_client: LLM 客户端
         circuit_breaker: 熔断器
-        checkpoint_service: 检查点服务
+        checkpointer: LangGraph 检查点存储
     返回：
         配置好的 GraphRunner 实例
     """
@@ -244,7 +251,10 @@ def _build_graph_runner(
         llm_client=llm_client,
         circuit_breaker=circuit_breaker or CircuitBreaker(),
         agent_selector=select_agents,  # 动态 Agent 选择器
-        checkpoint_service=checkpoint_service,
+        checkpointer=checkpointer,
+        checkpoint_lock=checkpoint_lock,
+        graph_version=get_settings().graph_version,
+        parallel_failure_mode=get_settings().graph_parallel_failure_mode,
         rag_retrieval_service=rag_retrieval_service,
     )
     # 串行节点
@@ -299,6 +309,7 @@ def _resolve_telemetry(settings: AppSettings) -> TelemetryHook:
 # ---------------------------------------------------------------------------
 
 
+@lru_cache
 def get_ai_service() -> AIService:
     """组装并返回 AI 审查服务（主入口）。
 
@@ -310,14 +321,15 @@ def get_ai_service() -> AIService:
     telemetry = _resolve_telemetry(settings)
     log_service = _create_log_service(telemetry=telemetry)
     llm_client = get_llm_client()
-    checkpoint_service = CheckpointService(settings)
+    checkpoints = get_graph_checkpoints()
     rag_retrieval_service = get_rag_retrieval_service()
     runner = _build_graph_runner(
         task_service=task_service,
         log_service=log_service,
         telemetry=telemetry,
         llm_client=llm_client,
-        checkpoint_service=checkpoint_service,
+        checkpointer=checkpoints.saver,
+        checkpoint_lock=checkpoints.execution_lock,
         rag_retrieval_service=rag_retrieval_service,
     )
     # AIService 依赖 runner.arun（异步入口，AsyncOpenAI 全链路异步化）

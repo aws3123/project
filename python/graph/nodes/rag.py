@@ -17,7 +17,6 @@ RAG 是什么？
 
 from __future__ import annotations
 
-import asyncio
 import logging
 
 # 安全地获取异常详情
@@ -34,13 +33,13 @@ from domain.reviewers.rag_review import (
     build_retrieval_query,
     format_retrieval_results,
 )
-from services.ast_query_builder import build_ast_retrieval_query
 
 # 导入 diff 提取器（用于构建代码片段给 LLM 看）
 from domain.shared.diff_extractor import build_diff_snippet
 
 # 导入图状态和节点上下文
 from graph.state import GraphState, NodeContext
+from graph.updates import node_input, node_output
 
 # 导入 LLM 结构化输出异常
 from llm.client import LLMStructuredOutputError
@@ -50,6 +49,7 @@ from llm.token_counter import truncate_to_budget
 
 # 导入 RAG 分析输出模型
 from schemas.domain.llm_output import RAGAnalysisOutput
+from services.ast_query_builder import build_ast_retrieval_query
 
 # 导入统一检索服务
 logger = logging.getLogger(__name__)
@@ -65,12 +65,13 @@ async def run_rag(state: GraphState, ctx: NodeContext) -> GraphState:
           state["rag_analysis"] —— LLM 的风险关联分析
           state["rag_status"] —— RAG 状态
     """
+    state = node_input(state)
     # 平凡变更 → 跳过 RAG 检索（triviality_check 已预填充结果）
     if state.get("trivial"):
         state["rag_context"] = []
         state["rag_analysis"] = ""
         state["rag_status"] = "NORMAL"
-        return state
+        return node_output(state, "rag_context", "rag_analysis", "rag_status")
 
     settings = AppSettings()
     # 构建自然语言查询（从层级 + diff 路径拼接）
@@ -146,4 +147,4 @@ async def run_rag(state: GraphState, ctx: NodeContext) -> GraphState:
         state["rag_analysis"] = ""
         state["rag_status"] = retrieval_status
 
-    return state
+    return node_output(state, "rag_context", "rag_analysis", "rag_status")

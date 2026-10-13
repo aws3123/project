@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 from graph.state import GraphState, NodeContext
+from graph.updates import node_input, node_output
 
 
 def verify_business_risks(state: GraphState, ctx: NodeContext) -> GraphState:
@@ -32,6 +33,7 @@ def verify_business_risks(state: GraphState, ctx: NodeContext) -> GraphState:
     返回:
         更新后的 state，新增了 verified_risks 字段
     """
+    state = node_input(state)
     report = state.get("business_risk_report", {})
     violations = state.get("invariant_violations", {})
     method_issues = state.get("method_issues", {})
@@ -64,7 +66,7 @@ def verify_business_risks(state: GraphState, ctx: NodeContext) -> GraphState:
 
     # 关联历史事故（RAG 检索到的，作为参考证据）
     related_incidents = []
-    for entry in (rag_context if isinstance(rag_context, list) else []):
+    for entry in rag_context if isinstance(rag_context, list) else []:
         if entry.get("score", 0) > 0:
             related_incidents.append(
                 {
@@ -89,4 +91,4 @@ def verify_business_risks(state: GraphState, ctx: NodeContext) -> GraphState:
         "related_incidents": related_incidents[:5],  # 关联历史事故（最多 5 个）
         "status": "READY",
     }
-    return state
+    return node_output(state, "verified_risks")

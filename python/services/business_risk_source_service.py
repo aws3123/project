@@ -18,3 +18,9 @@ class BusinessRiskSourceService:
     def run(self, request: BusinessRiskReviewRequest) -> BusinessRiskReviewResult:
         with self._worker_state.track_run():
             return self._runner.run(request)
+
+    async def arun(
+        self, request: BusinessRiskReviewRequest
+    ) -> BusinessRiskReviewResult:
+        with self._worker_state.track_run():
+            return await self._runner.arun(request)

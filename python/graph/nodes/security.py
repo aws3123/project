@@ -13,13 +13,15 @@ from domain.reviewers._findings import merge_findings, parse_llm_response
 from domain.reviewers.security_review import build_audit_messages, scan_deterministic
 from domain.shared.diff_extractor import build_diff_snippet
 from graph.state import GraphState, NodeContext
+from graph.updates import node_input, node_output
 
 
 async def audit_security(state: GraphState, ctx: NodeContext) -> GraphState:
     """安全审计主函数 —— 结合确定性扫描和 LLM 审计。
 
-    （签名与语义不变，保证流水线与测试零改动。）
+    返回本节点拥有的字段更新，由 LangGraph 合并到共享状态。
     """
+    state = node_input(state)
     # ── 第一步：确定性扫描前置（保证降级安全）──────────────────────
     files = state.get("diff_analysis", {}).get("files", [])
     det_findings = scan_deterministic(files)
@@ -35,7 +37,7 @@ async def audit_security(state: GraphState, ctx: NodeContext) -> GraphState:
                 "status": "degraded",
             }
         )
-        return state
+        return node_output(state, "security_findings")
 
     # ── 第二步：提取代码片段，准备 LLM 审计 ────────────────────────
     impact_radius = state.get("impact_radius")
@@ -59,7 +61,7 @@ async def audit_security(state: GraphState, ctx: NodeContext) -> GraphState:
                 "status": "no_diff_for_llm",
             }
         )
-        return state
+        return node_output(state, "security_findings")
 
     # ── 第三步：LLM 审计（可选增强；react=True 时进入自主取证模式）────
     react_mode = bool((state.get("request") or {}).get("react"))
@@ -122,4 +124,4 @@ async def audit_security(state: GraphState, ctx: NodeContext) -> GraphState:
             "status": "success",
         }
     )
-    return state
+    return node_output(state, "security_findings")

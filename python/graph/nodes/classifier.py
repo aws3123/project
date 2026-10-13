@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 
 from graph.state import GraphState, NodeContext
+from graph.updates import node_input, node_output
 from tools.base import ToolContext, ToolResult
 
 
@@ -34,12 +35,16 @@ async def classify_changes(state: GraphState, ctx: NodeContext) -> GraphState:
     返回:
         更新后的 state，新增了 classification 字段
     """
+    state = node_input(state)
     # 获取 diff 分析结果（由上一个节点 analyze_diff 产出）
     diff_meta = state.get("diff_analysis", {})
     payload = diff_meta or {"files": state["request"].get("files", [])}
     # 调用测试覆盖率检查工具，获取额外的覆盖率信息
     result: ToolResult = await asyncio.to_thread(
-        ctx.registry.run, "test_coverage_checker", payload, ToolContext(task_id=ctx.task_id)
+        ctx.registry.run,
+        "test_coverage_checker",
+        payload,
+        ToolContext(task_id=ctx.task_id),
     )
     files = payload.get("files", [])
     # 根据文件路径关键词判断所属架构层
@@ -59,4 +64,4 @@ async def classify_changes(state: GraphState, ctx: NodeContext) -> GraphState:
         "layers": layers or ["other"],  # 涉及的架构层列表
         "summary": result.payload,  # 工具返回的覆盖率等摘要信息
     }
-    return state
+    return node_output(state, "classification")

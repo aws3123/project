@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 from graph.state import GraphState, NodeContext
+from graph.updates import node_input, node_output
 
 
 def deep_read_methods(state: GraphState, ctx: NodeContext) -> GraphState:
@@ -27,6 +28,7 @@ def deep_read_methods(state: GraphState, ctx: NodeContext) -> GraphState:
     返回:
         更新后的 state，新增了 method_issues 字段
     """
+    state = node_input(state)
     source_package = (
         state.get("source_package", {})
         if isinstance(state.get("source_package", {}), dict)
@@ -67,4 +69,4 @@ def deep_read_methods(state: GraphState, ctx: NodeContext) -> GraphState:
         "scanned_files": scanned_files,  # 扫描的文件列表
         "status": "READY",
     }
-    return state
+    return node_output(state, "method_issues")

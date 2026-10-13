@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 
 from graph.state import GraphState, NodeContext
+from graph.updates import node_input, node_output
 from tools.base import ToolContext, ToolResult
 
 
@@ -29,6 +30,7 @@ async def analyze_diff(state: GraphState, ctx: NodeContext) -> GraphState:
     返回:
         更新后的 state，新增了 diff_analysis 字段
     """
+    state = node_input(state)
     # 从请求中提取文件列表和 diff URL
     files = state["request"].get("files", [])
     payload = {"files": files, "diffUrl": state["request"].get("diffUrl")}
@@ -38,4 +40,4 @@ async def analyze_diff(state: GraphState, ctx: NodeContext) -> GraphState:
     )
     # 将分析结果写入共享状态
     state["diff_analysis"] = result.payload
-    return state
+    return node_output(state, "diff_analysis")

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from domain.reviewers._findings import cross_validate
 from graph.state import GraphState, NodeContext
+from graph.updates import node_input, node_output
 
 
 def deduplicate_findings(state: GraphState, ctx: NodeContext) -> GraphState:
@@ -17,9 +18,10 @@ def deduplicate_findings(state: GraphState, ctx: NodeContext) -> GraphState:
 
     如果 state 已有预计算结果（如平凡变更场景），直接跳过。
     """
+    state = node_input(state)
     # 平凡变更 → 跳过（triviality_check 已预填充）
     if state.get("trivial"):
-        return state
+        return node_output(state, "cross_validated_findings", "force_human_review")
 
     sources = {
         "rules": state.get("rule_findings", []),
@@ -29,4 +31,4 @@ def deduplicate_findings(state: GraphState, ctx: NodeContext) -> GraphState:
     merged, force_human = cross_validate(sources)
     state["cross_validated_findings"] = merged
     state["force_human_review"] = force_human
-    return state
+    return node_output(state, "cross_validated_findings", "force_human_review")

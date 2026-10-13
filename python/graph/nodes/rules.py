@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 
 from graph.state import GraphState, NodeContext
+from graph.updates import node_input, node_output
 from tools.base import ToolContext, ToolResult
 
 # 规则工具列表 —— 每个工具名对应 tools/ 目录下的一个检查器
@@ -78,6 +79,7 @@ async def run_rule_checks(state: GraphState, ctx: NodeContext) -> GraphState:
     返回:
         更新后的 state，新增了 rule_findings 字段
     """
+    state = node_input(state)
     findings: list[dict] = []
     # 从 diff 分析结果中获取检查载荷
     payload = state.get("diff_analysis", {})
@@ -102,4 +104,4 @@ async def run_rule_checks(state: GraphState, ctx: NodeContext) -> GraphState:
         )
     # 将所有规则发现写入共享状态
     state["rule_findings"] = findings
-    return state
+    return node_output(state, "rule_findings")

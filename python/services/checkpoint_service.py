@@ -13,7 +13,11 @@ DEFAULT_TTL_SECONDS = 86400  # 24h, aligned with TaskStatus Redis cache
 
 
 class CheckpointService:
-    """Manages pipeline execution checkpoints in Redis."""
+    """Legacy checkpoint reader, retained for draining pre-migration tasks.
+
+    New review graphs use graph.checkpoints.GraphCheckpointManager. This JSON
+    format is not a LangGraph checkpoint and must not be injected into a graph.
+    """
 
     def __init__(self, settings: AppSettings | None = None) -> None:
         self._settings = settings or AppSettings()

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 # argparse 用于解析命令行参数
 import argparse
+import asyncio
 
 # json 用于格式化输出
 import json
@@ -34,9 +35,10 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 # 导入项目模块
-from app.dependencies import get_ai_service
+from app.dependencies import get_ai_service, get_graph_checkpoints
 from schemas.api.request import ReviewRequest
 from schemas.domain.enums import ReviewMode
+from telemetry.langfuse_tracing import get_langfuse_tracing
 
 # 示例 diff 内容（用于演示）
 SAMPLE_DIFF = """diff --git a/app.py b/app.py
@@ -48,7 +50,7 @@ SAMPLE_DIFF = """diff --git a/app.py b/app.py
 """
 
 
-def main():
+async def main():
     """命令行主函数。"""
     # 创建命令行参数解析器
     parser = argparse.ArgumentParser(description="Run LangGraph sample")
@@ -68,11 +70,24 @@ def main():
         mode=ReviewMode(args.mode),
     )
     # 获取 AI 服务实例并执行审查
-    ai_service = get_ai_service()
-    result = ai_service.run(request)
+    checkpoints = get_graph_checkpoints()
+    await checkpoints.start()
+    tracing = get_langfuse_tracing()
+    tracing.start()
+    try:
+        ai_service = get_ai_service()
+        result = await ai_service.run(request)
+    finally:
+        get_ai_service.cache_clear()
+        try:
+            await checkpoints.close()
+        finally:
+            get_graph_checkpoints.cache_clear()
+            await tracing.close()
+            get_langfuse_tracing.cache_clear()
     # 格式化输出结果（indent=2 美化 JSON 输出）
     print(json.dumps(result.model_dump(by_alias=True), ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

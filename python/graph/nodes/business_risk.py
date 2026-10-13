@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 from graph.state import GraphState, NodeContext
+from graph.updates import node_input, node_output
 
 
 def assess_business_risk(state: GraphState, ctx: NodeContext) -> GraphState:
@@ -35,6 +36,7 @@ def assess_business_risk(state: GraphState, ctx: NodeContext) -> GraphState:
     返回:
         更新后的 state，新增了 business_risk_report 字段
     """
+    state = node_input(state)
     # 读取各节点的产出
     violations = state.get("invariant_violations", {})
     method_issues = state.get("method_issues", {})
@@ -88,4 +90,4 @@ def assess_business_risk(state: GraphState, ctx: NodeContext) -> GraphState:
         "need_human_review": level != "LOW",  # 非低风险 → 需要人工审查
         "status": "READY",
     }
-    return state
+    return node_output(state, "business_risk_report")

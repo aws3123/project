@@ -15,6 +15,7 @@ from domain.reviewers.scoring_review import (
     parse_scoring_result,
 )
 from graph.state import GraphState, NodeContext
+from graph.updates import node_input, node_output
 from llm.client import LLMStructuredOutputError
 from schemas.domain.llm_output import ScoringOutput
 
@@ -22,11 +23,14 @@ from schemas.domain.llm_output import ScoringOutput
 async def score_risks(state: GraphState, ctx: NodeContext) -> GraphState:
     """风险评分主函数 —— 综合所有分析结果计算风险分数。
 
-    （签名与语义不变，保证流水线与测试零改动。）
+    返回本节点拥有的字段更新，由 LangGraph 合并到共享状态。
     """
+    state = node_input(state)
     # 平凡变更 → 直接返回预填充结果（triviality_check 已设置）
     if state.get("trivial"):
-        return state
+        return node_output(
+            state, "risk_score", "breakdown", "need_human_review", "risk_summary"
+        )
 
     # 读取去重节点的预计算结果（deduplicate 已运行时）
     cross_merged = state.get("cross_validated_findings", [])
@@ -43,7 +47,9 @@ async def score_risks(state: GraphState, ctx: NodeContext) -> GraphState:
     # 降级模式：没有 LLM 时用确定性公式评分
     if ctx.llm_client is None:
         _apply_deterministic(state, force_human)
-        return state
+        return node_output(
+            state, "risk_score", "breakdown", "need_human_review", "risk_summary"
+        )
 
     # ── LLM 结构化评分 ──────────────────────────────────────────────
     rule_findings = state.get("rule_findings", [])
@@ -78,7 +84,9 @@ async def score_risks(state: GraphState, ctx: NodeContext) -> GraphState:
         # LLM 输出格式错误 → 降级到确定性评分
         _apply_deterministic(state, force_human)
 
-    return state
+    return node_output(
+        state, "risk_score", "breakdown", "need_human_review", "risk_summary"
+    )
 
 
 def _apply_deterministic(state: GraphState, force_human: bool) -> None:

@@ -24,17 +24,17 @@ from collections.abc import (  # 可调用对象 / 可等待协程对象的类�
     Awaitable,
     Callable,
 )
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass  # 自动生成 __init__ 等样板代码
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
+
+from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from graph.circuit_breaker import (
     CircuitBreaker,  # 熔断器：某个 Agent 连续失败时自动跳过
 )
 from graph.runner import GraphRunner, RunnerConfig  # 实际执行流水线的运行器
 from graph.state import GraphState, NodeContext  # 流水线共享状态 & 节点上下文
-from services.checkpoint_service import (
-    CheckpointService,  # 断点续传服务（任务中断后可恢复）
-)
 from services.log_service import LogService  # 日志服务（记录每个节点的输入输出）
 from services.task_service import TaskService  # 任务状态管理服务
 from telemetry.hooks import TelemetryHook  # 遥测钩子（监控指标采集）
@@ -44,7 +44,7 @@ if TYPE_CHECKING:
 
 # 类型别名：让代码更易读
 # NodeFn = 一个节点函数的类型：接收 (状态, 上下文)，返回更新后的状态
-NodeFn = Callable[[GraphState, NodeContext], Awaitable[GraphState]]
+NodeFn = Callable[[GraphState, NodeContext], GraphState | Awaitable[GraphState]]
 # Phase = 一个阶段：包含多个 (名称, 节点函数) 的元组列表
 Phase = list[tuple[str, NodeFn]]
 
@@ -65,7 +65,10 @@ class BuilderConfig:
     agent_selector: Callable[[GraphState], list[tuple[str, NodeFn]]] | None = (
         None  # Agent 选择器（动态决定跑哪些 Agent）
     )
-    checkpoint_service: CheckpointService | None = None  # 断点续传服务（可选）
+    checkpointer: BaseCheckpointSaver | None = None
+    checkpoint_lock: Callable[[str], AbstractAsyncContextManager] | None = None
+    graph_version: str = "review-v1"
+    parallel_failure_mode: Literal["degrade", "raise"] = "degrade"
     rag_retrieval_service: Any | None = None  # 进程级 RAG 检索服务
 
 
@@ -96,7 +99,10 @@ class GraphBuilder:
         llm_client: Any | None = None,
         circuit_breaker: CircuitBreaker | None = None,
         agent_selector: Callable[[GraphState], list[tuple[str, NodeFn]]] | None = None,
-        checkpoint_service: CheckpointService | None = None,
+        checkpointer: BaseCheckpointSaver | None = None,
+        checkpoint_lock: Callable[[str], AbstractAsyncContextManager] | None = None,
+        graph_version: str = "review-v1",
+        parallel_failure_mode: Literal["degrade", "raise"] = "degrade",
         rag_retrieval_service: Any | None = None,
     ) -> None:
         # 将所有依赖打包存入 _config，后续 build() 时一次性取出
@@ -108,7 +114,10 @@ class GraphBuilder:
             llm_client=llm_client,
             circuit_breaker=circuit_breaker,
             agent_selector=agent_selector,
-            checkpoint_service=checkpoint_service,
+            checkpointer=checkpointer,
+            checkpoint_lock=checkpoint_lock,
+            graph_version=graph_version,
+            parallel_failure_mode=parallel_failure_mode,
             rag_retrieval_service=rag_retrieval_service,
         )
         # _phases 是有序的"阶段列表"，每个阶段是一个节点列表
@@ -159,7 +168,10 @@ class GraphBuilder:
             circuit_breaker=self._config.circuit_breaker
             or CircuitBreaker(),  # 没提供则用默认熔断器
             agent_selector=self._config.agent_selector,
-            checkpoint_service=self._config.checkpoint_service,
+            checkpointer=self._config.checkpointer,
+            checkpoint_lock=self._config.checkpoint_lock,
+            graph_version=self._config.graph_version,
+            parallel_failure_mode=self._config.parallel_failure_mode,
             rag_retrieval_service=self._config.rag_retrieval_service,
         )
         # 用 .copy() 复制阶段列表，防止外部后续修改影响已构建的 Runner

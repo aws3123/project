@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from domain.reviewers.report_review import build_report_messages, template_fallback
 from graph.state import GraphState, NodeContext
+from graph.updates import node_input, node_output
 from llm.client import LLMStructuredOutputError
 from schemas.domain.llm_output import ReportOutput
 
@@ -14,16 +15,17 @@ from schemas.domain.llm_output import ReportOutput
 async def summarize(state: GraphState, ctx: NodeContext) -> GraphState:
     """报告生成主函数 —— 生成审查报告摘要和建议。
 
-    （签名与语义不变，保证流水线与测试零改动。）
+    返回本节点拥有的字段更新，由 LangGraph 合并到共享状态。
     """
+    state = node_input(state)
     # 平凡变更 → 直接返回预填充结果（triviality_check 已设置）
     if state.get("trivial"):
-        return state
+        return node_output(state, "summary", "details", "recommendations")
 
     # 降级模式：没有 LLM 时用模板拼接
     if ctx.llm_client is None:
         _apply_template(state)
-        return state
+        return node_output(state, "summary", "details", "recommendations")
 
     # 准备风险评分数据（0-1 → 0-100）
     risk_score = state.get("risk_score", 0.5)
@@ -60,7 +62,7 @@ async def summarize(state: GraphState, ctx: NodeContext) -> GraphState:
         # LLM 输出格式错误 → 降级到模板模式
         _apply_template(state)
 
-    return state
+    return node_output(state, "summary", "details", "recommendations")
 
 
 def _apply_template(state: GraphState) -> None:

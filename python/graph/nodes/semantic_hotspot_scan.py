@@ -11,7 +11,7 @@
 
 执行流程：
   1. 从源码包中收集所有热点
-  2. 用线程池并行发给 LLM（每个热点一次调用）
+  2. 用受限协程并发发给 LLM（每个热点一次调用）
   3. 收集 LLM 的判断结果，过滤掉"无风险"的
   4. 对低置信度的发现降级处理
 
@@ -22,13 +22,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 from config.settings import AppSettings
 from graph.state import GraphState, NodeContext
-from llm.client import LLMStructuredOutputError
+from graph.updates import node_input, node_output
 from schemas.domain.semantic_finding import SemanticFindingSchema
 
 logger = logging.getLogger(__name__)
@@ -126,7 +126,7 @@ def _severity_downgrade(severity: str) -> str:
     return {"high": "medium", "medium": "low"}.get(severity, severity)
 
 
-def _scan_one(
+async def _scan_one(
     llm_client: Any,
     entry: dict[str, Any],
     react: bool = False,
@@ -153,7 +153,7 @@ def _scan_one(
             max_steps=4,
         )
         # messages[0]=system，messages[1]=user；ReActAgent 会在 system 后拼工具清单
-        parsed, trace = agent.run(
+        parsed, trace = await agent.run(
             messages[0]["content"],
             messages[1]["content"],
             output_schema=SemanticFindingSchema,
@@ -163,7 +163,7 @@ def _scan_one(
         if tool_traces is not None and trace:
             tool_traces.extend(trace)
     else:
-        parsed = llm_client.chat_structured(
+        parsed = await llm_client.chat_structured(
             messages=messages,
             output_schema=SemanticFindingSchema,
             temperature=0.1,  # 低温度：减少随机性，结果更稳定
@@ -190,14 +190,14 @@ def _scan_one(
     }
 
 
-def scan_semantic_hotspots(state: GraphState, ctx: NodeContext) -> GraphState:
-    """语义热点扫描主函数 —— 用线程池并行调用 LLM 分析所有热点。
+async def scan_semantic_hotspots(state: GraphState, ctx: NodeContext) -> GraphState:
+    """语义热点扫描主函数 —— 用受限协程并发调用 LLM 分析所有热点。
 
     执行策略：
     1. 功能未启用 → 返回空结果（status: disabled）
     2. 没有 LLM 客户端 → 跳过扫描（status: llm_skipped）
     3. 没有热点 → 返回空结果（status: READY）
-    4. 有热点 → 线程池并行分析，收集结果
+    4. 有热点 → 受限协程并发分析，收集结果
 
     参数:
         state: 共享状态，包含 source_package
@@ -206,6 +206,7 @@ def scan_semantic_hotspots(state: GraphState, ctx: NodeContext) -> GraphState:
     返回:
         更新后的 state，新增了 semantic_findings 字段
     """
+    state = node_input(state)
     hotspots = _collect_hotspots(state)
 
     # 功能未启用
@@ -216,7 +217,7 @@ def scan_semantic_hotspots(state: GraphState, ctx: NodeContext) -> GraphState:
             "status": "disabled",
             "reason": None,
         }
-        return state
+        return node_output(state, "semantic_findings")
 
     # 没有 LLM 客户端
     if ctx.llm_client is None:
@@ -226,7 +227,7 @@ def scan_semantic_hotspots(state: GraphState, ctx: NodeContext) -> GraphState:
             "status": "llm_skipped",
             "reason": None,
         }
-        return state
+        return node_output(state, "semantic_findings")
 
     # 没有热点需要分析
     if not hotspots:
@@ -236,35 +237,33 @@ def scan_semantic_hotspots(state: GraphState, ctx: NodeContext) -> GraphState:
             "status": "READY",
             "reason": None,
         }
-        return state
+        return node_output(state, "semantic_findings")
 
-    # 线程池并行分析所有热点
+    # 受限协程并发分析所有热点
     react_mode = bool((state.get("request") or {}).get("react"))
     items: list[dict[str, Any]] = []
     errors: list[str] = []
     tool_traces: list[dict] = []
-    max_workers = min(SETTINGS.semantic_hotspot_concurrency, len(hotspots))
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        future_to_entry = {
-            pool.submit(
-                _scan_one,
-                ctx.llm_client,
-                entry,
-                react_mode,
-                ctx.registry,
-                ctx.task_id,
-                tool_traces,
-            ): entry
-            for entry in hotspots
-        }
-        for future in as_completed(future_to_entry):
+    limit = asyncio.Semaphore(max(1, SETTINGS.semantic_hotspot_concurrency))
+
+    async def scan(entry: dict[str, Any]) -> None:
+        async with limit:
             try:
-                finding = future.result()
+                finding = await _scan_one(
+                    ctx.llm_client,
+                    entry,
+                    react_mode,
+                    ctx.registry,
+                    ctx.task_id,
+                    tool_traces,
+                )
                 if finding is not None:
                     items.append(finding)
-            except (LLMStructuredOutputError, Exception) as exc:
+            except Exception as exc:
                 logger.warning("semantic_hotspot_scan failed for one hotspot: %s", exc)
                 errors.append(str(exc)[:200])
+
+    await asyncio.gather(*(scan(entry) for entry in hotspots))
 
     if tool_traces:
         state.setdefault("tool_logs", []).extend(tool_traces)
@@ -280,4 +279,4 @@ def scan_semantic_hotspots(state: GraphState, ctx: NodeContext) -> GraphState:
         "status": status,  # 分析状态
         "reason": errors[-1] if errors else None,  # 最后一个错误信息（如有）
     }
-    return state
+    return node_output(state, "semantic_findings")

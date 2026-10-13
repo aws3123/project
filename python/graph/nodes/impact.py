@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 
 from graph.state import GraphState, NodeContext
+from graph.updates import node_input, node_output
 from tools.base import ToolContext, ToolResult
 
 
@@ -39,6 +40,7 @@ async def analyze_impact(state: GraphState, ctx: NodeContext) -> GraphState:
     返回:
         更新后的 state，新增了 diff_analysis（含实体/关系）、code_graph、impact_radius
     """
+    state = node_input(state)
     diff_analysis = state.get("diff_analysis", {})
     files = diff_analysis.get("files", [])
     # 获取变更文件的路径列表
@@ -89,4 +91,4 @@ async def analyze_impact(state: GraphState, ctx: NodeContext) -> GraphState:
     # 影响半径：哪些代码会被这次变更波及
     state["impact_radius"] = kg_result.payload.get("impact", {})
 
-    return state
+    return node_output(state, "diff_analysis", "code_graph", "impact_radius")

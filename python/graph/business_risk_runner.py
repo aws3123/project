@@ -64,3 +64,17 @@ class BusinessRiskRunner:
         graph_state = self._runner.run_state(state)
         # 将最终状态转换为前端可消费的结果
         return build_business_risk_result(request, graph_state)
+
+    async def arun(
+        self, request: BusinessRiskReviewRequest
+    ) -> BusinessRiskReviewResult:
+        """Async entry for callers sharing the application's checkpointer loop."""
+        state: BusinessRiskGraphState = {
+            "task_id": request.task_id,
+            "run_id": request.run_id,
+            "trace_id": request.trace_id,
+            "request": request.model_dump(mode="json"),
+            "source_package": request.source_package.model_dump(mode="json"),
+        }
+        graph_state = await self._runner.arun_state(state)
+        return build_business_risk_result(request, graph_state)

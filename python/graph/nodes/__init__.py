@@ -1,8 +1,8 @@
 # 节点导出 —— 按领域分组的 LangGraph 节点函数
 #
 # 集中导出所有节点函数，方便其他模块统一导入。
-# 所有节点函数遵循统一签名：def node_fn(state, ctx) -> state
-# (state: GraphState, ctx: NodeContext 输入，返回更新后的 GraphState)
+# 节点返回拥有字段的局部更新；tool_logs 只包含本节点新增的记录。
+# LangGraph 负责更新共享状态，节点不返回完整输入快照。
 
 from .classifier import classify_changes
 from .deduplicate import deduplicate_findings

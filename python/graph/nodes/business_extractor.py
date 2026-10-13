@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 from graph.state import GraphState, NodeContext
+from graph.updates import node_input, node_output
 
 
 def extract_business_invariants(state: GraphState, ctx: NodeContext) -> GraphState:
@@ -27,6 +28,7 @@ def extract_business_invariants(state: GraphState, ctx: NodeContext) -> GraphSta
     返回:
         更新后的 state，新增了 business_invariants 字段
     """
+    state = node_input(state)
     request = state.get("request", {})
     metadata = request.get("metadata", {}) if isinstance(request, dict) else {}
     source_package = (
@@ -69,4 +71,4 @@ def extract_business_invariants(state: GraphState, ctx: NodeContext) -> GraphSta
         "inferred_methods": inferred,  # 从源码推断的不变量方法
         "status": "READY",
     }
-    return state
+    return node_output(state, "business_invariants")

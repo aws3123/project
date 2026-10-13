@@ -143,7 +143,7 @@ async def analyze_source_business_risk(
     resolved_trace_id = review_request.trace_id or trace_id
 
     try:
-        result = ai_service.run(review_request)
+        result = await ai_service.arun(review_request)
 
         # P3: Persist proposed memory updates to Redis after successful processing
         memory_service.save_session_memory(

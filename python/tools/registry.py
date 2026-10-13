@@ -6,6 +6,7 @@ from domain.checkers.config_change_checker import ConfigChangeCheckerTool
 # 静态检查器（领域单元）从 domain.checkers 引入，仍实现 tools.base.Tool 协议
 from domain.checkers.sql_risk_checker import SQLRiskCheckerTool
 from domain.checkers.test_coverage_checker import TestCoverageCheckerTool
+from telemetry.langfuse_tracing import get_langfuse_tracing
 from tools.ast_parser import ASTParserTool
 from tools.base import Tool, ToolContext, ToolResult
 from tools.code_knowledge_graph import CodeKnowledgeGraphTool
@@ -24,9 +25,17 @@ class ToolRegistry:
         return name in self._registry
 
     def run(self, name: str, payload: dict, context: ToolContext) -> ToolResult:
-        if name not in self._registry:
-            raise KeyError(f"Tool '{name}' not registered")
-        return self._registry[name].run(payload, context)
+        with get_langfuse_tracing().observation(
+            f"tool.{name}",
+            kind="tool",
+            input=payload,
+            metadata={"task_id": context.task_id, "tool": name},
+        ) as observation:
+            if name not in self._registry:
+                raise KeyError(f"Tool '{name}' not registered")
+            result = self._registry[name].run(payload, context)
+            observation.update(output=result.payload)
+            return result
 
     def describe(self) -> list[dict]:
         """返回每个已注册工具的名称与元数据（供 ReAct 等自主决策使用）。"""

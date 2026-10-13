@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 from graph.state import GraphState, NodeContext
+from graph.updates import node_input, node_output
 
 
 def trace_data_flow(state: GraphState, ctx: NodeContext) -> GraphState:
@@ -28,6 +29,7 @@ def trace_data_flow(state: GraphState, ctx: NodeContext) -> GraphState:
     返回:
         更新后的 state，新增了 data_flow_paths 字段
     """
+    state = node_input(state)
     source_package = (
         state.get("source_package", {})
         if isinstance(state.get("source_package", {}), dict)
@@ -65,4 +67,4 @@ def trace_data_flow(state: GraphState, ctx: NodeContext) -> GraphState:
         "entry_files": entry_files,  # 所有入口文件
         "status": "READY",
     }
-    return state
+    return node_output(state, "data_flow_paths")

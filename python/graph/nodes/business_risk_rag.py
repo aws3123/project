@@ -22,7 +22,7 @@ import logging
 
 from config.settings import AppSettings
 from graph.state import GraphState, NodeContext
-from services.rag_retrieval_service import RagRetrievalService
+from graph.updates import node_input, node_output
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +124,7 @@ def _build_code_metadata(state: GraphState) -> list[dict]:
     return code_metadata or None
 
 
-def business_risk_rag(state: GraphState, ctx: NodeContext) -> GraphState:
+async def business_risk_rag(state: GraphState, ctx: NodeContext) -> GraphState:
     """业务风险 RAG 检索 —— 从历史事故库中检索相关业务风险案例。
 
     执行流程：
@@ -140,6 +140,7 @@ def business_risk_rag(state: GraphState, ctx: NodeContext) -> GraphState:
     返回:
         更新后的 state，新增了 rag_context 和 rag_status 字段
     """
+    state = node_input(state)
     settings = AppSettings()
 
     # 收集并去重查询词
@@ -152,9 +153,11 @@ def business_risk_rag(state: GraphState, ctx: NodeContext) -> GraphState:
     code_metadata = _build_code_metadata(state)
 
     # 调用统一检索服务
-    retrieval_service = RagRetrievalService(settings)
+    retrieval_service = ctx.rag_retrieval_service
     try:
-        fused, status, reason = retrieval_service.retrieve(
+        if retrieval_service is None:
+            raise RuntimeError("RAG retrieval service is not configured")
+        fused, status, reason = await retrieval_service.retrieve(
             nl_query, code_metadata, top_k=settings.top_k
         )
     except Exception as exc:
@@ -187,4 +190,12 @@ def business_risk_rag(state: GraphState, ctx: NodeContext) -> GraphState:
     # 将检索结果写入共享状态
     state["rag_context"] = rag_findings
     state["rag_status"] = status
-    return state
+    state["tool_logs"].append(
+        {
+            "node": "business_risk_rag",
+            "status": status,
+            "reason": reason,
+            "findings_count": len(rag_findings),
+        }
+    )
+    return node_output(state, "rag_context", "rag_status")

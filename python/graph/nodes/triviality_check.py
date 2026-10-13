@@ -42,10 +42,6 @@ def check_triviality(state: GraphState, ctx: NodeContext) -> GraphState:
     from graph.agent_selector import CORE_RISK_KEYWORDS
 
     if is_trivial(diff_analysis, CORE_RISK_KEYWORDS):
-        state["trivial"] = True
         layers = state.get("classification", {}).get("layers", [])
-        state.update(prefilled_fields(layers=layers, diff_size=diff_size))
-    else:
-        state["trivial"] = False
-
-    return state
+        return {"trivial": True, **prefilled_fields(layers=layers, diff_size=diff_size)}
+    return {"trivial": False}

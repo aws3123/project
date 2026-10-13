@@ -63,6 +63,8 @@ Python AI 层在启用 Jev 时，通过内部 Jev MCP 服务为审查方向提�
 
 - **三种提交方式**：小变更可同步返回；大变更可异步入队；`dispatch` 根据 diff 大小、文件数、风险信号和系统负载自动选择路径。
 - **多阶段分析**：`diff → classifier → impact → RAG → [rules | security | performance] → scoring → report`；同阶段专家并行执行，并可按变更特征裁剪。
+- **LangGraph 执行引擎**：`StateGraph` 编译、并行屏障、字段更新合并与持久化恢复；可选 ReAct 分析通过决策/工具/终答/降级子图执行。迁移配置与运行边界见 [迁移说明](docs/langgraph-migration.md)。
+- **可选 Langfuse 追踪**：任务、图节点、ReAct、工具和模型 generation 形成关联追踪，记录真实 Token 用量；配置和采集范围见 [Langfuse 接入](docs/langfuse.md)。
 - **可选 Jev MCP 路由**：同步接口和 Kafka 异步 Worker 共用同一个 MCP 工具，按置信度补充安全/性能审查方向；默认关闭，超时、低置信度或服务异常时沿用现有选择逻辑。
 - **变更影响评估**：Java 端 Tree-sitter 预处理，Python 端用 AST 和知识图谱计算调用/依赖影响半径。
 - **历史经验召回**：ChromaDB 向量检索与 Elasticsearch 关键词检索通过 RRF 融合，为审查提供历史事故上下文。

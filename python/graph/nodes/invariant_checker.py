@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 from graph.state import GraphState, NodeContext
+from graph.updates import node_input, node_output
 
 
 def check_invariants(state: GraphState, ctx: NodeContext) -> GraphState:
@@ -32,6 +33,7 @@ def check_invariants(state: GraphState, ctx: NodeContext) -> GraphState:
     返回:
         更新后的 state，新增了 invariant_violations 字段
     """
+    state = node_input(state)
     invariants = state.get("business_invariants", {})
     items = invariants.get("items", []) if isinstance(invariants, dict) else []
     inferred_methods = (
@@ -71,4 +73,4 @@ def check_invariants(state: GraphState, ctx: NodeContext) -> GraphState:
         "checked_count": len(items) + len(inferred_methods),  # 检查的方法总数
         "status": "READY",
     }
-    return state
+    return node_output(state, "invariant_violations")

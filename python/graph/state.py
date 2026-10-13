@@ -23,8 +23,11 @@ from __future__ import (
 from dataclasses import (
     dataclass,  # dataclass 装饰器：自动生成 __init__、__repr__ 等方法
 )
-from typing import TYPE_CHECKING, Any, TypedDict
+from operator import add
+from typing import TYPE_CHECKING, Annotated, Any
 
+from domain.business_risk.state import BusinessRiskGraphState
+from graph.updates import merge_node_status
 from services.task_service import TaskService
 from telemetry.hooks import TelemetryHook
 
@@ -36,7 +39,7 @@ if TYPE_CHECKING:
     from tools.registry import ToolRegistry
 
 
-class GraphState(TypedDict, total=False):
+class GraphState(BusinessRiskGraphState, total=False):
     """流水线全局共享状态 —— 所有节点通过读写这个字典来传递数据。
 
     类比：把它想象成一个"接力赛跑棒"，每个跑步者（节点）接过棒后
@@ -45,8 +48,7 @@ class GraphState(TypedDict, total=False):
     total=False 表示所有字段都是可选的（不是每个节点都会写入所有字段）。
     """
 
-    task_id: str  # 任务唯一标识，贯穿整个流水线
-    request: dict[str, Any]  # 原始审查请求（来自 Java BFF 层）
+    # task_id/request/run_id/source_package and business-risk outputs are inherited.
     diff_analysis: dict[str, Any]  # diff 分析结果（代码变更的文件、行数、实体等）
     classification: dict[
         str, Any
@@ -66,11 +68,17 @@ class GraphState(TypedDict, total=False):
     ]  # 性能分析发现（N+1查询、循环IO、大事务等）
     code_graph: dict[str, Any]  # 代码知识图谱数据（类/方法的调用关系）
     impact_radius: dict[str, Any]  # 变更影响范围（受影响的文件列表、影响评分）
-    tool_logs: list[dict[str, Any]]  # 工具调用日志（记录每个工具的输入输出）
+    tool_logs: Annotated[list[dict[str, Any]], add]  # 仅追加各节点的新日志
+    node_status: Annotated[dict[str, str], merge_node_status]
+    selected_agents: list[str]
+    input_digest: str  # 拒绝用相同执行标识恢复不同输入
+    graph_version: str
     risk_score: float  # 综合风险评分（0~1 或 0~100）
     breakdown: list[dict[str, Any]]  # 风险评分的维度细分（安全/性能/规则等各维度得分）
     need_human_review: bool  # 是否需要人工复核
     summary: str  # 审查报告摘要（给人类看的总结）
+    risk_summary: str  # 评分节点生成、报告节点消费的中间摘要
+    tier: str
     details: list[str]  # 审查报告的具体发现列表
     recommendations: list[dict[str, Any]]  # 可操作的改进建议
     trivial: bool  # 是否为平凡变更（纯注释/文档，可跳过深度分析）

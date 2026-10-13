@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from config.settings import AppSettings
 from llm.metering import metered
+from telemetry.langfuse_tracing import get_langfuse_tracing, traced_operation
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +63,9 @@ def _mock_field_value(annotation: Any) -> Any:
     from pydantic import BaseModel
 
     origin = typing.get_origin(annotation)
-    if origin is typing.Union or (hasattr(types, "UnionType") and origin is types.UnionType):
+    if origin is typing.Union or (
+        hasattr(types, "UnionType") and origin is types.UnionType
+    ):
         args = [a for a in typing.get_args(annotation) if a is not type(None)]
         return None if not args else _mock_field_value(args[0])
     if origin in (list, dict) or annotation in (list, dict, typing.List, typing.Dict):
@@ -155,11 +158,29 @@ class LLMClient:
         if self._disable_thinking:
             extra_body = kwargs.setdefault("extra_body", {})
             extra_body.setdefault("chat_template_kwargs", {})["enable_thinking"] = False
-        sem = LLMClient._concurrency_semaphore
-        if sem is not None:
-            async with sem:
-                return await self._call(model, kwargs, output_schema)
-        return await self._call(model, kwargs, output_schema)
+        with get_langfuse_tracing().observation(
+            "llm.completion",
+            kind="generation",
+            model=model or self._model,
+            input=kwargs.get("messages"),
+            model_parameters={
+                key: kwargs[key]
+                for key in ("temperature", "max_tokens")
+                if key in kwargs
+            },
+            metadata={
+                "mock": self._mock_delay_seconds > 0,
+                "output_schema": output_schema.__name__ if output_schema else "text",
+            },
+        ) as generation:
+            sem = LLMClient._concurrency_semaphore
+            if sem is not None:
+                async with sem:
+                    response = await self._call(model, kwargs, output_schema)
+            else:
+                response = await self._call(model, kwargs, output_schema)
+            generation.completion(response)
+            return response
 
     async def _call(
         self,
@@ -195,6 +216,7 @@ class LLMClient:
         )
         return response.choices[0].message.content or ""
 
+    @traced_operation("llm.structured", kind="chain")
     async def chat_structured(
         self,
         messages: list[dict[str, str]],
@@ -220,7 +242,9 @@ class LLMClient:
                 return validated.model_dump()
             except json.JSONDecodeError as e:
                 finish_reason = getattr(response.choices[0], "finish_reason", None)
-                reasoning = getattr(response.choices[0].message, "reasoning_content", None)
+                reasoning = getattr(
+                    response.choices[0].message, "reasoning_content", None
+                )
                 logger.warning(
                     "LLM JSON parse failed attempt "
                     + str(attempt + 1)
@@ -320,7 +344,10 @@ class LLMClient:
         """
         kwargs: dict[str, Any] = {
             "messages": [
-                {"role": "user", "content": self._build_vision_content(prompt, image_paths)}
+                {
+                    "role": "user",
+                    "content": self._build_vision_content(prompt, image_paths),
+                }
             ],
             "temperature": temperature,
             "max_tokens": max_tokens,
@@ -330,6 +357,7 @@ class LLMClient:
         response = await self._create_completion(model=model, **kwargs)
         return response.choices[0].message.content or ""
 
+    @traced_operation("llm.vision_structured", kind="chain")
     async def chat_vision_structured(
         self,
         prompt: str,
